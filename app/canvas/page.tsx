@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo, memo } from "react";
 
 const ACCENT = "#C8A847";
 
@@ -404,6 +404,209 @@ function bringToFront(prev: CanvasNode[], id: number): CanvasNode[] {
   return next;
 }
 
+// ── Node item (memoised) ──────────────────────────────────────────────────────
+type CanvasNodeItemProps = {
+  n: CanvasNode;
+  isSel: boolean;
+  isHovered: boolean;
+  isConnectSource: boolean;
+  isConnectActive: boolean;
+  isConnectTarget: boolean;
+  onMouseDown: (e: React.MouseEvent, id: number) => void;
+  onContextMenu: (e: React.MouseEvent, id: number) => void;
+  onMouseEnter: (id: number) => void;
+  onMouseLeave: (id: number) => void;
+  updateNodeField: (id: number, field: "title" | "body", value: string) => void;
+  onDotMouseDown: (e: React.MouseEvent, id: number) => void;
+  onResizeMouseDown: (e: React.MouseEvent, id: number) => void;
+};
+
+const CanvasNodeItem = memo(function CanvasNodeItem({
+  n, isSel, isHovered, isConnectSource, isConnectActive, isConnectTarget,
+  onMouseDown, onContextMenu, onMouseEnter, onMouseLeave,
+  updateNodeField, onDotMouseDown, onResizeMouseDown,
+}: CanvasNodeItemProps) {
+  const isText = n.type === "text";
+  const isCircle = n.type === "circle";
+  const isDiamond = n.type === "diamond";
+  const isRounded = n.type === "rounded";
+  const isImage = n.type === "image";
+  const isDark = ["#343a40", "#6c757d", "#2C3E50", "#1A1A2E", "#0a0a0a"].includes(n.color);
+  const fs = n.fontSize ?? 13;
+
+  const hostBg = isDiamond || isText ? "transparent" : n.color;
+  const hostBorder = isDiamond || isText ? "none"
+    : isConnectTarget ? `2px solid ${ACCENT}`
+    : isSel ? "1px solid rgba(0,0,0,0.18)"
+    : "0.5px solid rgba(0,0,0,0.1)";
+  const hostShadow = isDiamond || isText ? "none"
+    : isConnectTarget ? `0 0 0 3px ${ACCENT}35, 0 4px 20px rgba(0,0,0,0.1)`
+    : isSel ? "0 4px 20px rgba(0,0,0,0.13), 0 1px 4px rgba(0,0,0,0.08)"
+    : "0 1px 8px rgba(0,0,0,0.06)";
+  const hostRadius = isCircle ? "50%" : isRounded ? 24 : 12;
+
+  const showResize = (isHovered || isSel) && !isText && !isCircle && !isDiamond;
+  const showDot = !isText && (isHovered || isConnectSource);
+
+  return (
+    <div
+      onMouseDown={(e) => onMouseDown(e, n.id)}
+      onContextMenu={(e) => onContextMenu(e, n.id)}
+      onMouseEnter={() => onMouseEnter(n.id)}
+      onMouseLeave={() => onMouseLeave(n.id)}
+      style={{
+        position: "absolute", left: n.x, top: n.y,
+        width: n.w, height: isText ? "auto" : n.h,
+        background: hostBg, border: hostBorder,
+        borderRadius: hostRadius, boxShadow: hostShadow,
+        padding: isText ? "2px 0" : isCircle ? 0 : isDiamond ? 0 : "14px 18px",
+        cursor: isConnectActive ? "crosshair" : "grab",
+        userSelect: "none",
+        transition: "box-shadow 0.15s ease, border-color 0.15s ease",
+        display: "flex", flexDirection: "column",
+        justifyContent: isCircle ? "center" : "flex-start",
+        alignItems: isCircle ? "center" : "flex-start",
+        overflow: isImage ? "hidden" : "visible",
+        isolation: "isolate",
+      }}
+    >
+      {/* Diamond */}
+      {isDiamond && (
+        <>
+          <svg
+            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none" }}
+            viewBox={`0 0 ${n.w} ${n.h}`} preserveAspectRatio="none"
+          >
+            <defs>
+              <filter id={`ds-${n.id}`} x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="1" stdDeviation={isSel ? 5 : 3} floodColor={isSel ? "rgba(0,0,0,0.13)" : "rgba(0,0,0,0.08)"} />
+              </filter>
+            </defs>
+            <polygon
+              points={`${n.w / 2},2 ${n.w - 2},${n.h / 2} ${n.w / 2},${n.h - 2} 2,${n.h / 2}`}
+              fill={n.color}
+              stroke={isConnectTarget ? ACCENT : isSel ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.13)"}
+              strokeWidth={isConnectTarget || isSel ? 1.5 : 0.8}
+              filter={`url(#ds-${n.id})`}
+            />
+          </svg>
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1, padding: "0 28px" }}>
+            <div
+              contentEditable suppressContentEditableWarning
+              onMouseDown={(e) => e.stopPropagation()}
+              onBlur={(e) => updateNodeField(n.id, "title", (e.target as HTMLElement).innerText)}
+              style={{ fontSize: fs, fontWeight: 500, color: isDark ? "#fff" : "#111", outline: "none", textAlign: "center", letterSpacing: "-0.2px", width: "100%" }}
+              dangerouslySetInnerHTML={{ __html: n.title }}
+            />
+            {n.body && (
+              <div
+                contentEditable suppressContentEditableWarning
+                onMouseDown={(e) => e.stopPropagation()}
+                onBlur={(e) => updateNodeField(n.id, "body", (e.target as HTMLElement).innerText)}
+                style={{ fontSize: Math.max(11, fs - 2), color: isDark ? "rgba(255,255,255,0.7)" : "#888", outline: "none", textAlign: "center", marginTop: 3, width: "100%" }}
+                dangerouslySetInnerHTML={{ __html: n.body }}
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Image */}
+      {isImage && (
+        <div style={{ width: "100%", height: "100%", position: "relative" }}>
+          {n.imageUrl ? (
+            <img src={n.imageUrl} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", borderRadius: 12, pointerEvents: "none" }} />
+          ) : (
+            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#ccc", fontSize: 13 }}>No Image</div>
+          )}
+          {isSel && <div style={{ position: "absolute", inset: 0, borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.2)", pointerEvents: "none", zIndex: 5 }} />}
+        </div>
+      )}
+
+      {/* Block / Rounded / Circle */}
+      {!isText && !isDiamond && !isImage && (
+        <>
+          <div
+            contentEditable suppressContentEditableWarning
+            onMouseDown={(e) => e.stopPropagation()}
+            onBlur={(e) => updateNodeField(n.id, "title", (e.target as HTMLElement).innerText)}
+            style={{ fontSize: fs, fontWeight: 500, color: isDark ? "#fff" : "#111", outline: "none", letterSpacing: "-0.2px", textAlign: isCircle ? "center" : "left", zIndex: 1, background: "transparent", minWidth: 40 }}
+            dangerouslySetInnerHTML={{ __html: n.title }}
+          />
+          <div
+            contentEditable suppressContentEditableWarning
+            onMouseDown={(e) => e.stopPropagation()}
+            onBlur={(e) => updateNodeField(n.id, "body", (e.target as HTMLElement).innerText)}
+            style={{ fontSize: Math.max(11, fs - 2), color: isDark ? "rgba(255,255,255,0.7)" : "#888", marginTop: 5, outline: "none", lineHeight: 1.55, minHeight: 16, zIndex: 1, background: "transparent", width: "100%", textAlign: isCircle ? "center" : "left" }}
+            dangerouslySetInnerHTML={{ __html: n.body }}
+          />
+        </>
+      )}
+
+      {/* Free text */}
+      {isText && (
+        <div
+          contentEditable suppressContentEditableWarning
+          onMouseDown={(e) => e.stopPropagation()}
+          onBlur={(e) => updateNodeField(n.id, "title", (e.target as HTMLElement).innerText)}
+          style={{ fontSize: fs, color: "#1a1a1a", outline: "none", lineHeight: 1.55, minHeight: 22, letterSpacing: "-0.2px", background: "transparent", width: "100%" }}
+          dangerouslySetInnerHTML={{ __html: n.title }}
+        />
+      )}
+
+      {/* Connect dot — appears on hover, drag to connect */}
+      {showDot && (
+        <div
+          data-role="connect-dot"
+          onMouseDown={(e) => onDotMouseDown(e, n.id)}
+          title="Drag to connect"
+          style={{
+            width: 13, height: 13, borderRadius: "50%",
+            background: isConnectSource ? ACCENT : "#fff",
+            border: `2px solid ${ACCENT}`,
+            position: "absolute",
+            right: isCircle ? -9 : isDiamond ? -8 : -7,
+            top: "50%",
+            transform: "translateY(-50%)",
+            cursor: "crosshair",
+            zIndex: 10,
+            boxShadow: "0 1px 5px rgba(0,0,0,0.2)",
+            transition: "background 0.12s, transform 0.12s",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = "translateY(-50%) scale(1.2)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = "translateY(-50%) scale(1)"; }}
+        />
+      )}
+
+      {/* Resize handle — appears on hover */}
+      {showResize && (
+        <div
+          data-role="resize-handle"
+          onMouseDown={(e) => onResizeMouseDown(e, n.id)}
+          style={{
+            position: "absolute", right: 5, bottom: 5,
+            width: 18, height: 18,
+            background: "rgba(255,255,255,0.96)",
+            border: "1px solid rgba(0,0,0,0.13)",
+            borderRadius: 5, cursor: "nwse-resize", zIndex: 10,
+            boxShadow: "0 1px 5px rgba(0,0,0,0.14)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            opacity: isHovered || isSel ? 1 : 0,
+            transition: "opacity 0.15s ease, box-shadow 0.15s ease",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.22)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 1px 5px rgba(0,0,0,0.14)"; }}
+        >
+          <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ pointerEvents: "none", display: "block" }}>
+            <line x1="1.5" y1="8" x2="8" y2="1.5" stroke="rgba(0,0,0,0.32)" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="5" y1="8" x2="8" y2="5" stroke="rgba(0,0,0,0.32)" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+});
+
 // ── Main Canvas ───────────────────────────────────────────────────────────────
 export default function Canvas() {
   const [nodes, setNodes] = useState<CanvasNode[]>(DEFAULT_NODES);
@@ -582,6 +785,12 @@ export default function Canvas() {
     [contextMenu, connectDrag],
   );
 
+  // ── Node map (O(1) lookup for connections) ────────────────────────────────────
+  const nodeMap = useMemo(
+    () => new Map(nodes.map((n) => [n.id, n])),
+    [nodes],
+  );
+
   const onNodeMouseDown = useCallback(
     (e: React.MouseEvent, id: number) => {
       if (e.button !== 0) return;
@@ -593,7 +802,7 @@ export default function Canvas() {
       setContextMenu(null);
       setSelected(id);
       setNodes((prev) => bringToFront(prev, id));
-      const n = nodes.find((x) => x.id === id);
+      const n = nodeMap.get(id);
       if (!n || !canvasRef.current) return;
       const r = canvasRef.current.getBoundingClientRect();
       const mx = (e.clientX - r.left - pan.x) / zoom;
@@ -601,7 +810,7 @@ export default function Canvas() {
       dragging.current = { id, ox: mx - n.x, oy: my - n.y };
       e.preventDefault();
     },
-    [nodes, pan, zoom],
+    [nodeMap, pan, zoom],
   );
 
   const onResizeMouseDown = useCallback(
@@ -609,11 +818,11 @@ export default function Canvas() {
       e.stopPropagation();
       e.preventDefault();
       setNodes((prev) => bringToFront(prev, id));
-      const n = nodes.find((x) => x.id === id);
+      const n = nodeMap.get(id);
       if (!n) return;
       resizing.current = { id, startX: e.clientX, startY: e.clientY, startW: n.w, startH: n.h };
     },
-    [nodes],
+    [nodeMap],
   );
 
   // ── Connect: drag-to-connect ──────────────────────────────────────────────────
@@ -709,6 +918,15 @@ export default function Canvas() {
   const updateFontSize = useCallback((id: number, size: number) => {
     setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, fontSize: size } : n)));
     setContextMenu(null);
+  }, []);
+
+  // ── Node hover (stable callbacks for memo) ────────────────────────────────────
+  const onNodeMouseEnter = useCallback((id: number) => {
+    setHoveredId(id);
+  }, []);
+
+  const onNodeMouseLeave = useCallback((id: number) => {
+    setHoveredId((prev) => (prev === id ? null : prev));
   }, []);
 
   useEffect(() => {
@@ -836,8 +1054,8 @@ export default function Canvas() {
           <svg style={{ position: "absolute", left: -5000, top: -5000, width: 10000, height: 10000, pointerEvents: "none", overflow: "visible" }}>
             {/* Existing connections */}
             {connections.map((c) => {
-              const fn = nodes.find((x) => x.id === c.from);
-              const tn = nodes.find((x) => x.id === c.to);
+              const fn = nodeMap.get(c.from);
+              const tn = nodeMap.get(c.to);
               if (!fn || !tn) return null;
               const x1 = fn.x + fn.w, y1 = fn.y + fn.h / 2;
               const x2 = tn.x, y2 = tn.y + tn.h / 2;
@@ -853,7 +1071,7 @@ export default function Canvas() {
 
             {/* Live preview line while dragging to connect */}
             {connectDrag && (() => {
-              const fn = nodes.find((x) => x.id === connectDrag.fromId);
+              const fn = nodeMap.get(connectDrag.fromId);
               if (!fn) return null;
               const x1 = fn.x + fn.w, y1 = fn.y + fn.h / 2;
               const x2 = connectDrag.x, y2 = connectDrag.y;
@@ -872,189 +1090,28 @@ export default function Canvas() {
           {/* Nodes */}
           {nodes.map((n) => {
             const isSel = selected === n.id;
+            const isHovered = hoveredId === n.id;
             const isText = n.type === "text";
-            const isCircle = n.type === "circle";
-            const isDiamond = n.type === "diamond";
-            const isRounded = n.type === "rounded";
-            const isImage = n.type === "image";
-            const isDark = ["#343a40", "#6c757d", "#2C3E50", "#1A1A2E", "#0a0a0a"].includes(n.color);
-            const fs = n.fontSize ?? 13;
-
-            // Highlight potential connection target
-            const isConnectTarget = connectDrag !== null && hoveredId === n.id && n.id !== connectDrag.fromId && !isText;
-
-            const hostBg = isDiamond || isText ? "transparent" : n.color;
-            const hostBorder = isDiamond || isText ? "none"
-              : isConnectTarget ? `2px solid ${ACCENT}`
-              : isSel ? "1px solid rgba(0,0,0,0.18)"
-              : "0.5px solid rgba(0,0,0,0.1)";
-            const hostShadow = isDiamond || isText ? "none"
-              : isConnectTarget ? `0 0 0 3px ${ACCENT}35, 0 4px 20px rgba(0,0,0,0.1)`
-              : isSel ? "0 4px 20px rgba(0,0,0,0.13), 0 1px 4px rgba(0,0,0,0.08)"
-              : "0 1px 8px rgba(0,0,0,0.06)";
-            const hostRadius = isCircle ? "50%" : isRounded ? 24 : 12;
-
-            const showResize = (hoveredId === n.id || isSel) && !isText && !isCircle && !isDiamond;
-            // Show connect dot on hover (or when it's the active source)
-            const showDot = !isText && (hoveredId === n.id || connectDrag?.fromId === n.id);
-
+            const isConnectSource = connectDrag?.fromId === n.id;
+            const isConnectActive = connectDrag !== null;
+            const isConnectTarget = isConnectActive && isHovered && !isConnectSource && !isText;
             return (
-              <div
+              <CanvasNodeItem
                 key={n.id}
-                onMouseDown={(e) => onNodeMouseDown(e, n.id)}
-                onContextMenu={(e) => onNodeContextMenu(e, n.id)}
-                onMouseEnter={() => setHoveredId(n.id)}
-                onMouseLeave={() => setHoveredId((prev) => (prev === n.id ? null : prev))}
-                style={{
-                  position: "absolute", left: n.x, top: n.y,
-                  width: n.w, height: isText ? "auto" : n.h,
-                  background: hostBg, border: hostBorder,
-                  borderRadius: hostRadius, boxShadow: hostShadow,
-                  padding: isText ? "2px 0" : isCircle ? 0 : isDiamond ? 0 : "14px 18px",
-                  cursor: connectDrag ? "crosshair" : "grab",
-                  userSelect: "none",
-                  transition: "box-shadow 0.15s ease, border-color 0.15s ease",
-                  display: "flex", flexDirection: "column",
-                  justifyContent: isCircle ? "center" : "flex-start",
-                  alignItems: isCircle ? "center" : "flex-start",
-                  overflow: isImage ? "hidden" : "visible",
-                  isolation: "isolate",
-                }}
-              >
-                {/* Diamond */}
-                {isDiamond && (
-                  <>
-                    <svg
-                      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none" }}
-                      viewBox={`0 0 ${n.w} ${n.h}`} preserveAspectRatio="none"
-                    >
-                      <defs>
-                        <filter id={`ds-${n.id}`} x="-20%" y="-20%" width="140%" height="140%">
-                          <feDropShadow dx="0" dy="1" stdDeviation={isSel ? 5 : 3} floodColor={isSel ? "rgba(0,0,0,0.13)" : "rgba(0,0,0,0.08)"} />
-                        </filter>
-                      </defs>
-                      <polygon
-                        points={`${n.w / 2},2 ${n.w - 2},${n.h / 2} ${n.w / 2},${n.h - 2} 2,${n.h / 2}`}
-                        fill={n.color}
-                        stroke={isConnectTarget ? ACCENT : isSel ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.13)"}
-                        strokeWidth={isConnectTarget || isSel ? 1.5 : 0.8}
-                        filter={`url(#ds-${n.id})`}
-                      />
-                    </svg>
-                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1, padding: "0 28px" }}>
-                      <div
-                        contentEditable suppressContentEditableWarning
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onBlur={(e) => updateNodeField(n.id, "title", (e.target as HTMLElement).innerText)}
-                        style={{ fontSize: fs, fontWeight: 500, color: isDark ? "#fff" : "#111", outline: "none", textAlign: "center", letterSpacing: "-0.2px", width: "100%" }}
-                        dangerouslySetInnerHTML={{ __html: n.title }}
-                      />
-                      {n.body && (
-                        <div
-                          contentEditable suppressContentEditableWarning
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onBlur={(e) => updateNodeField(n.id, "body", (e.target as HTMLElement).innerText)}
-                          style={{ fontSize: Math.max(11, fs - 2), color: isDark ? "rgba(255,255,255,0.7)" : "#888", outline: "none", textAlign: "center", marginTop: 3, width: "100%" }}
-                          dangerouslySetInnerHTML={{ __html: n.body }}
-                        />
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {/* Image */}
-                {isImage && (
-                  <div style={{ width: "100%", height: "100%", position: "relative" }}>
-                    {n.imageUrl ? (
-                      <img src={n.imageUrl} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", borderRadius: 12, pointerEvents: "none" }} />
-                    ) : (
-                      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#ccc", fontSize: 13 }}>No Image</div>
-                    )}
-                    {isSel && <div style={{ position: "absolute", inset: 0, borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.2)", pointerEvents: "none", zIndex: 5 }} />}
-                  </div>
-                )}
-
-                {/* Block / Rounded / Circle */}
-                {!isText && !isDiamond && !isImage && (
-                  <>
-                    <div
-                      contentEditable suppressContentEditableWarning
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onBlur={(e) => updateNodeField(n.id, "title", (e.target as HTMLElement).innerText)}
-                      style={{ fontSize: fs, fontWeight: 500, color: isDark ? "#fff" : "#111", outline: "none", letterSpacing: "-0.2px", textAlign: isCircle ? "center" : "left", zIndex: 1, background: "transparent", minWidth: 40 }}
-                      dangerouslySetInnerHTML={{ __html: n.title }}
-                    />
-                    <div
-                      contentEditable suppressContentEditableWarning
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onBlur={(e) => updateNodeField(n.id, "body", (e.target as HTMLElement).innerText)}
-                      style={{ fontSize: Math.max(11, fs - 2), color: isDark ? "rgba(255,255,255,0.7)" : "#888", marginTop: 5, outline: "none", lineHeight: 1.55, minHeight: 16, zIndex: 1, background: "transparent", width: "100%", textAlign: isCircle ? "center" : "left" }}
-                      dangerouslySetInnerHTML={{ __html: n.body }}
-                    />
-                  </>
-                )}
-
-                {/* Free text */}
-                {isText && (
-                  <div
-                    contentEditable suppressContentEditableWarning
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onBlur={(e) => updateNodeField(n.id, "title", (e.target as HTMLElement).innerText)}
-                    style={{ fontSize: fs, color: "#1a1a1a", outline: "none", lineHeight: 1.55, minHeight: 22, letterSpacing: "-0.2px", background: "transparent", width: "100%" }}
-                    dangerouslySetInnerHTML={{ __html: n.title }}
-                  />
-                )}
-
-                {/* Connect dot — appears on hover, drag to connect */}
-                {showDot && (
-                  <div
-                    data-role="connect-dot"
-                    onMouseDown={(e) => onDotMouseDown(e, n.id)}
-                    title="Drag to connect"
-                    style={{
-                      width: 13, height: 13, borderRadius: "50%",
-                      background: connectDrag?.fromId === n.id ? ACCENT : "#fff",
-                      border: `2px solid ${ACCENT}`,
-                      position: "absolute",
-                      right: isCircle ? -9 : isDiamond ? -8 : -7,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      cursor: "crosshair",
-                      zIndex: 10,
-                      boxShadow: "0 1px 5px rgba(0,0,0,0.2)",
-                      transition: "background 0.12s, transform 0.12s",
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = "translateY(-50%) scale(1.2)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = "translateY(-50%) scale(1)"; }}
-                  />
-                )}
-
-                {/* Resize handle — appears on hover */}
-                {showResize && (
-                  <div
-                    data-role="resize-handle"
-                    onMouseDown={(e) => onResizeMouseDown(e, n.id)}
-                    style={{
-                      position: "absolute", right: 5, bottom: 5,
-                      width: 18, height: 18,
-                      background: "rgba(255,255,255,0.96)",
-                      border: "1px solid rgba(0,0,0,0.13)",
-                      borderRadius: 5, cursor: "nwse-resize", zIndex: 10,
-                      boxShadow: "0 1px 5px rgba(0,0,0,0.14)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      opacity: hoveredId === n.id || isSel ? 1 : 0,
-                      transition: "opacity 0.15s ease, box-shadow 0.15s ease",
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.22)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 1px 5px rgba(0,0,0,0.14)"; }}
-                  >
-                    <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ pointerEvents: "none", display: "block" }}>
-                      <line x1="1.5" y1="8" x2="8" y2="1.5" stroke="rgba(0,0,0,0.32)" strokeWidth="1.5" strokeLinecap="round" />
-                      <line x1="5" y1="8" x2="8" y2="5" stroke="rgba(0,0,0,0.32)" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
-                  </div>
-                )}
-              </div>
+                n={n}
+                isSel={isSel}
+                isHovered={isHovered}
+                isConnectSource={!!isConnectSource}
+                isConnectActive={isConnectActive}
+                isConnectTarget={isConnectTarget}
+                onMouseDown={onNodeMouseDown}
+                onContextMenu={onNodeContextMenu}
+                onMouseEnter={onNodeMouseEnter}
+                onMouseLeave={onNodeMouseLeave}
+                updateNodeField={updateNodeField}
+                onDotMouseDown={onDotMouseDown}
+                onResizeMouseDown={onResizeMouseDown}
+              />
             );
           })}
         </div>
@@ -1111,7 +1168,7 @@ export default function Canvas() {
       {/* ── Node Context Menu ── */}
       {contextMenu?.kind === "node" &&
         (() => {
-          const n = nodes.find((x) => x.id === contextMenu.id);
+          const n = nodeMap.get(contextMenu.id);
           if (!n) return null;
           const canColor = n.type !== "text" && n.type !== "image";
           return (
