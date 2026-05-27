@@ -738,6 +738,8 @@ export default function Canvas() {
   };
 
   // ── Render ────────────────────────────────────────────────────────────────────
+  if (!hydrated) return null;
+
   return (
     <div
       style={{
