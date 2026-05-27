@@ -694,6 +694,22 @@ export default function Canvas() {
     hoveredIdRef.current = hoveredId;
   }, [hoveredId]);
 
+  // ── rAF-based interaction refs ────────────────────────────────────────────────
+  // Mirror latest state into refs so mouse handlers never capture stale closures
+  const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
+  const connectDragRef = useRef(connectDrag);
+  useEffect(() => { panRef.current = pan; }, [pan]);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { connectDragRef.current = connectDrag; }, [connectDrag]);
+
+  // Pending values accumulated during a mousemove burst; applied once per frame
+  const rafRef = useRef<number | null>(null);
+  const pendingPanDelta = useRef({ x: 0, y: 0 });
+  const pendingDragPos = useRef<{ id: number; x: number; y: number } | null>(null);
+  const pendingResizeSize = useRef<{ id: number; w: number; h: number } | null>(null);
+  const pendingConnectPos = useRef<{ fromId: number; x: number; y: number } | null>(null);
+
   const toCanvas = useCallback(
     (sx: number, sy: number) => ({
       x: (sx - pan.x) / zoom,
@@ -966,70 +982,125 @@ export default function Canvas() {
   );
 
   // ── Global mouse move + up ────────────────────────────────────────────────────
+
+  // Apply all pending updates in a single React render (called from rAF or mouseup)
+  const flushPending = useCallback(() => {
+    rafRef.current = null;
+
+    const panDelta = pendingPanDelta.current;
+    if (panDelta.x !== 0 || panDelta.y !== 0) {
+      const { x, y } = panDelta;
+      pendingPanDelta.current = { x: 0, y: 0 };
+      setPan((prev) => ({ x: prev.x + x, y: prev.y + y }));
+    }
+
+    const drag = pendingDragPos.current;
+    if (drag) {
+      pendingDragPos.current = null;
+      setNodes((prev) =>
+        prev.map((n) => (n.id === drag.id ? { ...n, x: drag.x, y: drag.y } : n)),
+      );
+    }
+
+    const resize = pendingResizeSize.current;
+    if (resize) {
+      pendingResizeSize.current = null;
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.id === resize.id ? { ...n, w: resize.w, h: resize.h } : n,
+        ),
+      );
+    }
+
+    const cd = pendingConnectPos.current;
+    if (cd) {
+      pendingConnectPos.current = null;
+      setConnectDrag(cd);
+    }
+  }, []);
+
   const onMouseMove = useCallback(
     (e: MouseEvent) => {
+      const pan = panRef.current;
+      const zoom = zoomRef.current;
+      let dirty = false;
+
       if (isPanning.current) {
         const dx = e.clientX - lastPan.current.x;
         const dy = e.clientY - lastPan.current.y;
         lastPan.current = { x: e.clientX, y: e.clientY };
-        setPan((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
-        return;
+        pendingPanDelta.current.x += dx;
+        pendingPanDelta.current.y += dy;
+        dirty = true;
       }
+
       if (dragging.current && canvasRef.current) {
         const r = canvasRef.current.getBoundingClientRect();
         const mx = (e.clientX - r.left - pan.x) / zoom;
         const my = (e.clientY - r.top - pan.y) / zoom;
         const { id, ox, oy } = dragging.current;
-        setNodes((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, x: mx - ox, y: my - oy } : n)),
-        );
+        pendingDragPos.current = { id, x: mx - ox, y: my - oy };
+        dirty = true;
       }
+
       if (resizing.current) {
         const dx = (e.clientX - resizing.current.startX) / zoom;
         const dy = (e.clientY - resizing.current.startY) / zoom;
         const { id, startW, startH } = resizing.current;
-        setNodes((prev) =>
-          prev.map((n) =>
-            n.id === id
-              ? {
-                  ...n,
-                  w: Math.max(80, startW + dx),
-                  h: Math.max(50, startH + dy),
-                }
-              : n,
-          ),
-        );
+        pendingResizeSize.current = {
+          id,
+          w: Math.max(80, startW + dx),
+          h: Math.max(50, startH + dy),
+        };
+        dirty = true;
       }
-      if (connectDrag && canvasRef.current) {
+
+      const cd = connectDragRef.current;
+      if (cd && canvasRef.current) {
         const r = canvasRef.current.getBoundingClientRect();
         const mx = (e.clientX - r.left - pan.x) / zoom;
         const my = (e.clientY - r.top - pan.y) / zoom;
-        setConnectDrag((prev) => (prev ? { ...prev, x: mx, y: my } : null));
+        pendingConnectPos.current = { fromId: cd.fromId, x: mx, y: my };
+        dirty = true;
+      }
+
+      if (dirty && rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(flushPending);
       }
     },
-    [pan, zoom, connectDrag],
+    [flushPending],
   );
 
   const onMouseUp = useCallback(() => {
-    // Finalize connect drag
-    if (connectDrag) {
+    // Cancel any pending frame and commit the final position immediately
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    // Clear pending connect pos — connect finalization is handled below
+    pendingConnectPos.current = null;
+    // Flush pending drag / resize / pan
+    flushPending();
+
+    // Finalize connect drag using the ref (avoids stale closure)
+    const cd = connectDragRef.current;
+    if (cd) {
       const targetId = hoveredIdRef.current;
-      if (targetId !== null && targetId !== connectDrag.fromId) {
+      if (targetId !== null && targetId !== cd.fromId) {
         setConnections((prev) => {
           const dup = prev.some(
-            (c) => c.from === connectDrag.fromId && c.to === targetId,
+            (c) => c.from === cd.fromId && c.to === targetId,
           );
-          return dup
-            ? prev
-            : [...prev, { from: connectDrag.fromId, to: targetId }];
+          return dup ? prev : [...prev, { from: cd.fromId, to: targetId }];
         });
       }
       setConnectDrag(null);
     }
+
     dragging.current = null;
     resizing.current = null;
     isPanning.current = false;
-  }, [connectDrag]);
+  }, [flushPending]);
 
   useEffect(() => {
     window.addEventListener("mousemove", onMouseMove);
