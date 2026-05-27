@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState, useCallback, useEffect } from "react";
 
-const ACCENT = "#C8A847";
+const ACCENT = "#FFB162";
 
 type NodeType = "block" | "text" | "circle" | "diamond" | "rounded" | "image";
 
@@ -71,7 +71,7 @@ const DEFAULT_NODES: CanvasNode[] = [
     title: "Project Idea",
     body: "Capture your thoughts here",
     type: "block",
-    color: "#ffffff",
+    color: "#1E2226",
     fontSize: 13,
   },
   {
@@ -83,7 +83,7 @@ const DEFAULT_NODES: CanvasNode[] = [
     title: "Concept",
     body: "Connect your ideas",
     type: "block",
-    color: "#ffffff",
+    color: "#1E2226",
     fontSize: 13,
   },
   {
@@ -95,7 +95,7 @@ const DEFAULT_NODES: CanvasNode[] = [
     title: "Next Steps",
     body: "",
     type: "block",
-    color: "#ffffff",
+    color: "#1E2226",
     fontSize: 13,
   },
 ];
@@ -292,9 +292,9 @@ function ColorPickerWindow({
           Math.min(pos.y, window.innerHeight - pickerH - 340 - 8),
         ),
         width: W,
-        background: "rgba(252,251,249,0.97)",
+        background: "rgba(22,24,28,0.97)",
         backdropFilter: "blur(28px)",
-        border: "0.5px solid rgba(0,0,0,0.1)",
+        border: "0.5px solid rgba(255,255,255,0.08)",
         borderRadius: 18,
         boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08)",
         zIndex: 500,
@@ -317,15 +317,15 @@ function ColorPickerWindow({
           alignItems: "center",
           justifyContent: "space-between",
           cursor: "grab",
-          borderBottom: "0.5px solid rgba(0,0,0,0.07)",
-          background: "rgba(255,255,255,0.6)",
+          borderBottom: "0.5px solid rgba(255,255,255,0.06)",
+          background: "rgba(255,255,255,0.04)",
         }}
       >
         <span
           style={{
             fontSize: 12,
             fontWeight: 500,
-            color: "#555",
+            color: "#9CA3AF",
             letterSpacing: "-0.1px",
           }}
         >
@@ -347,7 +347,7 @@ function ColorPickerWindow({
             height: 44,
             borderRadius: 10,
             background: currentHex,
-            border: "0.5px solid rgba(0,0,0,0.1)",
+            border: "0.5px solid rgba(255,255,255,0.08)",
             marginBottom: 12,
             boxShadow: "inset 0 1px 4px rgba(0,0,0,0.07)",
             transition: "background 0.05s",
@@ -369,7 +369,7 @@ function ColorPickerWindow({
             background: pureHueHex,
             cursor: "crosshair",
             marginBottom: 10,
-            border: "0.5px solid rgba(0,0,0,0.08)",
+            border: "0.5px solid rgba(255,255,255,0.08)",
             overflow: "hidden",
             flexShrink: 0,
             transition: "height 0.2s ease",
@@ -418,7 +418,7 @@ function ColorPickerWindow({
               borderRadius: 6,
               background:
                 "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)",
-              border: "0.5px solid rgba(0,0,0,0.08)",
+              border: "0.5px solid rgba(255,255,255,0.08)",
               pointerEvents: "none",
             }}
           />
@@ -470,10 +470,10 @@ function ColorPickerWindow({
               display: "flex",
               alignItems: "center",
               gap: 6,
-              background: "rgba(0,0,0,0.04)",
+              background: "rgba(255,255,255,0.06)",
               borderRadius: 8,
               padding: "6px 9px",
-              border: "0.5px solid rgba(0,0,0,0.08)",
+              border: "0.5px solid rgba(255,255,255,0.08)",
             }}
           >
             <div
@@ -482,7 +482,7 @@ function ColorPickerWindow({
                 height: 14,
                 borderRadius: 4,
                 background: currentHex,
-                border: "0.5px solid rgba(0,0,0,0.12)",
+                border: "0.5px solid rgba(255,255,255,0.12)",
                 flexShrink: 0,
               }}
             />
@@ -501,7 +501,7 @@ function ColorPickerWindow({
                 background: "transparent",
                 fontSize: 11,
                 fontFamily: "monospace",
-                color: "#333",
+                color: "#E8E6E1",
                 outline: "none",
                 minWidth: 0,
                 letterSpacing: "0.3px",
@@ -546,12 +546,12 @@ function ColorPickerWindow({
                 style={{
                   width: "100%",
                   textAlign: "center",
-                  border: "0.5px solid rgba(0,0,0,0.1)",
-                  background: "rgba(0,0,0,0.03)",
+                  border: "0.5px solid rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,0.06)",
                   borderRadius: 7,
                   padding: "5px 2px",
                   fontSize: 11,
-                  color: "#333",
+                  color: "#E8E6E1",
                   outline: "none",
                   fontFamily: "monospace",
                 }}
@@ -559,7 +559,7 @@ function ColorPickerWindow({
               <span
                 style={{
                   fontSize: 9,
-                  color: "#bbb",
+                  color: "#6B7280",
                   letterSpacing: "0.4px",
                   fontWeight: 500,
                 }}
@@ -574,7 +574,7 @@ function ColorPickerWindow({
           <div
             style={{
               fontSize: 10,
-              color: "#bbb",
+              color: "#6B7280",
               letterSpacing: "0.5px",
               textTransform: "uppercase",
               marginBottom: 7,
@@ -601,7 +601,7 @@ function ColorPickerWindow({
                     background: c,
                     border: active
                       ? `2px solid ${ACCENT}`
-                      : "1px solid rgba(0,0,0,0.1)",
+                      : "1px solid rgba(255,255,255,0.08)",
                     cursor: "pointer",
                     transition: "transform 0.1s",
                     boxShadow: active ? `0 0 0 3px ${ACCENT}30` : "none",
@@ -685,6 +685,7 @@ export default function Canvas() {
     startY: number;
     startW: number;
     startH: number;
+    constrain: boolean; // keep w === h (circle)
   } | null>(null);
   const isPanning = useRef(false);
   const lastPan = useRef({ x: 0, y: 0 });
@@ -761,7 +762,7 @@ export default function Canvas() {
                 : "New Block",
         body: "",
         type,
-        color: isText ? "transparent" : "#ffffff",
+        color: isText ? "transparent" : "#1E2226",
         fontSize: isText ? 15 : 13,
       };
       setNodes((prev) => [...prev, newNode]);
@@ -800,7 +801,7 @@ export default function Canvas() {
               title: "Image",
               body: "",
               type: "image",
-              color: "#ffffff",
+              color: "#1E2226",
               imageUrl,
             },
           ];
@@ -979,6 +980,7 @@ export default function Canvas() {
         startY: e.clientY,
         startW: n.w,
         startH: n.h,
+        constrain: n.type === "circle",
       };
     },
     [nodes],
@@ -1065,12 +1067,18 @@ export default function Canvas() {
       if (resizing.current) {
         const dx = (e.clientX - resizing.current.startX) / zoom;
         const dy = (e.clientY - resizing.current.startY) / zoom;
-        const { id, startW, startH } = resizing.current;
-        pendingResizeSize.current = {
-          id,
-          w: Math.max(80, startW + dx),
-          h: Math.max(50, startH + dy),
-        };
+        const { id, startW, startH, constrain } = resizing.current;
+        let newW: number, newH: number;
+        if (constrain) {
+          // Circle: keep square — drive size by the larger delta
+          const d = Math.max(dx, dy);
+          newW = Math.max(80, startW + d);
+          newH = newW;
+        } else {
+          newW = Math.max(80, startW + dx);
+          newH = Math.max(50, startH + dy);
+        }
+        pendingResizeSize.current = { id, w: newW, h: newH };
         dirty = true;
       }
 
@@ -1194,7 +1202,7 @@ export default function Canvas() {
     padding: "9px 14px",
     cursor: "pointer",
     fontSize: 13.5,
-    color: danger ? "#c0392b" : "#222",
+    color: danger ? "#FF6B6B" : "#E8E6E1",
     display: "flex",
     alignItems: "center",
     gap: 10,
@@ -1203,8 +1211,8 @@ export default function Canvas() {
   const hoverMenu = (e: React.MouseEvent, on: boolean, danger = false) => {
     (e.currentTarget as HTMLElement).style.background = on
       ? danger
-        ? "rgba(192,57,43,0.07)"
-        : "rgba(0,0,0,0.04)"
+        ? "rgba(255,107,107,0.1)"
+        : "rgba(255,255,255,0.06)"
       : "transparent";
   };
 
@@ -1214,7 +1222,7 @@ export default function Canvas() {
       style={{
         width: "100vw",
         height: "100vh",
-        background: "#f5f4f0",
+        background: "#141618",
         overflow: "hidden",
         position: "relative",
         fontFamily:
@@ -1242,11 +1250,11 @@ export default function Canvas() {
             ? "translateX(0)"
             : `translateX(-${SIDEBAR_W}px)`,
           transition: "transform 0.26s cubic-bezier(0.4, 0, 0.2, 1)",
-          background: "rgba(252,251,249,0.97)",
+          background: "rgba(18,20,22,0.97)",
           backdropFilter: "blur(24px)",
           WebkitBackdropFilter: "blur(24px)",
-          borderRight: "0.5px solid rgba(0,0,0,0.08)",
-          boxShadow: "4px 0 32px rgba(0,0,0,0.07)",
+          borderRight: "0.5px solid rgba(255,255,255,0.07)",
+          boxShadow: "4px 0 32px rgba(0,0,0,0.3)",
           zIndex: 150,
           display: "flex",
           flexDirection: "column",
@@ -1259,7 +1267,7 @@ export default function Canvas() {
         <div
           style={{
             padding: "22px 16px 14px",
-            borderBottom: "0.5px solid rgba(0,0,0,0.06)",
+            borderBottom: "0.5px solid rgba(255,255,255,0.06)",
             flexShrink: 0,
           }}
         >
@@ -1267,7 +1275,7 @@ export default function Canvas() {
             style={{
               fontSize: 14,
               fontWeight: 700,
-              color: "#111",
+              color: "#E8E6E1",
               letterSpacing: "-0.4px",
             }}
           >
@@ -1284,7 +1292,7 @@ export default function Canvas() {
                 padding: "10px 16px 4px",
                 fontSize: 10,
                 fontWeight: 600,
-                color: "#c0bdb8",
+                color: "#4B5563",
                 textTransform: "uppercase",
                 letterSpacing: "0.7px",
               }}
@@ -1299,17 +1307,17 @@ export default function Canvas() {
                 padding: "7px 12px",
                 margin: "1px 8px",
                 borderRadius: 8,
-                background: "rgba(0,0,0,0.04)",
+                background: "rgba(255,255,255,0.05)",
                 cursor: "default",
               }}
             >
-              <span style={{ fontSize: 12, color: "#888", flexShrink: 0 }}>
+              <span style={{ fontSize: 12, color: "#6B7280", flexShrink: 0 }}>
                 ◫
               </span>
               <span
                 style={{
                   fontSize: 12.5,
-                  color: "#111",
+                  color: "#E8E6E1",
                   fontWeight: 500,
                   flex: 1,
                 }}
@@ -1335,7 +1343,7 @@ export default function Canvas() {
                 padding: "10px 16px 4px",
                 fontSize: 10,
                 fontWeight: 600,
-                color: "#c0bdb8",
+                color: "#4B5563",
                 textTransform: "uppercase",
                 letterSpacing: "0.7px",
               }}
@@ -1343,7 +1351,9 @@ export default function Canvas() {
               Nodes
             </div>
             {nodes.length === 0 ? (
-              <div style={{ padding: "6px 16px", fontSize: 12, color: "#ccc" }}>
+              <div
+                style={{ padding: "6px 16px", fontSize: 12, color: "#4B5563" }}
+              >
                 No nodes yet
               </div>
             ) : (
@@ -1381,7 +1391,7 @@ export default function Canvas() {
                     onMouseEnter={(e) => {
                       if (!isActive)
                         (e.currentTarget as HTMLElement).style.background =
-                          "rgba(0,0,0,0.04)";
+                          "rgba(255,255,255,0.05)";
                     }}
                     onMouseLeave={(e) => {
                       if (!isActive)
@@ -1392,7 +1402,7 @@ export default function Canvas() {
                     <span
                       style={{
                         fontSize: 11,
-                        color: isActive ? ACCENT : "#c0bdb8",
+                        color: isActive ? ACCENT : "#4B5563",
                         width: 14,
                         textAlign: "center",
                         flexShrink: 0,
@@ -1403,7 +1413,7 @@ export default function Canvas() {
                     <span
                       style={{
                         fontSize: 12.5,
-                        color: isActive ? "#111" : "#555",
+                        color: isActive ? "#E8E6E1" : "#9CA3AF",
                         fontWeight: isActive ? 500 : 400,
                         flex: 1,
                         overflow: "hidden",
@@ -1426,7 +1436,7 @@ export default function Canvas() {
                 padding: "10px 16px 4px",
                 fontSize: 10,
                 fontWeight: 600,
-                color: "#c0bdb8",
+                color: "#4B5563",
                 textTransform: "uppercase",
                 letterSpacing: "0.7px",
               }}
@@ -1455,9 +1465,9 @@ export default function Canvas() {
                 <kbd
                   style={{
                     fontSize: 10.5,
-                    color: "#666",
-                    background: "rgba(0,0,0,0.05)",
-                    border: "0.5px solid rgba(0,0,0,0.1)",
+                    color: "#9CA3AF",
+                    background: "rgba(255,255,255,0.07)",
+                    border: "0.5px solid rgba(255,255,255,0.08)",
                     borderRadius: 5,
                     padding: "2px 6px",
                     fontFamily: "inherit",
@@ -1470,7 +1480,7 @@ export default function Canvas() {
                 <span
                   style={{
                     fontSize: 11.5,
-                    color: "#aaa",
+                    color: "#6B7280",
                     textAlign: "right",
                     lineHeight: 1.3,
                   }}
@@ -1492,10 +1502,10 @@ export default function Canvas() {
           top: "50%",
           transform: "translateY(-50%)",
           transition: "left 0.26s cubic-bezier(0.4, 0, 0.2, 1)",
-          background: "rgba(252,251,249,0.97)",
+          background: "rgba(18,20,22,0.97)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
-          border: "0.5px solid rgba(0,0,0,0.1)",
+          border: "0.5px solid rgba(255,255,255,0.08)",
           borderLeft: "none",
           borderRadius: "0 8px 8px 0",
           width: 18,
@@ -1506,16 +1516,16 @@ export default function Canvas() {
           justifyContent: "center",
           zIndex: 151,
           padding: 0,
-          boxShadow: "2px 0 8px rgba(0,0,0,0.05)",
-          color: "#bbb",
+          boxShadow: "2px 0 8px rgba(0,0,0,0.2)",
+          color: "#6B7280",
           fontSize: 11,
           lineHeight: 1,
         }}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.color = "#888";
+          (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.color = "#bbb";
+          (e.currentTarget as HTMLElement).style.color = "#6B7280";
         }}
       >
         {sidebarOpen ? "‹" : "›"}
@@ -1528,15 +1538,15 @@ export default function Canvas() {
           top: 20,
           left: "50%",
           transform: "translateX(-50%)",
-          background: "rgba(255,255,255,0.94)",
+          background: "rgba(20,22,24,0.92)",
           backdropFilter: "blur(20px)",
-          border: "0.5px solid rgba(0,0,0,0.1)",
+          border: "0.5px solid rgba(255,255,255,0.08)",
           borderRadius: 16,
           padding: "8px 14px",
           display: "flex",
           gap: 4,
           alignItems: "center",
-          boxShadow: "0 2px 24px rgba(0,0,0,0.08)",
+          boxShadow: "0 2px 24px rgba(0,0,0,0.3)",
           zIndex: 200,
         }}
       >
@@ -1550,7 +1560,7 @@ export default function Canvas() {
             fontFamily: "inherit",
             cursor: "pointer",
             background: "transparent",
-            color: "#c0392b",
+            color: "#FF6B6B",
           }}
         >
           Delete
@@ -1559,11 +1569,11 @@ export default function Canvas() {
           style={{
             width: "0.5px",
             height: 20,
-            background: "rgba(0,0,0,0.12)",
+            background: "rgba(255,255,255,0.1)",
             margin: "0 4px",
           }}
         />
-        <div style={{ fontSize: 11, color: "#ccc" }}>
+        <div style={{ fontSize: 11, color: "#4B5563" }}>
           Right-click → Shapes & Options
         </div>
         {/* Live indicator while connecting */}
@@ -1573,7 +1583,7 @@ export default function Canvas() {
               style={{
                 width: "0.5px",
                 height: 20,
-                background: "rgba(0,0,0,0.12)",
+                background: "rgba(255,255,255,0.1)",
                 margin: "0 4px",
               }}
             />
@@ -1591,14 +1601,14 @@ export default function Canvas() {
               onClick={() => setConnectDrag(null)}
               style={{
                 fontSize: 11,
-                color: "#aaa",
+                color: "#6B7280",
                 cursor: "pointer",
                 padding: "2px 6px",
                 borderRadius: 5,
                 marginLeft: 2,
               }}
               onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "rgba(0,0,0,0.06)")
+                (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
               }
               onMouseLeave={(e) =>
                 (e.currentTarget.style.background = "transparent")
@@ -1644,7 +1654,7 @@ export default function Canvas() {
               height={20 * zoom}
               patternUnits="userSpaceOnUse"
             >
-              <circle cx={1} cy={1} r={0.8} fill="#d0cec8" />
+              <circle cx={1} cy={1} r={0.8} fill="rgba(255,255,255,0.06)" />
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#dots)" />
@@ -1688,7 +1698,7 @@ export default function Canvas() {
                 <path
                   key={`${c.from}-${c.to}`}
                   d={`M ${x1} ${y1} C ${cxm} ${y1}, ${cxm} ${y2}, ${x2} ${y2}`}
-                  stroke="#c8c6c0"
+                  stroke="rgba(255,255,255,0.15)"
                   strokeWidth={1.5 / zoom}
                   fill="none"
                   strokeLinecap="round"
@@ -1728,13 +1738,9 @@ export default function Canvas() {
             const isDiamond = n.type === "diamond";
             const isRounded = n.type === "rounded";
             const isImage = n.type === "image";
-            const isDark = [
-              "#343a40",
-              "#6c757d",
-              "#2C3E50",
-              "#1A1A2E",
-              "#0a0a0a",
-            ].includes(n.color);
+            const [_nr, _ng, _nb] = hexToRgb(n.color);
+            const isDark =
+              (0.299 * _nr + 0.587 * _ng + 0.114 * _nb) / 255 < 0.45;
             const fs = n.fontSize ?? 13;
 
             // Highlight potential connection target
@@ -1751,23 +1757,19 @@ export default function Canvas() {
                 : isConnectTarget
                   ? `2px solid ${ACCENT}`
                   : isSel
-                    ? "1px solid rgba(0,0,0,0.18)"
-                    : "0.5px solid rgba(0,0,0,0.1)";
+                    ? "1px solid rgba(255,255,255,0.18)"
+                    : "0.5px solid rgba(255,255,255,0.07)";
             const hostShadow =
               isDiamond || isText
                 ? "none"
                 : isConnectTarget
-                  ? `0 0 0 3px ${ACCENT}35, 0 4px 20px rgba(0,0,0,0.1)`
+                  ? `0 0 0 3px ${ACCENT}50, 0 4px 20px rgba(0,0,0,0.3)`
                   : isSel
-                    ? "0 4px 20px rgba(0,0,0,0.13), 0 1px 4px rgba(0,0,0,0.08)"
-                    : "0 1px 8px rgba(0,0,0,0.06)";
+                    ? "0 4px 24px rgba(0,0,0,0.5), 0 1px 6px rgba(0,0,0,0.3)"
+                    : "0 2px 12px rgba(0,0,0,0.4)";
             const hostRadius = isCircle ? "50%" : isRounded ? 24 : 12;
 
-            const showResize =
-              (hoveredId === n.id || isSel) &&
-              !isText &&
-              !isCircle &&
-              !isDiamond;
+            const showResize = (hoveredId === n.id || isSel) && !isText;
             // Show connect dot on hover (or when it's the active source)
             const showDot =
               !isText && (hoveredId === n.id || connectDrag?.fromId === n.id);
@@ -1805,7 +1807,7 @@ export default function Canvas() {
                   flexDirection: "column",
                   justifyContent: isCircle ? "center" : "flex-start",
                   alignItems: isCircle ? "center" : "flex-start",
-                  overflow: isImage ? "hidden" : "visible",
+                  overflow: "visible",
                   isolation: "isolate",
                 }}
               >
@@ -1850,8 +1852,8 @@ export default function Canvas() {
                           isConnectTarget
                             ? ACCENT
                             : isSel
-                              ? "rgba(0,0,0,0.2)"
-                              : "rgba(0,0,0,0.13)"
+                              ? "rgba(255,255,255,0.25)"
+                              : "rgba(255,255,255,0.12)"
                         }
                         strokeWidth={isConnectTarget || isSel ? 1.5 : 0.8}
                         filter={`url(#ds-${n.id})`}
@@ -1883,7 +1885,7 @@ export default function Canvas() {
                         style={{
                           fontSize: fs,
                           fontWeight: 500,
-                          color: isDark ? "#fff" : "#111",
+                          color: isDark ? "#E8E6E1" : "#111",
                           outline: "none",
                           textAlign: "center",
                           letterSpacing: "-0.2px",
@@ -1949,7 +1951,7 @@ export default function Canvas() {
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          color: "#ccc",
+                          color: "#6B7280",
                           fontSize: 13,
                         }}
                       >
@@ -1962,7 +1964,7 @@ export default function Canvas() {
                           position: "absolute",
                           inset: 0,
                           borderRadius: 12,
-                          border: "1.5px solid rgba(0,0,0,0.2)",
+                          border: "1.5px solid rgba(255,255,255,0.2)",
                           pointerEvents: "none",
                           zIndex: 5,
                         }}
@@ -1988,7 +1990,7 @@ export default function Canvas() {
                       style={{
                         fontSize: fs,
                         fontWeight: 500,
-                        color: isDark ? "#fff" : "#111",
+                        color: isDark ? "#E8E6E1" : "#111",
                         outline: "none",
                         letterSpacing: "-0.2px",
                         textAlign: isCircle ? "center" : "left",
@@ -2041,7 +2043,7 @@ export default function Canvas() {
                     }
                     style={{
                       fontSize: fs,
-                      color: "#1a1a1a",
+                      color: "#E8E6E1",
                       outline: "none",
                       lineHeight: 1.55,
                       minHeight: 22,
@@ -2064,7 +2066,7 @@ export default function Canvas() {
                       height: 13,
                       borderRadius: "50%",
                       background:
-                        connectDrag?.fromId === n.id ? ACCENT : "#fff",
+                        connectDrag?.fromId === n.id ? ACCENT : "#2A2E34",
                       border: `2px solid ${ACCENT}`,
                       position: "absolute",
                       right: isCircle ? -9 : isDiamond ? -8 : -7,
@@ -2072,7 +2074,7 @@ export default function Canvas() {
                       transform: "translateY(-50%)",
                       cursor: "crosshair",
                       zIndex: 10,
-                      boxShadow: "0 1px 5px rgba(0,0,0,0.2)",
+                      boxShadow: "0 1px 5px rgba(0,0,0,0.5)",
                       transition: "background 0.12s, transform 0.12s",
                     }}
                     onMouseEnter={(e) => {
@@ -2086,60 +2088,65 @@ export default function Canvas() {
                   />
                 )}
 
-                {/* Resize handle — appears on hover */}
+                {/* Resize handle — outside node boundary, appears on hover */}
                 {showResize && (
                   <div
                     data-role="resize-handle"
                     onMouseDown={(e) => onResizeMouseDown(e, n.id)}
                     style={{
                       position: "absolute",
-                      right: 5,
-                      bottom: 5,
-                      width: 18,
-                      height: 18,
-                      background: "rgba(255,255,255,0.96)",
-                      border: "1px solid rgba(0,0,0,0.13)",
-                      borderRadius: 5,
+                      right: -8,
+                      bottom: -8,
+                      width: 16,
+                      height: 16,
+                      background: "rgba(28,32,36,0.97)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 4,
                       cursor: "nwse-resize",
-                      zIndex: 10,
-                      boxShadow: "0 1px 5px rgba(0,0,0,0.14)",
+                      zIndex: 20,
+                      boxShadow: "0 1px 6px rgba(0,0,0,0.6)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       opacity: hoveredId === n.id || isSel ? 1 : 0,
-                      transition: "opacity 0.15s ease, box-shadow 0.15s ease",
+                      transition:
+                        "opacity 0.15s ease, box-shadow 0.15s ease, background 0.1s ease",
                     }}
                     onMouseEnter={(e) => {
                       (e.currentTarget as HTMLElement).style.boxShadow =
-                        "0 2px 8px rgba(0,0,0,0.22)";
+                        "0 2px 10px rgba(0,0,0,0.7)";
+                      (e.currentTarget as HTMLElement).style.background =
+                        "rgba(40,46,54,0.99)";
                     }}
                     onMouseLeave={(e) => {
                       (e.currentTarget as HTMLElement).style.boxShadow =
-                        "0 1px 5px rgba(0,0,0,0.14)";
+                        "0 1px 6px rgba(0,0,0,0.6)";
+                      (e.currentTarget as HTMLElement).style.background =
+                        "rgba(28,32,36,0.97)";
                     }}
                   >
                     <svg
-                      width="9"
-                      height="9"
-                      viewBox="0 0 9 9"
+                      width="8"
+                      height="8"
+                      viewBox="0 0 8 8"
                       fill="none"
                       style={{ pointerEvents: "none", display: "block" }}
                     >
                       <line
                         x1="1.5"
-                        y1="8"
-                        x2="8"
+                        y1="7"
+                        x2="7"
                         y2="1.5"
-                        stroke="rgba(0,0,0,0.32)"
+                        stroke="rgba(255,255,255,0.5)"
                         strokeWidth="1.5"
                         strokeLinecap="round"
                       />
                       <line
-                        x1="5"
-                        y1="8"
-                        x2="8"
-                        y2="5"
-                        stroke="rgba(0,0,0,0.32)"
+                        x1="4.5"
+                        y1="7"
+                        x2="7"
+                        y2="4.5"
+                        stroke="rgba(255,255,255,0.5)"
                         strokeWidth="1.5"
                         strokeLinecap="round"
                       />
@@ -2160,11 +2167,11 @@ export default function Canvas() {
             position: "fixed",
             left: contextMenu.x,
             top: contextMenu.y,
-            background: "rgba(252,251,249,0.97)",
+            background: "rgba(22,24,28,0.97)",
             backdropFilter: "blur(24px)",
-            border: "0.5px solid rgba(0,0,0,0.1)",
+            border: "0.5px solid rgba(255,255,255,0.08)",
             borderRadius: 14,
-            boxShadow: "0 8px 40px rgba(0,0,0,0.12)",
+            boxShadow: "0 8px 40px rgba(0,0,0,0.35)",
             zIndex: 300,
             minWidth: 210,
             padding: "6px 0",
@@ -2173,7 +2180,7 @@ export default function Canvas() {
           <div
             style={{
               fontSize: 11,
-              color: "#bbb",
+              color: "#4B5563",
               padding: "6px 14px 4px",
               textTransform: "uppercase",
               letterSpacing: "0.5px",
@@ -2204,7 +2211,7 @@ export default function Canvas() {
               <span
                 style={{
                   fontSize: 15,
-                  color: "#aaa",
+                  color: "#6B7280",
                   width: 22,
                   textAlign: "center",
                 }}
@@ -2217,7 +2224,7 @@ export default function Canvas() {
           <div
             style={{
               height: "0.5px",
-              background: "rgba(0,0,0,0.07)",
+              background: "rgba(255,255,255,0.06)",
               margin: "4px 0",
             }}
           />
@@ -2248,11 +2255,11 @@ export default function Canvas() {
                 position: "fixed",
                 left: contextMenu.x,
                 top: contextMenu.y,
-                background: "rgba(252,251,249,0.97)",
+                background: "rgba(22,24,28,0.97)",
                 backdropFilter: "blur(24px)",
-                border: "0.5px solid rgba(0,0,0,0.1)",
+                border: "0.5px solid rgba(255,255,255,0.08)",
                 borderRadius: 14,
-                boxShadow: "0 8px 40px rgba(0,0,0,0.12)",
+                boxShadow: "0 8px 40px rgba(0,0,0,0.35)",
                 zIndex: 300,
                 minWidth: 240,
                 padding: "6px 0",
@@ -2261,7 +2268,7 @@ export default function Canvas() {
               <div
                 style={{
                   fontSize: 11,
-                  color: "#bbb",
+                  color: "#4B5563",
                   padding: "6px 14px 4px",
                   textTransform: "uppercase",
                   letterSpacing: "0.5px",
@@ -2292,8 +2299,10 @@ export default function Canvas() {
                       fontSize: 12,
                       fontWeight: 500,
                       background:
-                        n.fontSize === size ? "#222" : "rgba(0,0,0,0.05)",
-                      color: n.fontSize === size ? "#fff" : "#444",
+                        n.fontSize === size
+                          ? "#E8E6E1"
+                          : "rgba(255,255,255,0.07)",
+                      color: n.fontSize === size ? "#141618" : "#9CA3AF",
                       transition: "all 0.12s",
                     }}
                   >
@@ -2307,14 +2316,14 @@ export default function Canvas() {
                   <div
                     style={{
                       height: "0.5px",
-                      background: "rgba(0,0,0,0.07)",
+                      background: "rgba(255,255,255,0.06)",
                       margin: "2px 0",
                     }}
                   />
                   <div
                     style={{
                       fontSize: 11,
-                      color: "#bbb",
+                      color: "#4B5563",
                       padding: "6px 14px 4px",
                       textTransform: "uppercase",
                       letterSpacing: "0.5px",
@@ -2336,14 +2345,14 @@ export default function Canvas() {
                         height: 28,
                         borderRadius: 8,
                         background: n.color,
-                        border: "1px solid rgba(0,0,0,0.12)",
+                        border: "1px solid rgba(255,255,255,0.1)",
                         flexShrink: 0,
                       }}
                     />
                     <span
                       style={{
                         fontSize: 11,
-                        color: "#aaa",
+                        color: "#6B7280",
                         fontFamily: "monospace",
                         flex: 1,
                       }}
@@ -2362,20 +2371,22 @@ export default function Canvas() {
                       style={{
                         padding: "5px 10px",
                         borderRadius: 8,
-                        background: "rgba(0,0,0,0.05)",
-                        border: "0.5px solid rgba(0,0,0,0.1)",
+                        background: "rgba(255,255,255,0.07)",
+                        border: "0.5px solid rgba(255,255,255,0.08)",
                         cursor: "pointer",
                         fontSize: 12,
-                        color: "#555",
+                        color: "#9CA3AF",
                         display: "flex",
                         alignItems: "center",
                         gap: 5,
                       }}
                       onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = "rgba(0,0,0,0.09)")
+                        (e.currentTarget.style.background =
+                          "rgba(255,255,255,0.12)")
                       }
                       onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "rgba(0,0,0,0.05)")
+                        (e.currentTarget.style.background =
+                          "rgba(255,255,255,0.07)")
                       }
                     >
                       ···
@@ -2387,7 +2398,7 @@ export default function Canvas() {
               <div
                 style={{
                   height: "0.5px",
-                  background: "rgba(0,0,0,0.07)",
+                  background: "rgba(255,255,255,0.06)",
                   margin: "2px 0",
                 }}
               />
@@ -2424,15 +2435,15 @@ export default function Canvas() {
           position: "fixed",
           bottom: 24,
           right: 24,
-          background: "rgba(255,255,255,0.92)",
+          background: "rgba(20,22,24,0.92)",
           backdropFilter: "blur(12px)",
-          border: "0.5px solid rgba(0,0,0,0.08)",
+          border: "0.5px solid rgba(255,255,255,0.08)",
           borderRadius: 12,
           padding: "6px 10px",
           display: "flex",
           gap: 8,
           alignItems: "center",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+          boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
           zIndex: 100,
         }}
       >
@@ -2445,7 +2456,7 @@ export default function Canvas() {
             background: "none",
             fontSize: 18,
             cursor: "pointer",
-            color: "#555",
+            color: "#9CA3AF",
             lineHeight: 1,
           }}
         >
@@ -2454,7 +2465,7 @@ export default function Canvas() {
         <span
           style={{
             fontSize: 11,
-            color: "#999",
+            color: "#6B7280",
             minWidth: 38,
             textAlign: "center",
           }}
@@ -2470,14 +2481,18 @@ export default function Canvas() {
             background: "none",
             fontSize: 18,
             cursor: "pointer",
-            color: "#555",
+            color: "#9CA3AF",
             lineHeight: 1,
           }}
         >
           +
         </button>
         <div
-          style={{ width: "0.5px", height: 16, background: "rgba(0,0,0,0.1)" }}
+          style={{
+            width: "0.5px",
+            height: 16,
+            background: "rgba(255,255,255,0.1)",
+          }}
         />
         <button
           onClick={() => {
@@ -2489,7 +2504,7 @@ export default function Canvas() {
             background: "none",
             fontSize: 11,
             cursor: "pointer",
-            color: "#aaa",
+            color: "#6B7280",
           }}
         >
           Reset
@@ -2503,13 +2518,13 @@ export default function Canvas() {
           bottom: 24,
           left: "50%",
           transform: "translateX(-50%)",
-          background: "rgba(255,255,255,0.88)",
+          background: "rgba(20,22,24,0.88)",
           backdropFilter: "blur(12px)",
-          border: "0.5px solid rgba(0,0,0,0.08)",
+          border: "0.5px solid rgba(255,255,255,0.07)",
           borderRadius: 10,
           padding: "7px 16px",
           fontSize: 11.5,
-          color: "#aaa",
+          color: "#4B5563",
           letterSpacing: "-0.1px",
           whiteSpace: "nowrap",
           zIndex: 100,
