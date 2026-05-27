@@ -56,6 +56,8 @@ const PRESET_COLORS = [
 
 const FONT_SIZES = [11, 13, 15, 18, 22, 28, 36];
 
+const SIDEBAR_W = 220;
+
 const LS_NODES = "denkraum_nodes";
 const LS_CONNECTIONS = "denkraum_connections";
 
@@ -674,6 +676,7 @@ export default function Canvas() {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const dragging = useRef<{ id: number; ox: number; oy: number } | null>(null);
   const resizing = useRef<{
@@ -699,16 +702,30 @@ export default function Canvas() {
   const panRef = useRef(pan);
   const zoomRef = useRef(zoom);
   const connectDragRef = useRef(connectDrag);
-  useEffect(() => { panRef.current = pan; }, [pan]);
-  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
-  useEffect(() => { connectDragRef.current = connectDrag; }, [connectDrag]);
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+  useEffect(() => {
+    connectDragRef.current = connectDrag;
+  }, [connectDrag]);
 
   // Pending values accumulated during a mousemove burst; applied once per frame
   const rafRef = useRef<number | null>(null);
   const pendingPanDelta = useRef({ x: 0, y: 0 });
-  const pendingDragPos = useRef<{ id: number; x: number; y: number } | null>(null);
-  const pendingResizeSize = useRef<{ id: number; w: number; h: number } | null>(null);
-  const pendingConnectPos = useRef<{ fromId: number; x: number; y: number } | null>(null);
+  const pendingDragPos = useRef<{ id: number; x: number; y: number } | null>(
+    null,
+  );
+  const pendingResizeSize = useRef<{ id: number; w: number; h: number } | null>(
+    null,
+  );
+  const pendingConnectPos = useRef<{
+    fromId: number;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const toCanvas = useCallback(
     (sx: number, sy: number) => ({
@@ -998,7 +1015,9 @@ export default function Canvas() {
     if (drag) {
       pendingDragPos.current = null;
       setNodes((prev) =>
-        prev.map((n) => (n.id === drag.id ? { ...n, x: drag.x, y: drag.y } : n)),
+        prev.map((n) =>
+          n.id === drag.id ? { ...n, x: drag.x, y: drag.y } : n,
+        ),
       );
     }
 
@@ -1137,6 +1156,21 @@ export default function Canvas() {
     setContextMenu(null);
   }, []);
 
+  const focusNode = useCallback(
+    (id: number) => {
+      const n = nodes.find((x) => x.id === id);
+      if (!n) return;
+      setSelected(id);
+      if (!canvasRef.current) return;
+      const r = canvasRef.current.getBoundingClientRect();
+      setPan({
+        x: r.width / 2 - (n.x + n.w / 2) * zoom,
+        y: r.height / 2 - (n.y + n.h / 2) * zoom,
+      });
+    },
+    [nodes, zoom],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
@@ -1195,6 +1229,297 @@ export default function Canvas() {
         style={{ display: "none" }}
         onChange={onImageFileChange}
       />
+
+      {/* ── Sidebar ── */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          height: "100%",
+          width: SIDEBAR_W,
+          transform: sidebarOpen
+            ? "translateX(0)"
+            : `translateX(-${SIDEBAR_W}px)`,
+          transition: "transform 0.26s cubic-bezier(0.4, 0, 0.2, 1)",
+          background: "rgba(252,251,249,0.97)",
+          backdropFilter: "blur(24px)",
+          WebkitBackdropFilter: "blur(24px)",
+          borderRight: "0.5px solid rgba(0,0,0,0.08)",
+          boxShadow: "4px 0 32px rgba(0,0,0,0.07)",
+          zIndex: 150,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          fontFamily:
+            "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+        }}
+      >
+        {/* App name header */}
+        <div
+          style={{
+            padding: "22px 16px 14px",
+            borderBottom: "0.5px solid rgba(0,0,0,0.06)",
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#111",
+              letterSpacing: "-0.4px",
+            }}
+          >
+            denkraum
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "6px 0 20px" }}>
+          {/* ── Boards ── */}
+          <div style={{ marginBottom: 6 }}>
+            <div
+              style={{
+                padding: "10px 16px 4px",
+                fontSize: 10,
+                fontWeight: 600,
+                color: "#c0bdb8",
+                textTransform: "uppercase",
+                letterSpacing: "0.7px",
+              }}
+            >
+              Boards
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                padding: "7px 12px",
+                margin: "1px 8px",
+                borderRadius: 8,
+                background: "rgba(0,0,0,0.04)",
+                cursor: "default",
+              }}
+            >
+              <span style={{ fontSize: 12, color: "#888", flexShrink: 0 }}>
+                ◫
+              </span>
+              <span
+                style={{
+                  fontSize: 12.5,
+                  color: "#111",
+                  fontWeight: 500,
+                  flex: 1,
+                }}
+              >
+                Board 1
+              </span>
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  background: ACCENT,
+                  flexShrink: 0,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* ── Nodes ── */}
+          <div style={{ marginBottom: 6 }}>
+            <div
+              style={{
+                padding: "10px 16px 4px",
+                fontSize: 10,
+                fontWeight: 600,
+                color: "#c0bdb8",
+                textTransform: "uppercase",
+                letterSpacing: "0.7px",
+              }}
+            >
+              Nodes
+            </div>
+            {nodes.length === 0 ? (
+              <div style={{ padding: "6px 16px", fontSize: 12, color: "#ccc" }}>
+                No nodes yet
+              </div>
+            ) : (
+              nodes.map((n) => {
+                const icon =
+                  n.type === "text"
+                    ? "T"
+                    : n.type === "circle"
+                      ? "○"
+                      : n.type === "diamond"
+                        ? "◇"
+                        : n.type === "image"
+                          ? "▣"
+                          : n.type === "rounded"
+                            ? "▢"
+                            : "▭";
+                const label =
+                  n.title.replace(/<[^>]*>/g, "").trim() || "Untitled";
+                const isActive = selected === n.id;
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => focusNode(n.id)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 9,
+                      padding: "7px 12px",
+                      margin: "1px 8px",
+                      borderRadius: 8,
+                      background: isActive ? `${ACCENT}1a` : "transparent",
+                      cursor: "pointer",
+                      transition: "background 0.12s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive)
+                        (e.currentTarget as HTMLElement).style.background =
+                          "rgba(0,0,0,0.04)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive)
+                        (e.currentTarget as HTMLElement).style.background =
+                          "transparent";
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: isActive ? ACCENT : "#c0bdb8",
+                        width: 14,
+                        textAlign: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {icon}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 12.5,
+                        color: isActive ? "#111" : "#555",
+                        fontWeight: isActive ? 500 : 400,
+                        flex: 1,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {label}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* ── Shortcuts ── */}
+          <div>
+            <div
+              style={{
+                padding: "10px 16px 4px",
+                fontSize: 10,
+                fontWeight: 600,
+                color: "#c0bdb8",
+                textTransform: "uppercase",
+                letterSpacing: "0.7px",
+              }}
+            >
+              Shortcuts
+            </div>
+            {(
+              [
+                { kbd: "⌫  Delete", desc: "Delete selected" },
+                { kbd: "Esc", desc: "Cancel connect" },
+                { kbd: "⌃ Scroll", desc: "Zoom in / out" },
+                { kbd: "Right-click", desc: "Insert shape" },
+                { kbd: "Drag dot →", desc: "Connect nodes" },
+              ] as { kbd: string; desc: string }[]
+            ).map(({ kbd, desc }) => (
+              <div
+                key={kbd}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "5px 16px",
+                  gap: 8,
+                }}
+              >
+                <kbd
+                  style={{
+                    fontSize: 10.5,
+                    color: "#666",
+                    background: "rgba(0,0,0,0.05)",
+                    border: "0.5px solid rgba(0,0,0,0.1)",
+                    borderRadius: 5,
+                    padding: "2px 6px",
+                    fontFamily: "inherit",
+                    flexShrink: 0,
+                    letterSpacing: "-0.1px",
+                  }}
+                >
+                  {kbd}
+                </kbd>
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    color: "#aaa",
+                    textAlign: "right",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {desc}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Sidebar toggle ── */}
+      <button
+        onClick={() => setSidebarOpen((o) => !o)}
+        style={{
+          position: "fixed",
+          left: sidebarOpen ? SIDEBAR_W : 0,
+          top: "50%",
+          transform: "translateY(-50%)",
+          transition: "left 0.26s cubic-bezier(0.4, 0, 0.2, 1)",
+          background: "rgba(252,251,249,0.97)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          border: "0.5px solid rgba(0,0,0,0.1)",
+          borderLeft: "none",
+          borderRadius: "0 8px 8px 0",
+          width: 18,
+          height: 44,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 151,
+          padding: 0,
+          boxShadow: "2px 0 8px rgba(0,0,0,0.05)",
+          color: "#bbb",
+          fontSize: 11,
+          lineHeight: 1,
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLElement).style.color = "#888";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.color = "#bbb";
+        }}
+      >
+        {sidebarOpen ? "‹" : "›"}
+      </button>
 
       {/* ── Toolbar ── */}
       <div
