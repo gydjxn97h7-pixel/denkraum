@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState, useCallback, useEffect } from "react";
+import "./canvas.css";
 
 const ACCENT = "#FFB162";
 
@@ -17,6 +18,9 @@ type CanvasNode = {
   color: string;
   fontSize?: number;
   imageUrl?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
 };
 
 type Connection = { from: number; to: number };
@@ -53,8 +57,6 @@ const PRESET_COLORS = [
   "#1A1A2E",
   "#0a0a0a",
 ];
-
-const FONT_SIZES = [11, 13, 15, 18, 22, 28, 36];
 
 const SIDEBAR_W = 220;
 
@@ -787,26 +789,33 @@ export default function Canvas() {
       reader.onload = (ev) => {
         const imageUrl = ev.target?.result as string;
         if (!imageUrl) return;
-        setNodes((prev) => {
-          const maxId = prev.reduce((m, n) => Math.max(m, n.id), -1);
-          if (idCounter <= maxId) idCounter = maxId + 1;
-          return [
-            ...prev,
-            {
-              id: idCounter++,
-              x: pos.cx - 150,
-              y: pos.cy - 100,
-              w: 300,
-              h: 200,
-              title: "Image",
-              body: "",
-              type: "image",
-              color: "#1E2226",
-              imageUrl,
-            },
-          ];
-        });
-        pendingImagePos.current = null;
+        const img = new window.Image();
+        img.onload = () => {
+          const aspect = img.naturalWidth / img.naturalHeight;
+          const w = 300;
+          const h = Math.round(w / aspect);
+          setNodes((prev) => {
+            const maxId = prev.reduce((m, n) => Math.max(m, n.id), -1);
+            if (idCounter <= maxId) idCounter = maxId + 1;
+            return [
+              ...prev,
+              {
+                id: idCounter++,
+                x: pos.cx - w / 2,
+                y: pos.cy - h / 2,
+                w,
+                h,
+                title: "Image",
+                body: "",
+                type: "image",
+                color: "#1E2226",
+                imageUrl,
+              },
+            ];
+          });
+          pendingImagePos.current = null;
+        };
+        img.src = imageUrl;
       };
       reader.readAsDataURL(file);
       e.target.value = "";
@@ -1161,8 +1170,16 @@ export default function Canvas() {
     setNodes((prev) =>
       prev.map((n) => (n.id === id ? { ...n, fontSize: size } : n)),
     );
-    setContextMenu(null);
   }, []);
+
+  const updateNodeFormat = useCallback(
+    (id: number, field: "bold" | "italic" | "underline", value: boolean) => {
+      setNodes((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, [field]: value } : n)),
+      );
+    },
+    [],
+  );
 
   const focusNode = useCallback(
     (id: number) => {
@@ -1352,7 +1369,11 @@ export default function Canvas() {
             </div>
             {nodes.length === 0 ? (
               <div
-                style={{ padding: "6px 16px", fontSize: 12, color: "#4B5563" }}
+                style={{
+                  padding: "6px 16px",
+                  fontSize: 12,
+                  color: "#4B5563",
+                }}
               >
                 No nodes yet
               </div>
@@ -1750,9 +1771,10 @@ export default function Canvas() {
               n.id !== connectDrag.fromId &&
               !isText;
 
-            const hostBg = isDiamond || isText ? "transparent" : n.color;
+            const hostBg =
+              isDiamond || isText || isImage ? "transparent" : n.color;
             const hostBorder =
-              isDiamond || isText
+              isDiamond || isText || isImage
                 ? "none"
                 : isConnectTarget
                   ? `2px solid ${ACCENT}`
@@ -1760,7 +1782,7 @@ export default function Canvas() {
                     ? "1px solid rgba(255,255,255,0.18)"
                     : "0.5px solid rgba(255,255,255,0.07)";
             const hostShadow =
-              isDiamond || isText
+              isDiamond || isText || isImage
                 ? "none"
                 : isConnectTarget
                   ? `0 0 0 3px ${ACCENT}50, 0 4px 20px rgba(0,0,0,0.3)`
@@ -1884,7 +1906,9 @@ export default function Canvas() {
                         }
                         style={{
                           fontSize: fs,
-                          fontWeight: 500,
+                          fontWeight: n.bold ? 700 : 500,
+                          fontStyle: n.italic ? "italic" : "normal",
+                          textDecoration: n.underline ? "underline" : "none",
                           color: isDark ? "#E8E6E1" : "#111",
                           outline: "none",
                           textAlign: "center",
@@ -1907,6 +1931,9 @@ export default function Canvas() {
                           }
                           style={{
                             fontSize: Math.max(11, fs - 2),
+                            fontWeight: n.bold ? 600 : 400,
+                            fontStyle: n.italic ? "italic" : "normal",
+                            textDecoration: n.underline ? "underline" : "none",
                             color: isDark ? "rgba(255,255,255,0.7)" : "#888",
                             outline: "none",
                             textAlign: "center",
@@ -1937,7 +1964,7 @@ export default function Canvas() {
                         style={{
                           width: "100%",
                           height: "100%",
-                          objectFit: "cover",
+                          objectFit: "contain",
                           display: "block",
                           borderRadius: 12,
                           pointerEvents: "none",
@@ -1989,7 +2016,9 @@ export default function Canvas() {
                       }
                       style={{
                         fontSize: fs,
-                        fontWeight: 500,
+                        fontWeight: n.bold ? 700 : 500,
+                        fontStyle: n.italic ? "italic" : "normal",
+                        textDecoration: n.underline ? "underline" : "none",
                         color: isDark ? "#E8E6E1" : "#111",
                         outline: "none",
                         letterSpacing: "-0.2px",
@@ -2013,6 +2042,9 @@ export default function Canvas() {
                       }
                       style={{
                         fontSize: Math.max(11, fs - 2),
+                        fontWeight: n.bold ? 600 : 400,
+                        fontStyle: n.italic ? "italic" : "normal",
+                        textDecoration: n.underline ? "underline" : "none",
                         color: isDark ? "rgba(255,255,255,0.7)" : "#888",
                         marginTop: 5,
                         outline: "none",
@@ -2043,6 +2075,9 @@ export default function Canvas() {
                     }
                     style={{
                       fontSize: fs,
+                      fontWeight: n.bold ? 700 : 400,
+                      fontStyle: n.italic ? "italic" : "normal",
+                      textDecoration: n.underline ? "underline" : "none",
                       color: "#E8E6E1",
                       outline: "none",
                       lineHeight: 1.55,
@@ -2234,8 +2269,29 @@ export default function Canvas() {
             onMouseLeave={(e) => hoverMenu(e, false)}
             style={menuItem()}
           >
-            <span style={{ fontSize: 15, width: 22, textAlign: "center" }}>
-              🖼
+            <span
+              style={{
+                width: 22,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#6B7280",
+              }}
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
             </span>
             Insert Image
           </div>
@@ -2265,50 +2321,106 @@ export default function Canvas() {
                 padding: "6px 0",
               }}
             >
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#4B5563",
-                  padding: "6px 14px 4px",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px",
-                }}
-              >
-                Font Size
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 4,
-                  padding: "4px 14px 10px",
-                }}
-              >
-                {FONT_SIZES.map((size) => (
-                  <div
-                    key={size}
-                    onClick={() => updateFontSize(contextMenu.id, size)}
+              {/* ── Text formatting ── */}
+              <div style={{ padding: "8px 14px 10px" }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#4B5563",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                    marginBottom: 9,
+                  }}
+                >
+                  Text
+                </div>
+                {/* Font size slider */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    marginBottom: 8,
+                  }}
+                >
+                  <span
+                    style={{ fontSize: 10, color: "#6B7280", flexShrink: 0 }}
+                  >
+                    A
+                  </span>
+                  <input
+                    type="range"
+                    className="fmt-slider"
+                    min={8}
+                    max={72}
+                    value={n.fontSize ?? 13}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onChange={(e) => updateFontSize(n.id, +e.target.value)}
+                    style={{ flex: 1, cursor: "pointer", minWidth: 0 }}
+                  />
+                  <span
                     style={{
-                      width: 34,
-                      height: 30,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: 7,
-                      cursor: "pointer",
-                      fontSize: 12,
-                      fontWeight: 500,
-                      background:
-                        n.fontSize === size
-                          ? "#E8E6E1"
-                          : "rgba(255,255,255,0.07)",
-                      color: n.fontSize === size ? "#141618" : "#9CA3AF",
-                      transition: "all 0.12s",
+                      fontSize: 11,
+                      color: "#9CA3AF",
+                      minWidth: 20,
+                      textAlign: "right",
+                      fontVariantNumeric: "tabular-nums",
+                      flexShrink: 0,
                     }}
                   >
-                    {size}
-                  </div>
-                ))}
+                    {n.fontSize ?? 13}
+                  </span>
+                </div>
+                {/* B / I / U */}
+                <div style={{ display: "flex", gap: 5 }}>
+                  {(
+                    [
+                      { field: "bold", label: "B", style: { fontWeight: 700 } },
+                      {
+                        field: "italic",
+                        label: "I",
+                        style: { fontStyle: "italic" },
+                      },
+                      {
+                        field: "underline",
+                        label: "U",
+                        style: { textDecoration: "underline" },
+                      },
+                    ] as {
+                      field: "bold" | "italic" | "underline";
+                      label: string;
+                      style: React.CSSProperties;
+                    }[]
+                  ).map(({ field, label, style }) => {
+                    const active = !!n[field];
+                    return (
+                      <button
+                        key={field}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={() => updateNodeFormat(n.id, field, !active)}
+                        style={{
+                          flex: 1,
+                          height: 28,
+                          border: active
+                            ? "1px solid rgba(255,255,255,0.25)"
+                            : "1px solid rgba(255,255,255,0.08)",
+                          borderRadius: 7,
+                          background: active
+                            ? "rgba(255,255,255,0.12)"
+                            : "transparent",
+                          color: active ? "#E8E6E1" : "#6B7280",
+                          cursor: "pointer",
+                          fontSize: 12.5,
+                          fontFamily: "inherit",
+                          transition: "all 0.1s",
+                          ...style,
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {canColor && (

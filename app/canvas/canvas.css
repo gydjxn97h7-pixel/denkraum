@@ -1,0 +1,40 @@
+:root {
+  --accent: #FFB162;
+}
+
+input[type="range"].fmt-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+}
+
+input[type="range"].fmt-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+input[type="range"].fmt-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+input[type="range"].fmt-slider::-webkit-slider-runnable-track {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  height: 3px;
+}
