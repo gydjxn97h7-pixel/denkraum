@@ -857,12 +857,6 @@ export default function Canvas() {
     setColorPicker((prev) => (prev ? { ...prev, color } : null));
   }, []);
 
-  const updateNodeTextColor = useCallback((id: number, color: string) => {
-    setNodes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, textColor: color } : n)),
-    );
-  }, []);
-
   const openTextColorPicker = useCallback(
     (
       nodeId: number,
@@ -997,6 +991,12 @@ export default function Canvas() {
     [contextMenu, connectDrag],
   );
 
+  // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
+  const nodeMap = useMemo(
+    () => new Map(nodes.map((n) => [n.id, n])),
+    [nodes],
+  );
+
   const onNodeMouseDown = useCallback(
     (e: React.MouseEvent, id: number) => {
       if (e.button !== 0) return;
@@ -1008,7 +1008,7 @@ export default function Canvas() {
       setContextMenu(null);
       setSelected(id);
       setNodes((prev) => bringToFront(prev, id));
-      const n = nodes.find((x) => x.id === id);
+      const n = nodeMap.get(id);
       if (!n || !canvasRef.current) return;
       const r = canvasRef.current.getBoundingClientRect();
       const mx = (e.clientX - r.left - pan.x) / zoom;
@@ -1016,7 +1016,7 @@ export default function Canvas() {
       dragging.current = { id, ox: mx - n.x, oy: my - n.y };
       e.preventDefault();
     },
-    [nodes, pan, zoom],
+    [nodeMap, pan, zoom],
   );
 
   const onResizeMouseDown = useCallback(
@@ -1024,7 +1024,7 @@ export default function Canvas() {
       e.stopPropagation();
       e.preventDefault();
       setNodes((prev) => bringToFront(prev, id));
-      const n = nodes.find((x) => x.id === id);
+      const n = nodeMap.get(id);
       if (!n) return;
       resizing.current = {
         id,
@@ -1035,7 +1035,7 @@ export default function Canvas() {
         constrain: n.type === "circle",
       };
     },
-    [nodes],
+    [nodeMap],
   );
 
   // ── Connect: drag-to-connect ──────────────────────────────────────────────────
@@ -1286,12 +1286,6 @@ export default function Canvas() {
 
   // ── Sidebar width (collapsed = icon-only 48px, open = full 220px) ────────────
   const sidebarW = sidebarOpen ? SIDEBAR_W : 48;
-
-  // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
-  const nodeMap = useMemo(
-    () => new Map(nodes.map((n) => [n.id, n])),
-    [nodes],
-  );
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -2041,7 +2035,7 @@ export default function Canvas() {
                         style={{
                           width: "100%",
                           height: "100%",
-                          objectFit: "contain",
+                          objectFit: "cover",
                           display: "block",
                           borderRadius: 12,
                           pointerEvents: "none",
