@@ -459,6 +459,53 @@ function ColorPickerWindow({
           />
         </div>
 
+        {/* Hex row */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "rgba(255,255,255,0.06)",
+            borderRadius: 8,
+            padding: "6px 9px",
+            border: "0.5px solid rgba(255,255,255,0.08)",
+            marginBottom: 6,
+          }}
+        >
+          <div
+            style={{
+              width: 14,
+              height: 14,
+              borderRadius: 4,
+              background: currentHex,
+              border: "0.5px solid rgba(255,255,255,0.12)",
+              flexShrink: 0,
+            }}
+          />
+          <input
+            value={hexInput}
+            onChange={(e) => {
+              setHexInput(e.target.value);
+              if (isValidHex(e.target.value)) applyHex(e.target.value);
+            }}
+            onBlur={() => {
+              if (!isValidHex(hexInput)) setHexInput(currentHex);
+            }}
+            style={{
+              flex: 1,
+              border: "none",
+              background: "transparent",
+              fontSize: 11,
+              fontFamily: "monospace",
+              color: "#E8E6E1",
+              outline: "none",
+              minWidth: 0,
+              letterSpacing: "0.3px",
+            }}
+          />
+        </div>
+
+        {/* RGB row */}
         <div
           style={{
             display: "flex",
@@ -467,50 +514,6 @@ function ColorPickerWindow({
             alignItems: "flex-start",
           }}
         >
-          <div
-            style={{
-              flex: 2,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              background: "rgba(255,255,255,0.06)",
-              borderRadius: 8,
-              padding: "6px 9px",
-              border: "0.5px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            <div
-              style={{
-                width: 14,
-                height: 14,
-                borderRadius: 4,
-                background: currentHex,
-                border: "0.5px solid rgba(255,255,255,0.12)",
-                flexShrink: 0,
-              }}
-            />
-            <input
-              value={hexInput}
-              onChange={(e) => {
-                setHexInput(e.target.value);
-                if (isValidHex(e.target.value)) applyHex(e.target.value);
-              }}
-              onBlur={() => {
-                if (!isValidHex(hexInput)) setHexInput(currentHex);
-              }}
-              style={{
-                flex: 1,
-                border: "none",
-                background: "transparent",
-                fontSize: 11,
-                fontFamily: "monospace",
-                color: "#E8E6E1",
-                outline: "none",
-                minWidth: 0,
-                letterSpacing: "0.3px",
-              }}
-            />
-          </div>
           {(["R", "G", "B"] as const).map((label, i) => (
             <div
               key={label}
@@ -548,11 +551,12 @@ function ColorPickerWindow({
                 }}
                 style={{
                   width: "100%",
+                  boxSizing: "border-box",
                   textAlign: "center",
                   border: "0.5px solid rgba(255,255,255,0.08)",
                   background: "rgba(255,255,255,0.06)",
                   borderRadius: 7,
-                  padding: "5px 2px",
+                  padding: "5px 4px",
                   fontSize: 11,
                   color: "#E8E6E1",
                   outline: "none",
@@ -681,6 +685,7 @@ export default function Canvas() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   const dragging = useRef<{ id: number; ox: number; oy: number } | null>(null);
   const resizing = useRef<{
@@ -992,10 +997,7 @@ export default function Canvas() {
   );
 
   // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
-  const nodeMap = useMemo(
-    () => new Map(nodes.map((n) => [n.id, n])),
-    [nodes],
-  );
+  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
 
   const onNodeMouseDown = useCallback(
     (e: React.MouseEvent, id: number) => {
@@ -1284,6 +1286,80 @@ export default function Canvas() {
       : "transparent";
   };
 
+  // ── Export PDF ────────────────────────────────────────────────────────────────
+  const handleExportPDF = useCallback(async () => {
+    if (!canvasRef.current || nodes.length === 0) return;
+    setExporting(true);
+
+    const savedPan = { ...panRef.current };
+    const savedZoom = zoomRef.current;
+
+    try {
+      // Bug 1: compute tight bounding box of all nodes + padding
+      const PAD = 40;
+      const minX = Math.min(...nodes.map((n) => n.x)) - PAD;
+      const minY = Math.min(...nodes.map((n) => n.y)) - PAD;
+      const maxX = Math.max(...nodes.map((n) => n.x + n.w)) + PAD;
+      const maxY = Math.max(...nodes.map((n) => n.y + n.h)) + PAD;
+      const contentW = Math.ceil(maxX - minX);
+      const contentH = Math.ceil(maxY - minY);
+
+      // Pan so the bounding box top-left lands exactly at canvas (0, 0)
+      setPan({ x: -minX, y: -minY });
+      setZoom(1);
+
+      // Two rAF ticks — let React commit pan/zoom before capture
+      await new Promise<void>((r) =>
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => r());
+        }),
+      );
+
+      // Temporarily expand the canvas div to the full content size so
+      // html2canvas can see nodes that lie outside the current viewport
+      const el = canvasRef.current;
+      el.style.width = `${contentW}px`;
+      el.style.height = `${contentH}px`;
+
+      const { default: html2canvas } = await import("html2canvas");
+      const { jsPDF } = await import("jspdf");
+
+      const cvs = await html2canvas(el, {
+        backgroundColor: "#141618",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        // Skip all fixed-position overlays (sidebar, toolbars, pickers)
+        ignoreElements: (el) =>
+          window.getComputedStyle(el).position === "fixed",
+      });
+
+      // Restore canvas size before saving (even if jsPDF throws)
+      el.style.width = "";
+      el.style.height = "";
+
+      const imgData = cvs.toDataURL("image/jpeg", 0.92);
+      const pdf = new jsPDF({
+        orientation: contentW >= contentH ? "landscape" : "portrait",
+        unit: "px",
+        format: [contentW, contentH],
+      });
+      pdf.addImage(imgData, "JPEG", 0, 0, contentW, contentH);
+      pdf.save("denkraum.pdf");
+    } finally {
+      // Always restore canvas size in case the try block threw before cleanup
+      if (canvasRef.current) {
+        canvasRef.current.style.width = "";
+        canvasRef.current.style.height = "";
+      }
+      setPan(savedPan);
+      setZoom(savedZoom);
+      setExporting(false);
+    }
+  }, [nodes]);
+
   // ── Sidebar width (collapsed = icon-only 48px, open = full 220px) ────────────
   const sidebarW = sidebarOpen ? SIDEBAR_W : 48;
 
@@ -1390,7 +1466,12 @@ export default function Canvas() {
 
         {/* Scrollable body */}
         <div
-          style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 0 20px" }}
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            overflowX: "hidden",
+            padding: "6px 0 20px",
+          }}
         >
           {/* ── Boards ── */}
           <div style={{ marginBottom: 6 }}>
@@ -1709,6 +1790,74 @@ export default function Canvas() {
         )}
       </div>
 
+      {/* ── Export Toolbar ── */}
+      <div
+        style={{
+          position: "fixed",
+          top: 20,
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "rgba(20,22,24,0.92)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          border: "0.5px solid rgba(255,255,255,0.08)",
+          borderRadius: 16,
+          padding: "6px 10px",
+          display: "flex",
+          gap: 4,
+          alignItems: "center",
+          boxShadow: "0 2px 24px rgba(0,0,0,0.3)",
+          zIndex: 201,
+          marginLeft: 320,
+        }}
+      >
+        <button
+          onClick={handleExportPDF}
+          disabled={exporting}
+          style={{
+            padding: "6px 13px",
+            borderRadius: 8,
+            border: "none",
+            fontSize: 12.5,
+            fontFamily: "inherit",
+            cursor: exporting ? "default" : "pointer",
+            background: "transparent",
+            color: exporting ? "#4B5563" : "#9CA3AF",
+            transition: "color 0.15s",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            letterSpacing: "-0.1px",
+          }}
+          onMouseEnter={(e) => {
+            if (!exporting)
+              (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
+          }}
+          onMouseLeave={(e) => {
+            if (!exporting)
+              (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+          }}
+        >
+          {exporting ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}>
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+              Exporting…
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Export PDF
+            </>
+          )}
+        </button>
+      </div>
+
       {/* ── Canvas ── */}
       <div
         ref={canvasRef}
@@ -2005,7 +2154,11 @@ export default function Canvas() {
                             fontWeight: n.bold ? 600 : 400,
                             fontStyle: n.italic ? "italic" : "normal",
                             textDecoration: n.underline ? "underline" : "none",
-                            color: n.textColor ? n.textColor + "bb" : isDark ? "rgba(255,255,255,0.82)" : "#888",
+                            color: n.textColor
+                              ? n.textColor + "bb"
+                              : isDark
+                                ? "rgba(255,255,255,0.82)"
+                                : "#888",
                             outline: "none",
                             textAlign: "center",
                             marginTop: 3,
@@ -2116,7 +2269,11 @@ export default function Canvas() {
                         fontWeight: n.bold ? 600 : 400,
                         fontStyle: n.italic ? "italic" : "normal",
                         textDecoration: n.underline ? "underline" : "none",
-                        color: n.textColor ? n.textColor + "bb" : isDark ? "rgba(255,255,255,0.82)" : "#888",
+                        color: n.textColor
+                          ? n.textColor + "bb"
+                          : isDark
+                            ? "rgba(255,255,255,0.82)"
+                            : "#888",
                         marginTop: 5,
                         outline: "none",
                         lineHeight: 1.55,
