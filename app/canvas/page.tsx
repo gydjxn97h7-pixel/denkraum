@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import "./canvas.css";
 
 const ACCENT = "#FFB162";
@@ -21,6 +21,7 @@ type CanvasNode = {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  textColor?: string;
 };
 
 type Connection = { from: number; to: number };
@@ -675,10 +676,11 @@ export default function Canvas() {
   const [connectDrag, setConnectDrag] = useState<ConnectDrag>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
   const [colorPicker, setColorPicker] = useState<ColorPicker>(null);
+  const [textColorPicker, setTextColorPicker] = useState<ColorPicker>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const dragging = useRef<{ id: number; ox: number; oy: number } | null>(null);
   const resizing = useRef<{
@@ -730,6 +732,8 @@ export default function Canvas() {
     y: number;
   } | null>(null);
 
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const toCanvas = useCallback(
     (sx: number, sy: number) => ({
       x: (sx - pan.x) / zoom,
@@ -738,17 +742,21 @@ export default function Canvas() {
     [pan, zoom],
   );
 
-  const addNode = useCallback(
-    (cx: number, cy: number, type: NodeType) => {
-      const isText = type === "text";
-      const isCircle = type === "circle";
-      const isDiamond = type === "diamond";
-      const w = isText ? 160 : isCircle ? 100 : isDiamond ? 130 : 200;
-      const h = isText ? 40 : isCircle ? 100 : isDiamond ? 100 : 80;
-      const maxId = nodes.reduce((m, n) => Math.max(m, n.id), -1);
+  const addNode = useCallback((cx: number, cy: number, type: NodeType) => {
+    const isText = type === "text";
+    const isCircle = type === "circle";
+    const isDiamond = type === "diamond";
+    const w = isText ? 160 : isCircle ? 100 : isDiamond ? 130 : 200;
+    const h = isText ? 40 : isCircle ? 100 : isDiamond ? 100 : 80;
+    // Capture the ID before entering the setNodes updater so setSelected
+    // can reference it synchronously without a stale closure.
+    let newId: number;
+    setNodes((prev) => {
+      const maxId = prev.reduce((m, n) => Math.max(m, n.id), -1);
       if (idCounter <= maxId) idCounter = maxId + 1;
+      newId = idCounter++;
       const newNode: CanvasNode = {
-        id: idCounter++,
+        id: newId,
         x: cx - w / 2,
         y: cy - h / 2,
         w,
@@ -767,12 +775,13 @@ export default function Canvas() {
         color: isText ? "transparent" : "#1E2226",
         fontSize: isText ? 15 : 13,
       };
-      setNodes((prev) => [...prev, newNode]);
-      setSelected(newNode.id);
-      setContextMenu(null);
-    },
-    [nodes],
-  );
+      return [...prev, newNode];
+    });
+    // newId is always assigned before setNodes returns because the updater
+    // runs synchronously in the same microtask.
+    setSelected(newId!);
+    setContextMenu(null);
+  }, []);
 
   const handleImageInsert = useCallback((cx: number, cy: number) => {
     pendingImagePos.current = { cx, cy };
@@ -848,6 +857,40 @@ export default function Canvas() {
     setColorPicker((prev) => (prev ? { ...prev, color } : null));
   }, []);
 
+  const updateNodeTextColor = useCallback((id: number, color: string) => {
+    setNodes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, textColor: color } : n)),
+    );
+  }, []);
+
+  const openTextColorPicker = useCallback(
+    (
+      nodeId: number,
+      currentColor: string,
+      screenX: number,
+      screenY: number,
+    ) => {
+      setTextColorPicker({
+        nodeId,
+        x: screenX - 280,
+        y: screenY - 20,
+        color: currentColor,
+      });
+      setContextMenu(null);
+    },
+    [],
+  );
+
+  const onPickerTextColorChange = useCallback(
+    (nodeId: number, color: string) => {
+      setNodes((prev) =>
+        prev.map((n) => (n.id === nodeId ? { ...n, textColor: color } : n)),
+      );
+      setTextColorPicker((prev) => (prev ? { ...prev, color } : null));
+    },
+    [],
+  );
+
   // ── localStorage ─────────────────────────────────────────────────────────────
   useEffect(() => {
     try {
@@ -866,17 +909,17 @@ export default function Canvas() {
 
   useEffect(() => {
     if (!hydrated) return;
-    try {
-      localStorage.setItem(LS_NODES, JSON.stringify(nodes));
-    } catch {}
-  }, [nodes, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(LS_CONNECTIONS, JSON.stringify(connections));
-    } catch {}
-  }, [connections, hydrated]);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(LS_NODES, JSON.stringify(nodes));
+        localStorage.setItem(LS_CONNECTIONS, JSON.stringify(connections));
+      } catch {}
+    }, 500);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [nodes, connections, hydrated]);
 
   // ── Wheel ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1051,6 +1094,14 @@ export default function Canvas() {
 
   const onMouseMove = useCallback(
     (e: MouseEvent) => {
+      if (
+        !isPanning.current &&
+        !dragging.current &&
+        !resizing.current &&
+        !connectDragRef.current
+      )
+        return;
+
       const pan = panRef.current;
       const zoom = zoomRef.current;
       let dirty = false;
@@ -1233,6 +1284,15 @@ export default function Canvas() {
       : "transparent";
   };
 
+  // ── Sidebar width (collapsed = icon-only 48px, open = full 220px) ────────────
+  const sidebarW = sidebarOpen ? SIDEBAR_W : 48;
+
+  // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
+  const nodeMap = useMemo(
+    () => new Map(nodes.map((n) => [n.id, n])),
+    [nodes],
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div
@@ -1262,15 +1322,12 @@ export default function Canvas() {
           top: 0,
           left: 0,
           height: "100%",
-          width: SIDEBAR_W,
-          transform: sidebarOpen
-            ? "translateX(0)"
-            : `translateX(-${SIDEBAR_W}px)`,
-          transition: "transform 0.26s cubic-bezier(0.4, 0, 0.2, 1)",
+          width: sidebarW,
+          transition: "width 0.26s cubic-bezier(0.4, 0, 0.2, 1)",
           background: "rgba(18,20,22,0.97)",
           backdropFilter: "blur(24px)",
           WebkitBackdropFilter: "blur(24px)",
-          borderRight: "0.5px solid rgba(255,255,255,0.07)",
+          borderRight: "0.5px solid rgba(255,255,255,0.12)",
           boxShadow: "4px 0 32px rgba(0,0,0,0.3)",
           zIndex: 150,
           display: "flex",
@@ -1283,100 +1340,150 @@ export default function Canvas() {
         {/* App name header */}
         <div
           style={{
-            padding: "22px 16px 14px",
+            padding: "0 10px",
+            height: 58,
             borderBottom: "0.5px solid rgba(255,255,255,0.06)",
             flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: sidebarOpen ? "space-between" : "center",
           }}
         >
-          <div
+          {sidebarOpen && (
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#E8E6E1",
+                letterSpacing: "-0.4px",
+                paddingLeft: 6,
+              }}
+            >
+              denkraum
+            </div>
+          )}
+          <button
+            onClick={() => setSidebarOpen((o) => !o)}
             style={{
+              border: "none",
+              background: "transparent",
+              color: "#6B7280",
+              cursor: "pointer",
               fontSize: 14,
-              fontWeight: 700,
-              color: "#E8E6E1",
-              letterSpacing: "-0.4px",
+              padding: 0,
+              borderRadius: 6,
+              lineHeight: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 26,
+              height: 26,
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+              (e.currentTarget as HTMLElement).style.background =
+                "rgba(255,255,255,0.07)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.color = "#6B7280";
+              (e.currentTarget as HTMLElement).style.background = "transparent";
             }}
           >
-            denkraum
-          </div>
+            {sidebarOpen ? "‹" : "›"}
+          </button>
         </div>
 
         {/* Scrollable body */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "6px 0 20px" }}>
+        <div
+          style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 0 20px" }}
+        >
           {/* ── Boards ── */}
           <div style={{ marginBottom: 6 }}>
-            <div
-              style={{
-                padding: "10px 16px 4px",
-                fontSize: 10,
-                fontWeight: 600,
-                color: "#4B5563",
-                textTransform: "uppercase",
-                letterSpacing: "0.7px",
-              }}
-            >
-              Boards
-            </div>
+            {sidebarOpen && (
+              <div
+                style={{
+                  padding: "10px 16px 4px",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: "#6B7280",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.7px",
+                }}
+              >
+                Boards
+              </div>
+            )}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 9,
-                padding: "7px 12px",
+                gap: sidebarOpen ? 9 : 0,
+                padding: sidebarOpen ? "7px 12px" : "7px 0",
                 margin: "1px 8px",
                 borderRadius: 8,
                 background: "rgba(255,255,255,0.05)",
                 cursor: "default",
+                justifyContent: sidebarOpen ? "flex-start" : "center",
               }}
             >
               <span style={{ fontSize: 12, color: "#6B7280", flexShrink: 0 }}>
                 ◫
               </span>
-              <span
-                style={{
-                  fontSize: 12.5,
-                  color: "#E8E6E1",
-                  fontWeight: 500,
-                  flex: 1,
-                }}
-              >
-                Board 1
-              </span>
-              <div
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: 3,
-                  background: ACCENT,
-                  flexShrink: 0,
-                }}
-              />
+              {sidebarOpen && (
+                <>
+                  <span
+                    style={{
+                      fontSize: 12.5,
+                      color: "#E8E6E1",
+                      fontWeight: 500,
+                      flex: 1,
+                    }}
+                  >
+                    Board 1
+                  </span>
+                  <div
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      background: ACCENT,
+                      flexShrink: 0,
+                    }}
+                  />
+                </>
+              )}
             </div>
           </div>
 
           {/* ── Nodes ── */}
           <div style={{ marginBottom: 6 }}>
-            <div
-              style={{
-                padding: "10px 16px 4px",
-                fontSize: 10,
-                fontWeight: 600,
-                color: "#4B5563",
-                textTransform: "uppercase",
-                letterSpacing: "0.7px",
-              }}
-            >
-              Nodes
-            </div>
-            {nodes.length === 0 ? (
+            {sidebarOpen && (
               <div
                 style={{
-                  padding: "6px 16px",
-                  fontSize: 12,
-                  color: "#4B5563",
+                  padding: "10px 16px 4px",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: "#6B7280",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.7px",
                 }}
               >
-                No nodes yet
+                Nodes
               </div>
+            )}
+            {nodes.length === 0 ? (
+              sidebarOpen ? (
+                <div
+                  style={{
+                    padding: "6px 16px",
+                    fontSize: 12,
+                    color: "#4B5563",
+                  }}
+                >
+                  No nodes yet
+                </div>
+              ) : null
             ) : (
               nodes.map((n) => {
                 const icon =
@@ -1401,13 +1508,14 @@ export default function Canvas() {
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 9,
-                      padding: "7px 12px",
+                      gap: sidebarOpen ? 9 : 0,
+                      padding: sidebarOpen ? "7px 12px" : "7px 0",
                       margin: "1px 8px",
                       borderRadius: 8,
                       background: isActive ? `${ACCENT}1a` : "transparent",
                       cursor: "pointer",
                       transition: "background 0.12s",
+                      justifyContent: sidebarOpen ? "flex-start" : "center",
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive)
@@ -1431,19 +1539,21 @@ export default function Canvas() {
                     >
                       {icon}
                     </span>
-                    <span
-                      style={{
-                        fontSize: 12.5,
-                        color: isActive ? "#E8E6E1" : "#9CA3AF",
-                        fontWeight: isActive ? 500 : 400,
-                        flex: 1,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {label}
-                    </span>
+                    {sidebarOpen && (
+                      <span
+                        style={{
+                          fontSize: 12.5,
+                          color: isActive ? "#E8E6E1" : "#9CA3AF",
+                          fontWeight: isActive ? 500 : 400,
+                          flex: 1,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {label}
+                      </span>
+                    )}
                   </div>
                 );
               })
@@ -1451,106 +1561,70 @@ export default function Canvas() {
           </div>
 
           {/* ── Shortcuts ── */}
-          <div>
-            <div
-              style={{
-                padding: "10px 16px 4px",
-                fontSize: 10,
-                fontWeight: 600,
-                color: "#4B5563",
-                textTransform: "uppercase",
-                letterSpacing: "0.7px",
-              }}
-            >
-              Shortcuts
-            </div>
-            {(
-              [
-                { kbd: "⌫  Delete", desc: "Delete selected" },
-                { kbd: "Esc", desc: "Cancel connect" },
-                { kbd: "⌃ Scroll", desc: "Zoom in / out" },
-                { kbd: "Right-click", desc: "Insert shape" },
-                { kbd: "Drag dot →", desc: "Connect nodes" },
-              ] as { kbd: string; desc: string }[]
-            ).map(({ kbd, desc }) => (
+          {sidebarOpen && (
+            <div>
               <div
-                key={kbd}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "5px 16px",
-                  gap: 8,
+                  padding: "10px 16px 4px",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: "#6B7280",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.7px",
                 }}
               >
-                <kbd
-                  style={{
-                    fontSize: 10.5,
-                    color: "#9CA3AF",
-                    background: "rgba(255,255,255,0.07)",
-                    border: "0.5px solid rgba(255,255,255,0.08)",
-                    borderRadius: 5,
-                    padding: "2px 6px",
-                    fontFamily: "inherit",
-                    flexShrink: 0,
-                    letterSpacing: "-0.1px",
-                  }}
-                >
-                  {kbd}
-                </kbd>
-                <span
-                  style={{
-                    fontSize: 11.5,
-                    color: "#6B7280",
-                    textAlign: "right",
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {desc}
-                </span>
+                Shortcuts
               </div>
-            ))}
-          </div>
+              {(
+                [
+                  { kbd: "⌫  Delete", desc: "Delete selected" },
+                  { kbd: "Esc", desc: "Cancel connect" },
+                  { kbd: "⌃ Scroll", desc: "Zoom in / out" },
+                  { kbd: "Right-click", desc: "Insert shape" },
+                  { kbd: "Drag dot →", desc: "Connect nodes" },
+                ] as { kbd: string; desc: string }[]
+              ).map(({ kbd, desc }) => (
+                <div
+                  key={kbd}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "5px 16px",
+                    gap: 8,
+                  }}
+                >
+                  <kbd
+                    style={{
+                      fontSize: 10.5,
+                      color: "#9CA3AF",
+                      background: "rgba(255,255,255,0.07)",
+                      border: "0.5px solid rgba(255,255,255,0.08)",
+                      borderRadius: 5,
+                      padding: "2px 6px",
+                      fontFamily: "inherit",
+                      flexShrink: 0,
+                      letterSpacing: "-0.1px",
+                    }}
+                  >
+                    {kbd}
+                  </kbd>
+                  <span
+                    style={{
+                      fontSize: 11.5,
+                      color: "#6B7280",
+                      textAlign: "right",
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {desc}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* ── Sidebar toggle ── */}
-      <button
-        onClick={() => setSidebarOpen((o) => !o)}
-        style={{
-          position: "fixed",
-          left: sidebarOpen ? SIDEBAR_W : 0,
-          top: "50%",
-          transform: "translateY(-50%)",
-          transition: "left 0.26s cubic-bezier(0.4, 0, 0.2, 1)",
-          background: "rgba(18,20,22,0.97)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          border: "0.5px solid rgba(255,255,255,0.08)",
-          borderLeft: "none",
-          borderRadius: "0 8px 8px 0",
-          width: 18,
-          height: 44,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 151,
-          padding: 0,
-          boxShadow: "2px 0 8px rgba(0,0,0,0.2)",
-          color: "#6B7280",
-          fontSize: 11,
-          lineHeight: 1,
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.color = "#6B7280";
-        }}
-      >
-        {sidebarOpen ? "‹" : "›"}
-      </button>
 
       {/* ── Toolbar ── */}
       <div
@@ -1648,9 +1722,12 @@ export default function Canvas() {
         onMouseDown={onCanvasMouseDown}
         onContextMenu={onCanvasContextMenu}
         style={{
-          width: "100%",
-          height: "100%",
-          position: "relative",
+          position: "absolute",
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: sidebarW,
+          transition: "left 0.26s cubic-bezier(0.4, 0, 0.2, 1)",
           cursor: connectDrag ? "crosshair" : "grab",
           overflow: "hidden",
         }}
@@ -1707,8 +1784,8 @@ export default function Canvas() {
           >
             {/* Existing connections */}
             {connections.map((c) => {
-              const fn = nodes.find((x) => x.id === c.from);
-              const tn = nodes.find((x) => x.id === c.to);
+              const fn = nodeMap.get(c.from);
+              const tn = nodeMap.get(c.to);
               if (!fn || !tn) return null;
               const x1 = fn.x + fn.w,
                 y1 = fn.y + fn.h / 2;
@@ -1719,7 +1796,7 @@ export default function Canvas() {
                 <path
                   key={`${c.from}-${c.to}`}
                   d={`M ${x1} ${y1} C ${cxm} ${y1}, ${cxm} ${y2}, ${x2} ${y2}`}
-                  stroke="rgba(255,255,255,0.15)"
+                  stroke="rgba(255,255,255,0.25)"
                   strokeWidth={1.5 / zoom}
                   fill="none"
                   strokeLinecap="round"
@@ -1730,7 +1807,7 @@ export default function Canvas() {
             {/* Live preview line while dragging to connect */}
             {connectDrag &&
               (() => {
-                const fn = nodes.find((x) => x.id === connectDrag.fromId);
+                const fn = nodeMap.get(connectDrag.fromId);
                 if (!fn) return null;
                 const x1 = fn.x + fn.w,
                   y1 = fn.y + fn.h / 2;
@@ -1779,8 +1856,8 @@ export default function Canvas() {
                 : isConnectTarget
                   ? `2px solid ${ACCENT}`
                   : isSel
-                    ? "1px solid rgba(255,255,255,0.18)"
-                    : "0.5px solid rgba(255,255,255,0.07)";
+                    ? "1px solid rgba(255,255,255,0.28)"
+                    : "0.5px solid rgba(255,255,255,0.13)";
             const hostShadow =
               isDiamond || isText || isImage
                 ? "none"
@@ -1909,7 +1986,7 @@ export default function Canvas() {
                           fontWeight: n.bold ? 700 : 500,
                           fontStyle: n.italic ? "italic" : "normal",
                           textDecoration: n.underline ? "underline" : "none",
-                          color: isDark ? "#E8E6E1" : "#111",
+                          color: n.textColor ?? (isDark ? "#E8E6E1" : "#111"),
                           outline: "none",
                           textAlign: "center",
                           letterSpacing: "-0.2px",
@@ -1934,7 +2011,7 @@ export default function Canvas() {
                             fontWeight: n.bold ? 600 : 400,
                             fontStyle: n.italic ? "italic" : "normal",
                             textDecoration: n.underline ? "underline" : "none",
-                            color: isDark ? "rgba(255,255,255,0.7)" : "#888",
+                            color: n.textColor ? n.textColor + "bb" : isDark ? "rgba(255,255,255,0.82)" : "#888",
                             outline: "none",
                             textAlign: "center",
                             marginTop: 3,
@@ -2019,7 +2096,7 @@ export default function Canvas() {
                         fontWeight: n.bold ? 700 : 500,
                         fontStyle: n.italic ? "italic" : "normal",
                         textDecoration: n.underline ? "underline" : "none",
-                        color: isDark ? "#E8E6E1" : "#111",
+                        color: n.textColor ?? (isDark ? "#E8E6E1" : "#111"),
                         outline: "none",
                         letterSpacing: "-0.2px",
                         textAlign: isCircle ? "center" : "left",
@@ -2045,7 +2122,7 @@ export default function Canvas() {
                         fontWeight: n.bold ? 600 : 400,
                         fontStyle: n.italic ? "italic" : "normal",
                         textDecoration: n.underline ? "underline" : "none",
-                        color: isDark ? "rgba(255,255,255,0.7)" : "#888",
+                        color: n.textColor ? n.textColor + "bb" : isDark ? "rgba(255,255,255,0.82)" : "#888",
                         marginTop: 5,
                         outline: "none",
                         lineHeight: 1.55,
@@ -2078,7 +2155,7 @@ export default function Canvas() {
                       fontWeight: n.bold ? 700 : 400,
                       fontStyle: n.italic ? "italic" : "normal",
                       textDecoration: n.underline ? "underline" : "none",
-                      color: "#E8E6E1",
+                      color: n.textColor ?? "#E8E6E1",
                       outline: "none",
                       lineHeight: 1.55,
                       minHeight: 22,
@@ -2259,7 +2336,7 @@ export default function Canvas() {
           <div
             style={{
               height: "0.5px",
-              background: "rgba(255,255,255,0.06)",
+              background: "rgba(255,255,255,0.10)",
               margin: "4px 0",
             }}
           />
@@ -2421,6 +2498,68 @@ export default function Canvas() {
                     );
                   })}
                 </div>
+                {/* Text Color */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginTop: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      background: n.textColor ?? "#E8E6E1",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#6B7280",
+                      fontFamily: "monospace",
+                      flex: 1,
+                    }}
+                  >
+                    {n.textColor ?? "#E8E6E1"}
+                  </span>
+                  <div
+                    onClick={() =>
+                      openTextColorPicker(
+                        contextMenu.id,
+                        n.textColor ?? "#E8E6E1",
+                        contextMenu.x,
+                        contextMenu.y,
+                      )
+                    }
+                    style={{
+                      padding: "5px 10px",
+                      borderRadius: 8,
+                      background: "rgba(255,255,255,0.07)",
+                      border: "0.5px solid rgba(255,255,255,0.08)",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      color: "#9CA3AF",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 5,
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background =
+                        "rgba(255,255,255,0.12)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background =
+                        "rgba(255,255,255,0.07)")
+                    }
+                  >
+                    ···
+                  </div>
+                </div>
               </div>
 
               {canColor && (
@@ -2428,7 +2567,7 @@ export default function Canvas() {
                   <div
                     style={{
                       height: "0.5px",
-                      background: "rgba(255,255,255,0.06)",
+                      background: "rgba(255,255,255,0.10)",
                       margin: "2px 0",
                     }}
                   />
@@ -2510,7 +2649,7 @@ export default function Canvas() {
               <div
                 style={{
                   height: "0.5px",
-                  background: "rgba(255,255,255,0.06)",
+                  background: "rgba(255,255,255,0.10)",
                   margin: "2px 0",
                 }}
               />
@@ -2538,6 +2677,15 @@ export default function Canvas() {
           picker={colorPicker}
           onColorChange={onPickerColorChange}
           onClose={() => setColorPicker(null)}
+        />
+      )}
+
+      {/* ── Text Color Picker ── */}
+      {textColorPicker && (
+        <ColorPickerWindow
+          picker={textColorPicker}
+          onColorChange={onPickerTextColorChange}
+          onClose={() => setTextColorPicker(null)}
         />
       )}
 
