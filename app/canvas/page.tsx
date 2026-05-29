@@ -8,957 +8,36 @@ import {
   useLayoutEffect,
 } from "react";
 import "./canvas.css";
-
-const ACCENT = "#FFB162";
-
-type NodeType =
-  | "block"
-  | "text"
-  | "circle"
-  | "oval"
-  | "diamond"
-  | "rounded"
-  | "image"
-  | "textfile";
-
-type CanvasNode = {
-  id: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  title: string;
-  body: string;
-  type: NodeType;
-  color: string;
-  fontSize?: number;
-  imageUrl?: string;
-  bold?: boolean;
-  italic?: boolean;
-  underline?: boolean;
-  textColor?: string;
-  textFileContent?: string;
-  textFileName?: string;
-};
-
-type Connection = { from: number; to: number };
-
-// Active drag-to-connect state (canvas coordinates)
-type ConnectDrag = { fromId: number } | null;
-
-type ContextMenu =
-  | { kind: "canvas"; x: number; y: number; cx: number; cy: number }
-  | { kind: "node"; x: number; y: number; id: number }
-  | null;
-
-type ColorPicker = {
-  nodeId: number;
-  x: number;
-  y: number;
-  color: string;
-} | null;
-
-const PRESET_COLORS = [
-  "#ffffff",
-  "#f5f4f0",
-  "#F0EDE8",
-  "#FFF3CD",
-  "#D4EDDA",
-  "#D1ECF1",
-  "#F8D7DA",
-  "#E2D9F3",
-  "#FCE4D6",
-  "#C8A847",
-  "#6c757d",
-  "#343a40",
-  "#2C3E50",
-  "#1A1A2E",
-  "#0a0a0a",
-];
-
-const SIDEBAR_W = 220;
-
-const LS_NODES = "denkraum_nodes";
-const LS_CONNECTIONS = "denkraum_connections";
-
-const DEFAULT_NODES: CanvasNode[] = [
-  {
-    id: 0,
-    x: 200,
-    y: 180,
-    w: 200,
-    h: 90,
-    title: "Project Idea",
-    body: "Capture your thoughts here",
-    type: "block",
-    color: "#1E2226",
-    fontSize: 13,
-  },
-  {
-    id: 1,
-    x: 500,
-    y: 150,
-    w: 200,
-    h: 90,
-    title: "Concept",
-    body: "Connect your ideas",
-    type: "block",
-    color: "#1E2226",
-    fontSize: 13,
-  },
-  {
-    id: 2,
-    x: 420,
-    y: 320,
-    w: 200,
-    h: 70,
-    title: "Next Steps",
-    body: "",
-    type: "block",
-    color: "#1E2226",
-    fontSize: 13,
-  },
-];
-const DEFAULT_CONNECTIONS: Connection[] = [
-  { from: 0, to: 1 },
-  { from: 1, to: 2 },
-];
-
-let idCounter = 3;
-
-// ── Color helpers ─────────────────────────────────────────────────────────────
-function hexToHsv(hex: string): [number, number, number] {
-  let r = 0,
-    g = 0,
-    b = 0;
-  if (hex.length === 7) {
-    r = parseInt(hex.slice(1, 3), 16) / 255;
-    g = parseInt(hex.slice(3, 5), 16) / 255;
-    b = parseInt(hex.slice(5, 7), 16) / 255;
-  }
-  const max = Math.max(r, g, b),
-    min = Math.min(r, g, b);
-  const v = max;
-  const s = max === 0 ? 0 : (max - min) / max;
-  let h = 0;
-  if (max !== min) {
-    const d = max - min;
-    switch (max) {
-      case r:
-        h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-        break;
-      case g:
-        h = ((b - r) / d + 2) / 6;
-        break;
-      case b:
-        h = ((r - g) / d + 4) / 6;
-        break;
-    }
-  }
-  return [Math.round(h * 360), Math.round(s * 100), Math.round(v * 100)];
-}
-
-function hsvToHex(h: number, s: number, v: number): string {
-  s /= 100;
-  v /= 100;
-  const f = (n: number) => {
-    const k = (n + h / 60) % 6;
-    return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
-  };
-  const toHex = (x: number) =>
-    Math.round(Math.max(0, Math.min(1, x)) * 255)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${toHex(f(5))}${toHex(f(3))}${toHex(f(1))}`;
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  if (hex.length === 7) {
-    return [
-      parseInt(hex.slice(1, 3), 16),
-      parseInt(hex.slice(3, 5), 16),
-      parseInt(hex.slice(5, 7), 16),
-    ];
-  }
-  return [0, 0, 0];
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  const toHex = (x: number) =>
-    Math.max(0, Math.min(255, Math.round(x)))
-      .toString(16)
-      .padStart(2, "0");
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-
-function isValidHex(s: string) {
-  return /^#[0-9a-fA-F]{6}$/.test(s);
-}
-
-// Strips HTML tags from untrusted loaded strings (e.g. manipulated localStorage)
-// so persisted payloads are stored and rendered as plain text.
-function stripHtml(s: unknown): string {
-  if (typeof s !== "string") return "";
-  const d = document.createElement("div");
-  d.innerHTML = s;
-  return d.textContent ?? "";
-}
-
-// ── Color Picker ──────────────────────────────────────────────────────────────
-function ColorPickerWindow({
-  picker,
-  onColorChange,
-  onClose,
-}: {
-  picker: NonNullable<ColorPicker>;
-  onColorChange: (id: number, color: string) => void;
-  onClose: () => void;
-}) {
-  const divRef = useRef<HTMLDivElement>(null);
-  const posRef = useRef({ x: picker.x, y: picker.y });
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [hsv, setHsv] = useState<[number, number, number]>(() =>
-    hexToHsv(picker.color),
-  );
-  const [hexInput, setHexInput] = useState(picker.color);
-  const [rgbInput, setRgbInput] = useState<[string, string, string]>(() => {
-    const [r, g, b] = hexToRgb(picker.color);
-    return [String(r), String(g), String(b)];
-  });
-
-  const currentHex = hsvToHex(hsv[0], hsv[1], hsv[2]);
-  const pureHueHex = hsvToHex(hsv[0], 100, 100);
-
-  useEffect(() => {
-    setHsv(hexToHsv(picker.color));
-    setHexInput(picker.color);
-    const [r, g, b] = hexToRgb(picker.color);
-    setRgbInput([String(r), String(g), String(b)]);
-  }, [picker.nodeId, picker.color]);
-
-  const applyHex = useCallback(
-    (hex: string) => {
-      setHsv(hexToHsv(hex));
-      setHexInput(hex);
-      const [r, g, b] = hexToRgb(hex);
-      setRgbInput([String(r), String(g), String(b)]);
-      onColorChange(picker.nodeId, hex);
-    },
-    [picker.nodeId, onColorChange],
-  );
-
-  const applyHsv = useCallback(
-    (h: number, s: number, v: number) => {
-      const hex = hsvToHex(h, s, v);
-      setHsv([h, s, v]);
-      setHexInput(hex);
-      const [r, g, b] = hexToRgb(hex);
-      setRgbInput([String(r), String(g), String(b)]);
-      onColorChange(picker.nodeId, hex);
-    },
-    [picker.nodeId, onColorChange],
-  );
-
-  const pickerAreaRef = useRef<HTMLDivElement>(null);
-  const isDraggingPicker = useRef(false);
-  const isDraggingWindow = useRef<{ ox: number; oy: number } | null>(null);
-  const hsvRef = useRef(hsv);
-  const applyHsvRef = useRef(applyHsv);
-  useEffect(() => {
-    hsvRef.current = hsv;
-  }, [hsv]);
-  useEffect(() => {
-    applyHsvRef.current = applyHsv;
-  }, [applyHsv]);
-
-  const updatePickerPos = useCallback((clientX: number, clientY: number) => {
-    if (!pickerAreaRef.current) return;
-    const rect = pickerAreaRef.current.getBoundingClientRect();
-    const s = Math.round(
-      Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)),
-    );
-    const v = Math.round(
-      Math.max(
-        0,
-        Math.min(100, (1 - (clientY - rect.top) / rect.height) * 100),
-      ),
-    );
-    applyHsvRef.current(hsvRef.current[0], s, v);
-  }, []);
-
-  useEffect(() => {
-    const move = (e: MouseEvent) => {
-      if (isDraggingPicker.current) updatePickerPos(e.clientX, e.clientY);
-      if (isDraggingWindow.current && divRef.current) {
-        const x = e.clientX - isDraggingWindow.current.ox;
-        const y = e.clientY - isDraggingWindow.current.oy;
-        posRef.current = { x, y };
-        divRef.current.style.transform = `translate(${x}px, ${y}px)`;
-      }
-    };
-    const up = () => {
-      isDraggingPicker.current = false;
-      isDraggingWindow.current = null;
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-    return () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-    };
-  }, [updatePickerPos]);
-
-  useLayoutEffect(() => {
-    if (divRef.current) {
-      divRef.current.style.transform = `translate(${posRef.current.x}px, ${posRef.current.y}px)`;
-    }
-  }, []);
-
-  const W = isFullscreen ? 400 : 272;
-  const pickerH = isFullscreen ? 210 : 160;
-
-  return (
-    <div
-      ref={divRef}
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        position: "fixed",
-        left: 0,
-        top: 0,
-        width: W,
-        background: "rgba(22,24,28,0.97)",
-        backdropFilter: "blur(28px)",
-        border: "0.5px solid rgba(255,255,255,0.08)",
-        borderRadius: 18,
-        boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08)",
-        zIndex: 500,
-        overflow: "hidden",
-        userSelect: "none",
-        transition: "width 0.2s ease",
-      }}
-    >
-      <div
-        onMouseDown={(e) => {
-          e.preventDefault();
-          isDraggingWindow.current = {
-            ox: e.clientX - posRef.current.x,
-            oy: e.clientY - posRef.current.y,
-          };
-        }}
-        style={{
-          padding: "12px 16px 10px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          cursor: "grab",
-          borderBottom: "0.5px solid rgba(255,255,255,0.06)",
-          background: "rgba(255,255,255,0.04)",
-        }}
-      >
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: "#9CA3AF",
-            letterSpacing: "-0.1px",
-          }}
-        >
-          Color
-        </span>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <TrafficDot color="#ff5f57" title="Close" onClick={onClose} />
-          <TrafficDot
-            color="#28c840"
-            title={isFullscreen ? "Shrink" : "Fullscreen"}
-            onClick={() => setIsFullscreen((f) => !f)}
-          />
-        </div>
-      </div>
-
-      <div style={{ padding: "14px 16px 16px" }}>
-        <div
-          style={{
-            height: 44,
-            borderRadius: 10,
-            background: currentHex,
-            border: "0.5px solid rgba(255,255,255,0.08)",
-            marginBottom: 12,
-            boxShadow: "inset 0 1px 4px rgba(0,0,0,0.07)",
-            transition: "background 0.05s",
-          }}
-        />
-
-        <div
-          ref={pickerAreaRef}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            isDraggingPicker.current = true;
-            updatePickerPos(e.clientX, e.clientY);
-          }}
-          style={{
-            position: "relative",
-            width: "100%",
-            height: pickerH,
-            borderRadius: 10,
-            background: pureHueHex,
-            cursor: "crosshair",
-            marginBottom: 10,
-            border: "0.5px solid rgba(255,255,255,0.08)",
-            overflow: "hidden",
-            flexShrink: 0,
-            transition: "height 0.2s ease",
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: "linear-gradient(to right, #fff, transparent)",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: "linear-gradient(to bottom, transparent, #000)",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              left: `${hsv[1]}%`,
-              top: `${100 - hsv[2]}%`,
-              transform: "translate(-50%, -50%)",
-              width: 14,
-              height: 14,
-              borderRadius: "50%",
-              border: "2px solid #fff",
-              boxShadow:
-                "0 0 0 1px rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.3)",
-              pointerEvents: "none",
-            }}
-          />
-        </div>
-
-        <div style={{ position: "relative", height: 18, marginBottom: 14 }}>
-          <div
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: 0,
-              right: 0,
-              height: 12,
-              transform: "translateY(-50%)",
-              borderRadius: 6,
-              background:
-                "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)",
-              border: "0.5px solid rgba(255,255,255,0.08)",
-              pointerEvents: "none",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              left: `calc(${(hsv[0] / 360) * 100}% - 8px)`,
-              top: "50%",
-              transform: "translateY(-50%)",
-              width: 16,
-              height: 16,
-              borderRadius: "50%",
-              background: pureHueHex,
-              border: "2px solid #fff",
-              boxShadow:
-                "0 0 0 1px rgba(0,0,0,0.18), 0 2px 4px rgba(0,0,0,0.22)",
-              pointerEvents: "none",
-            }}
-          />
-          <input
-            type="range"
-            min={0}
-            max={360}
-            value={hsv[0]}
-            onChange={(e) => applyHsv(+e.target.value, hsv[1], hsv[2])}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              opacity: 0,
-              cursor: "pointer",
-              margin: 0,
-            }}
-          />
-        </div>
-
-        {/* Hex row */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            background: "rgba(255,255,255,0.06)",
-            borderRadius: 8,
-            padding: "6px 9px",
-            border: "0.5px solid rgba(255,255,255,0.08)",
-            marginBottom: 6,
-          }}
-        >
-          <div
-            style={{
-              width: 14,
-              height: 14,
-              borderRadius: 4,
-              background: currentHex,
-              border: "0.5px solid rgba(255,255,255,0.12)",
-              flexShrink: 0,
-            }}
-          />
-          <input
-            value={hexInput}
-            onChange={(e) => {
-              setHexInput(e.target.value);
-              if (isValidHex(e.target.value)) applyHex(e.target.value);
-            }}
-            onBlur={() => {
-              if (!isValidHex(hexInput)) setHexInput(currentHex);
-            }}
-            style={{
-              flex: 1,
-              border: "none",
-              background: "transparent",
-              fontSize: 11,
-              fontFamily: "monospace",
-              color: "#E8E6E1",
-              outline: "none",
-              minWidth: 0,
-              letterSpacing: "0.3px",
-            }}
-          />
-        </div>
-
-        {/* RGB row */}
-        <div
-          style={{
-            display: "flex",
-            gap: 6,
-            marginBottom: 14,
-            alignItems: "flex-start",
-          }}
-        >
-          {(["R", "G", "B"] as const).map((label, i) => (
-            <div
-              key={label}
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 3,
-              }}
-            >
-              <input
-                value={rgbInput[i]}
-                onChange={(e) => {
-                  const next = [...rgbInput] as [string, string, string];
-                  next[i] = e.target.value;
-                  setRgbInput(next);
-                  const n = parseInt(e.target.value);
-                  if (!isNaN(n) && n >= 0 && n <= 255) {
-                    const rgb: [number, number, number] = [
-                      parseInt(rgbInput[0]) || 0,
-                      parseInt(rgbInput[1]) || 0,
-                      parseInt(rgbInput[2]) || 0,
-                    ];
-                    rgb[i] = n;
-                    applyHex(rgbToHex(...rgb));
-                  }
-                }}
-                onBlur={(e) => {
-                  const n = parseInt(e.target.value);
-                  if (isNaN(n) || n < 0 || n > 255) {
-                    const [r, g, b] = hexToRgb(currentHex);
-                    setRgbInput([String(r), String(g), String(b)]);
-                  }
-                }}
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  textAlign: "center",
-                  border: "0.5px solid rgba(255,255,255,0.08)",
-                  background: "rgba(255,255,255,0.06)",
-                  borderRadius: 7,
-                  padding: "5px 4px",
-                  fontSize: 11,
-                  color: "#E8E6E1",
-                  outline: "none",
-                  fontFamily: "monospace",
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "#6B7280",
-                  letterSpacing: "0.4px",
-                  fontWeight: 500,
-                }}
-              >
-                {label}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <div>
-          <div
-            style={{
-              fontSize: 10,
-              color: "#6B7280",
-              letterSpacing: "0.5px",
-              textTransform: "uppercase",
-              marginBottom: 7,
-            }}
-          >
-            Quick Picks
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(5, 1fr)",
-              gap: 5,
-            }}
-          >
-            {PRESET_COLORS.map((c) => {
-              const active = currentHex.toLowerCase() === c.toLowerCase();
-              return (
-                <div
-                  key={c}
-                  onClick={() => applyHex(c)}
-                  style={{
-                    height: 24,
-                    borderRadius: 6,
-                    background: c,
-                    border: active
-                      ? `2px solid ${ACCENT}`
-                      : "1px solid rgba(255,255,255,0.08)",
-                    cursor: "pointer",
-                    transition: "transform 0.1s",
-                    boxShadow: active ? `0 0 0 3px ${ACCENT}30` : "none",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.transform =
-                      "scale(1.1)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.transform =
-                      "scale(1)";
-                  }}
-                />
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TrafficDot({
-  color,
-  title,
-  onClick,
-}: {
-  color: string;
-  title: string;
-  onClick: () => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <div
-      onClick={onClick}
-      title={title}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        width: 12,
-        height: 12,
-        borderRadius: "50%",
-        background: color,
-        cursor: "pointer",
-        transition: "transform 0.1s, filter 0.1s",
-        transform: hovered ? "scale(1.15)" : "scale(1)",
-        filter: hovered ? "brightness(0.88)" : "brightness(1)",
-      }}
-    />
-  );
-}
-
-// ── Text File Viewer Window ───────────────────────────────────────────────────
-function TextFileViewerWindow({
-  viewer,
-  onClose,
-}: {
-  viewer: {
-    nodeId: number;
-    x: number;
-    y: number;
-    fileName: string;
-    content: string;
-  };
-  onClose: () => void;
-}) {
-  const divRef = useRef<HTMLDivElement>(null);
-  const posRef = useRef({ x: viewer.x, y: viewer.y });
-  const [isMaximized, setIsMaximized] = useState(false);
-  const isDraggingWindow = useRef<{ ox: number; oy: number } | null>(null);
-
-  const W = isMaximized ? Math.round(window.innerWidth * 0.9) : 480;
-  const H = isMaximized ? Math.round(window.innerHeight * 0.9) : 340;
-
-  useEffect(() => {
-    const move = (e: MouseEvent) => {
-      if (isDraggingWindow.current && divRef.current) {
-        const x = e.clientX - isDraggingWindow.current.ox;
-        const y = e.clientY - isDraggingWindow.current.oy;
-        posRef.current = { x, y };
-        divRef.current.style.transform = `translate(${x}px, ${y}px)`;
-      }
-    };
-    const up = () => {
-      isDraggingWindow.current = null;
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-    return () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-    };
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!divRef.current) return;
-    if (isMaximized) {
-      divRef.current.style.transform = "none";
-    } else {
-      divRef.current.style.transform = `translate(${posRef.current.x}px, ${posRef.current.y}px)`;
-    }
-  }, [isMaximized]);
-
-  return (
-    <div
-      ref={divRef}
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        position: "fixed",
-        left: isMaximized ? "5%" : 0,
-        top: isMaximized ? "5%" : 0,
-        width: W,
-        height: H,
-        background: "rgba(18,20,22,0.97)",
-        backdropFilter: "blur(28px)",
-        WebkitBackdropFilter: "blur(28px)",
-        border: "0.5px solid rgba(255,255,255,0.08)",
-        borderRadius: 16,
-        boxShadow: "0 20px 60px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2)",
-        zIndex: 500,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        userSelect: "none",
-        transition: "width 0.2s ease, height 0.2s ease",
-        fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-      }}
-    >
-      {/* Header */}
-      <div
-        onMouseDown={(e) => {
-          if (isMaximized) return;
-          e.preventDefault();
-          isDraggingWindow.current = {
-            ox: e.clientX - posRef.current.x,
-            oy: e.clientY - posRef.current.y,
-          };
-        }}
-        style={{
-          padding: "11px 14px 10px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          cursor: isMaximized ? "default" : "grab",
-          borderBottom: "0.5px solid rgba(255,255,255,0.06)",
-          background: "rgba(255,255,255,0.03)",
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="rgba(255,255,255,0.4)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ flexShrink: 0 }}
-          >
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 500,
-              color: "#9CA3AF",
-              letterSpacing: "-0.1px",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {viewer.fileName}
-          </span>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 6,
-            alignItems: "center",
-            flexShrink: 0,
-            marginLeft: 10,
-          }}
-        >
-          <TrafficDot color="#ff5f57" title="Close" onClick={onClose} />
-          <TrafficDot
-            color="#28c840"
-            title={isMaximized ? "Restore" : "Maximize"}
-            onClick={() => setIsMaximized((m) => !m)}
-          />
-        </div>
-      </div>
-
-      {/* Content */}
-      <pre
-        style={{
-          flex: 1,
-          margin: 0,
-          padding: "14px 16px",
-          overflowY: "auto",
-          overflowX: "auto",
-          fontSize: 12,
-          lineHeight: 1.65,
-          fontFamily:
-            "'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace",
-          color: "rgba(255,255,255,0.82)",
-          background: "transparent",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          userSelect: "text",
-        }}
-      >
-        {viewer.content}
-      </pre>
-    </div>
-  );
-}
-
-// ── Bring-to-front helper ─────────────────────────────────────────────────────
-function bringToFront(prev: CanvasNode[], id: number): CanvasNode[] {
-  const idx = prev.findIndex((n) => n.id === id);
-  if (idx === -1 || idx === prev.length - 1) return prev;
-  const next = [...prev];
-  next.push(next.splice(idx, 1)[0]);
-  return next;
-}
-function bringForward(prev: CanvasNode[], id: number): CanvasNode[] {
-  const idx = prev.findIndex((n) => n.id === id);
-  if (idx === -1 || idx === prev.length - 1) return prev;
-  const next = [...prev];
-  [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-  return next;
-}
-function sendBackward(prev: CanvasNode[], id: number): CanvasNode[] {
-  const idx = prev.findIndex((n) => n.id === id);
-  if (idx <= 0) return prev;
-  const next = [...prev];
-  [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-  return next;
-}
-function sendToBack(prev: CanvasNode[], id: number): CanvasNode[] {
-  const idx = prev.findIndex((n) => n.id === id);
-  if (idx <= 0) return prev;
-  const next = [...prev];
-  next.unshift(next.splice(idx, 1)[0]);
-  return next;
-}
-
-// ── IndexedDB asset store ─────────────────────────────────────────────────────
-// Offloads large per-node fields (textFileContent, imageUrl) to IndexedDB so
-// they never touch the ~5 MB localStorage quota.
-// Store "assets": key = String(nodeId), value = AssetRecord.
-
-const IDB_NAME = "denkraum_db";
-const IDB_VERSION = 1;
-const IDB_STORE = "assets";
-
-type AssetRecord = { textFileContent?: string; imageUrl?: string };
-
-let _idbPromise: Promise<IDBDatabase> | null = null;
-function openDB(): Promise<IDBDatabase> {
-  if (!_idbPromise) {
-    _idbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(IDB_NAME, IDB_VERSION);
-      req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => {
-        _idbPromise = null;
-        reject(req.error);
-      };
-    });
-  }
-  return _idbPromise;
-}
-
-async function setAsset(id: number, record: AssetRecord): Promise<void> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, "readwrite");
-    tx.objectStore(IDB_STORE).put(record, String(id));
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function deleteAsset(id: number): Promise<void> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, "readwrite");
-    tx.objectStore(IDB_STORE).delete(String(id));
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-// Loads the entire store in one transaction — used at hydration time.
-async function getAllAssets(): Promise<Map<number, AssetRecord>> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE);
-    const store = tx.objectStore(IDB_STORE);
-    const kReq = store.getAllKeys();
-    const vReq = store.getAll();
-    tx.oncomplete = () => {
-      const map = new Map<number, AssetRecord>();
-      (kReq.result as string[]).forEach((k, i) =>
-        map.set(Number(k), vReq.result[i]),
-      );
-      resolve(map);
-    };
-    tx.onerror = () => reject(tx.error);
-  });
-}
+import {
+  ACCENT,
+  PRESET_COLORS,
+  SIDEBAR_W,
+  LS_NODES,
+  LS_CONNECTIONS,
+  DEFAULT_NODES,
+  DEFAULT_CONNECTIONS,
+  idCounter,
+  setIdCounter,
+} from "./lib/canvas-types";
+import type {
+  NodeType,
+  CanvasNode,
+  Connection,
+  ConnectDrag,
+  ContextMenu,
+  ColorPicker,
+  AssetRecord,
+} from "./lib/canvas-types";
+import { hexToRgb, stripHtml } from "./lib/color-helpers";
+import {
+  bringToFront,
+  bringForward,
+  sendBackward,
+  sendToBack,
+} from "./lib/canvas-helpers";
+import { setAsset, deleteAsset, getAllAssets } from "./lib/idb";
+import { ColorPickerWindow } from "./components/ColorPickerWindow";
+import { TextFileViewerWindow } from "./components/TextFileViewerWindow";
 
 // ── Main Canvas ───────────────────────────────────────────────────────────────
 export default function Canvas() {
@@ -1059,8 +138,9 @@ export default function Canvas() {
             : 80;
     const maxExistingId =
       nodeMapRef.current.size > 0 ? Math.max(...nodeMapRef.current.keys()) : -1;
-    if (idCounter <= maxExistingId) idCounter = maxExistingId + 1;
-    const newId = idCounter++;
+    if (idCounter <= maxExistingId) setIdCounter(maxExistingId + 1);
+    const newId = idCounter;
+    setIdCounter(idCounter + 1);
 
     setNodes((prev) => [
       ...prev,
@@ -1124,8 +204,9 @@ export default function Canvas() {
             nodeMapRef.current.size > 0
               ? Math.max(...nodeMapRef.current.keys())
               : -1;
-          if (idCounter <= maxExistingId) idCounter = maxExistingId + 1;
-          const newId = idCounter++;
+          if (idCounter <= maxExistingId) setIdCounter(maxExistingId + 1);
+          const newId = idCounter;
+          setIdCounter(idCounter + 1);
           setNodes((prev) => [
             ...prev,
             {
@@ -1172,8 +253,9 @@ export default function Canvas() {
           nodeMapRef.current.size > 0
             ? Math.max(...nodeMapRef.current.keys())
             : -1;
-        if (idCounter <= maxExistingId) idCounter = maxExistingId + 1;
-        const newId = idCounter++;
+        if (idCounter <= maxExistingId) setIdCounter(maxExistingId + 1);
+        const newId = idCounter;
+        setIdCounter(idCounter + 1);
         setNodes((prev) => [
           ...prev,
           {
@@ -1282,7 +364,7 @@ export default function Canvas() {
             }),
           }));
           const maxId = loadedNodes.reduce((m, n) => Math.max(m, n.id), -1);
-          if (maxId >= idCounter) idCounter = maxId + 1;
+          if (maxId >= idCounter) setIdCounter(maxId + 1);
 
           // ② IndexedDB (async) — merge textFileContent / imageUrl back in
           try {
@@ -3117,15 +2199,60 @@ export default function Canvas() {
                       fill="none"
                       style={{ pointerEvents: "none", display: "block" }}
                     >
-                      <circle cx="2" cy="2" r="0.8" fill="rgba(255,255,255,0.55)" />
-                      <circle cx="4" cy="2" r="0.8" fill="rgba(255,255,255,0.55)" />
-                      <circle cx="6" cy="2" r="0.8" fill="rgba(255,255,255,0.55)" />
-                      <circle cx="2" cy="4" r="0.8" fill="rgba(255,255,255,0.55)" />
-                      <circle cx="4" cy="4" r="0.8" fill="rgba(255,255,255,0.55)" />
-                      <circle cx="6" cy="4" r="0.8" fill="rgba(255,255,255,0.55)" />
-                      <circle cx="2" cy="6" r="0.8" fill="rgba(255,255,255,0.55)" />
-                      <circle cx="4" cy="6" r="0.8" fill="rgba(255,255,255,0.55)" />
-                      <circle cx="6" cy="6" r="0.8" fill="rgba(255,255,255,0.55)" />
+                      <circle
+                        cx="2"
+                        cy="2"
+                        r="0.8"
+                        fill="rgba(255,255,255,0.55)"
+                      />
+                      <circle
+                        cx="4"
+                        cy="2"
+                        r="0.8"
+                        fill="rgba(255,255,255,0.55)"
+                      />
+                      <circle
+                        cx="6"
+                        cy="2"
+                        r="0.8"
+                        fill="rgba(255,255,255,0.55)"
+                      />
+                      <circle
+                        cx="2"
+                        cy="4"
+                        r="0.8"
+                        fill="rgba(255,255,255,0.55)"
+                      />
+                      <circle
+                        cx="4"
+                        cy="4"
+                        r="0.8"
+                        fill="rgba(255,255,255,0.55)"
+                      />
+                      <circle
+                        cx="6"
+                        cy="4"
+                        r="0.8"
+                        fill="rgba(255,255,255,0.55)"
+                      />
+                      <circle
+                        cx="2"
+                        cy="6"
+                        r="0.8"
+                        fill="rgba(255,255,255,0.55)"
+                      />
+                      <circle
+                        cx="4"
+                        cy="6"
+                        r="0.8"
+                        fill="rgba(255,255,255,0.55)"
+                      />
+                      <circle
+                        cx="6"
+                        cy="6"
+                        r="0.8"
+                        fill="rgba(255,255,255,0.55)"
+                      />
                     </svg>
                   </div>
                 )}
