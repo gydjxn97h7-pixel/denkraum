@@ -873,6 +873,105 @@ function bringToFront(prev: CanvasNode[], id: number): CanvasNode[] {
   next.push(next.splice(idx, 1)[0]);
   return next;
 }
+function bringForward(prev: CanvasNode[], id: number): CanvasNode[] {
+  const idx = prev.findIndex((n) => n.id === id);
+  if (idx === -1 || idx === prev.length - 1) return prev;
+  const next = [...prev];
+  [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+  return next;
+}
+function sendBackward(prev: CanvasNode[], id: number): CanvasNode[] {
+  const idx = prev.findIndex((n) => n.id === id);
+  if (idx <= 0) return prev;
+  const next = [...prev];
+  [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+  return next;
+}
+function sendToBack(prev: CanvasNode[], id: number): CanvasNode[] {
+  const idx = prev.findIndex((n) => n.id === id);
+  if (idx <= 0) return prev;
+  const next = [...prev];
+  next.unshift(next.splice(idx, 1)[0]);
+  return next;
+}
+
+// ── IndexedDB asset store ─────────────────────────────────────────────────────
+// Offloads large per-node fields (textFileContent, imageUrl) to IndexedDB so
+// they never touch the ~5 MB localStorage quota.
+// Store "assets": key = String(nodeId), value = AssetRecord.
+
+const IDB_NAME = "denkraum_db";
+const IDB_VERSION = 1;
+const IDB_STORE = "assets";
+
+type AssetRecord = { textFileContent?: string; imageUrl?: string };
+
+let _idbPromise: Promise<IDBDatabase> | null = null;
+function openDB(): Promise<IDBDatabase> {
+  if (!_idbPromise) {
+    _idbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+      req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => {
+        _idbPromise = null;
+        reject(req.error);
+      };
+    });
+  }
+  return _idbPromise;
+}
+
+async function getAsset(id: number): Promise<AssetRecord | undefined> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const req = db
+      .transaction(IDB_STORE)
+      .objectStore(IDB_STORE)
+      .get(String(id));
+    req.onsuccess = () => resolve(req.result as AssetRecord | undefined);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function setAsset(id: number, record: AssetRecord): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).put(record, String(id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function deleteAsset(id: number): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).delete(String(id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Loads the entire store in one transaction — used at hydration time.
+async function getAllAssets(): Promise<Map<number, AssetRecord>> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE);
+    const store = tx.objectStore(IDB_STORE);
+    const kReq = store.getAllKeys();
+    const vReq = store.getAll();
+    tx.oncomplete = () => {
+      const map = new Map<number, AssetRecord>();
+      (kReq.result as string[]).forEach((k, i) =>
+        map.set(Number(k), vReq.result[i]),
+      );
+      resolve(map);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
 
 // ── Main Canvas ───────────────────────────────────────────────────────────────
 export default function Canvas() {
@@ -953,6 +1052,9 @@ export default function Canvas() {
   } | null>(null);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks which node IDs currently have an entry in IndexedDB so we can
+  // delete stale records when a node is removed or loses its asset fields.
+  const prevAssetNodeIdsRef = useRef(new Set<number>());
 
   const toCanvas = useCallback(
     (sx: number, sy: number) => ({
@@ -1172,38 +1274,78 @@ export default function Canvas() {
 
   // ── localStorage ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    try {
-      const rawNodes = localStorage.getItem(LS_NODES);
-      if (rawNodes) {
-        const loaded = JSON.parse(rawNodes) as CanvasNode[];
-        const sanitized = loaded.map((n) => ({
-          ...n,
-          title: stripHtml(n.title),
-          body: stripHtml(n.body),
-          ...(n.textFileName != null && {
-            textFileName: stripHtml(n.textFileName),
-          }),
-        }));
-        const maxId = sanitized.reduce((m, n) => Math.max(m, n.id), -1);
-        if (maxId >= idCounter) idCounter = maxId + 1;
-        setNodes(sanitized);
+    void (async () => {
+      try {
+        // ① localStorage (synchronous)
+        const rawConns = localStorage.getItem(LS_CONNECTIONS);
+        if (rawConns) setConnections(JSON.parse(rawConns) as Connection[]);
+
+        const rawNodes = localStorage.getItem(LS_NODES);
+        if (rawNodes) {
+          let loadedNodes: CanvasNode[] = (
+            JSON.parse(rawNodes) as CanvasNode[]
+          ).map((n) => ({
+            ...n,
+            title: stripHtml(n.title),
+            body: stripHtml(n.body),
+            ...(n.textFileName != null && {
+              textFileName: stripHtml(n.textFileName),
+            }),
+          }));
+          const maxId = loadedNodes.reduce((m, n) => Math.max(m, n.id), -1);
+          if (maxId >= idCounter) idCounter = maxId + 1;
+
+          // ② IndexedDB (async) — merge textFileContent / imageUrl back in
+          try {
+            const allAssets = await getAllAssets();
+            if (allAssets.size > 0) {
+              loadedNodes = loadedNodes.map((n) => {
+                const a = allAssets.get(n.id);
+                return a
+                  ? {
+                      ...n,
+                      ...(a.textFileContent != null && {
+                        textFileContent: a.textFileContent,
+                      }),
+                      ...(a.imageUrl != null && { imageUrl: a.imageUrl }),
+                    }
+                  : n;
+              });
+              // Orphan cleanup: IDB keys with no matching node
+              const nodeIdSet = new Set(loadedNodes.map((n) => n.id));
+              for (const id of allAssets.keys()) {
+                if (!nodeIdSet.has(id)) deleteAsset(id).catch(() => {});
+              }
+            }
+          } catch {
+            // IDB unavailable (e.g. private-browsing) — proceed without assets
+          }
+
+          // ③ Initialise prevAssetNodeIdsRef before setHydrated triggers the
+          //    save effect, so the first save doesn't delete any IDB entries.
+          prevAssetNodeIdsRef.current = new Set(
+            loadedNodes
+              .filter((n) => n.textFileContent != null || n.imageUrl != null)
+              .map((n) => n.id),
+          );
+          setNodes(loadedNodes);
+        }
+      } catch {
+        // JSON parse error — keep DEFAULT_NODES
       }
-      const rawConns = localStorage.getItem(LS_CONNECTIONS);
-      if (rawConns) setConnections(JSON.parse(rawConns) as Connection[]);
-    } catch {}
-    setHydrated(true);
+      setHydrated(true);
+    })();
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
+      // ── localStorage: strip large asset fields ──────────────────────────────
       try {
-        // Strip textFileContent before persisting — file data can be many MB
-        // and would silently overflow the ~5 MB localStorage quota.
-        // The node (position, filename, type) is kept; content must be re-loaded.
         const nodesToSave = nodes.map(
-          ({ textFileContent: _omit, ...rest }) => rest,
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          ({ textFileContent: _tc, imageUrl: _iu, ...rest }) => rest,
         );
         localStorage.setItem(LS_NODES, JSON.stringify(nodesToSave));
         localStorage.setItem(LS_CONNECTIONS, JSON.stringify(connections));
@@ -1218,6 +1360,24 @@ export default function Canvas() {
           );
         }
       }
+
+      // ── IndexedDB: write assets / delete stale entries ──────────────────────
+      const currentAssetIds = new Set<number>();
+      for (const n of nodes) {
+        const record: AssetRecord = {};
+        if (n.textFileContent != null)
+          record.textFileContent = n.textFileContent;
+        if (n.imageUrl != null) record.imageUrl = n.imageUrl;
+        if (Object.keys(record).length > 0) {
+          currentAssetIds.add(n.id);
+          setAsset(n.id, record).catch(() => {});
+        }
+      }
+      // Delete entries whose node was removed or lost all asset fields
+      for (const id of prevAssetNodeIdsRef.current) {
+        if (!currentAssetIds.has(id)) deleteAsset(id).catch(() => {});
+      }
+      prevAssetNodeIdsRef.current = currentAssetIds;
     }, 500);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -1491,6 +1651,19 @@ export default function Canvas() {
   }, [onMouseMove, onMouseUp]);
 
   // ── Keyboard ──────────────────────────────────────────────────────────────────
+  const arrangeBringToFront = useCallback((id: number) => {
+    setNodes((prev) => bringToFront(prev, id));
+  }, []);
+  const arrangeBringForward = useCallback((id: number) => {
+    setNodes((prev) => bringForward(prev, id));
+  }, []);
+  const arrangeSendBackward = useCallback((id: number) => {
+    setNodes((prev) => sendBackward(prev, id));
+  }, []);
+  const arrangeSendToBack = useCallback((id: number) => {
+    setNodes((prev) => sendToBack(prev, id));
+  }, []);
+
   const deleteSelected = useCallback(() => {
     const id = selectedRef.current;
     if (id === null) return;
@@ -3155,6 +3328,72 @@ export default function Canvas() {
                   </div>
                 </>
               )}
+
+              <div
+                style={{
+                  height: "0.5px",
+                  background: "rgba(255,255,255,0.10)",
+                  margin: "2px 0",
+                }}
+              />
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "rgba(255,255,255,0.3)",
+                  padding: "6px 14px 4px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                }}
+              >
+                Arrange
+              </div>
+              {(
+                [
+                  {
+                    label: "Bring to Front",
+                    icon: "⤒",
+                    action: () => arrangeBringToFront(contextMenu.id),
+                  },
+                  {
+                    label: "Bring Forward",
+                    icon: "↑",
+                    action: () => arrangeBringForward(contextMenu.id),
+                  },
+                  {
+                    label: "Send Backward",
+                    icon: "↓",
+                    action: () => arrangeSendBackward(contextMenu.id),
+                  },
+                  {
+                    label: "Send to Back",
+                    icon: "⤓",
+                    action: () => arrangeSendToBack(contextMenu.id),
+                  },
+                ] as const
+              ).map(({ label, icon, action }) => (
+                <div
+                  key={label}
+                  onClick={() => {
+                    action();
+                    setContextMenu(null);
+                  }}
+                  onMouseEnter={(e) => hoverMenu(e, true)}
+                  onMouseLeave={(e) => hoverMenu(e, false)}
+                  style={menuItem()}
+                >
+                  <span
+                    style={{
+                      width: 22,
+                      textAlign: "center",
+                      fontSize: 14,
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    {icon}
+                  </span>
+                  {label}
+                </div>
+              ))}
 
               <div
                 style={{
