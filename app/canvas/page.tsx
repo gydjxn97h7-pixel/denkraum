@@ -44,7 +44,7 @@ type CanvasNode = {
 type Connection = { from: number; to: number };
 
 // Active drag-to-connect state (canvas coordinates)
-type ConnectDrag = { fromId: number; x: number; y: number } | null;
+type ConnectDrag = { fromId: number } | null;
 
 type ContextMenu =
   | { kind: "canvas"; x: number; y: number; cx: number; cy: number }
@@ -195,9 +195,8 @@ function isValidHex(s: string) {
   return /^#[0-9a-fA-F]{6}$/.test(s);
 }
 
-// Strips all HTML tags from a string by parsing via a detached div and reading
-// back textContent. Prevents persisted HTML payloads (e.g. manipulated
-// localStorage) from reaching dangerouslySetInnerHTML on load.
+// Strips HTML tags from untrusted loaded strings (e.g. manipulated localStorage)
+// so persisted payloads are stored and rendered as plain text.
 function stripHtml(s: unknown): string {
   if (typeof s !== "string") return "";
   const d = document.createElement("div");
@@ -922,18 +921,6 @@ function openDB(): Promise<IDBDatabase> {
   return _idbPromise;
 }
 
-async function getAsset(id: number): Promise<AssetRecord | undefined> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const req = db
-      .transaction(IDB_STORE)
-      .objectStore(IDB_STORE)
-      .get(String(id));
-    req.onsuccess = () => resolve(req.result as AssetRecord | undefined);
-    req.onerror = () => reject(req.error);
-  });
-}
-
 async function setAsset(id: number, record: AssetRecord): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -985,6 +972,7 @@ export default function Canvas() {
   const [colorPicker, setColorPicker] = useState<ColorPicker>(null);
   const [textColorPicker, setTextColorPicker] = useState<ColorPicker>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [hoveredConnKey, setHoveredConnKey] = useState<string | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -1011,11 +999,9 @@ export default function Canvas() {
   const textFileInputRef = useRef<HTMLInputElement>(null);
   const pendingImagePos = useRef<{ cx: number; cy: number } | null>(null);
   const pendingTextFilePos = useRef<{ cx: number; cy: number } | null>(null);
-  // Ref so onMouseUp can read latest hoveredId without stale closure
-  const hoveredIdRef = useRef<number | null>(null);
-  useEffect(() => {
-    hoveredIdRef.current = hoveredId;
-  }, [hoveredId]);
+  // Tracks which node is actively being edited so ref callbacks never clobber
+  // in-progress input (more reliable than document.activeElement checks).
+  const editingNodeIdRef = useRef<number | null>(null);
 
   // ── rAF-based interaction refs ────────────────────────────────────────────────
   // Mirror latest state into refs so mouse handlers never capture stale closures
@@ -1029,9 +1015,7 @@ export default function Canvas() {
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
-  useEffect(() => {
-    connectDragRef.current = connectDrag;
-  }, [connectDrag]);
+  connectDragRef.current = connectDrag;
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
@@ -1045,24 +1029,10 @@ export default function Canvas() {
   const pendingResizeSize = useRef<{ id: number; w: number; h: number } | null>(
     null,
   );
-  const pendingConnectPos = useRef<{
-    fromId: number;
-    x: number;
-    y: number;
-  } | null>(null);
-
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks which node IDs currently have an entry in IndexedDB so we can
   // delete stale records when a node is removed or loses its asset fields.
   const prevAssetNodeIdsRef = useRef(new Set<number>());
-
-  const toCanvas = useCallback(
-    (sx: number, sy: number) => ({
-      x: (sx - pan.x) / zoom,
-      y: (sy - pan.y) / zoom,
-    }),
-    [pan, zoom],
-  );
 
   const addNode = useCallback((cx: number, cy: number, type: NodeType) => {
     const isText = type === "text";
@@ -1087,14 +1057,14 @@ export default function Canvas() {
           : isDiamond
             ? 100
             : 80;
-    // Capture the ID before entering the setNodes updater so setSelected
-    // can reference it synchronously without a stale closure.
-    let newId: number;
-    setNodes((prev) => {
-      const maxId = prev.reduce((m, n) => Math.max(m, n.id), -1);
-      if (idCounter <= maxId) idCounter = maxId + 1;
-      newId = idCounter++;
-      const newNode: CanvasNode = {
+    const maxExistingId =
+      nodeMapRef.current.size > 0 ? Math.max(...nodeMapRef.current.keys()) : -1;
+    if (idCounter <= maxExistingId) idCounter = maxExistingId + 1;
+    const newId = idCounter++;
+
+    setNodes((prev) => [
+      ...prev,
+      {
         id: newId,
         x: cx - w / 2,
         y: cy - h / 2,
@@ -1115,12 +1085,9 @@ export default function Canvas() {
         type,
         color: isText ? "transparent" : "#1E2226",
         fontSize: isText ? 15 : 13,
-      };
-      return [...prev, newNode];
-    });
-    // newId is always assigned before setNodes returns because the updater
-    // runs synchronously in the same microtask.
-    setSelected(newId!);
+      },
+    ]);
+    setSelected(newId);
     setContextMenu(null);
   }, []);
 
@@ -1144,25 +1111,27 @@ export default function Canvas() {
           const aspect = img.naturalWidth / img.naturalHeight;
           const w = 300;
           const h = Math.round(w / aspect);
-          setNodes((prev) => {
-            const maxId = prev.reduce((m, n) => Math.max(m, n.id), -1);
-            if (idCounter <= maxId) idCounter = maxId + 1;
-            return [
-              ...prev,
-              {
-                id: idCounter++,
-                x: pos.cx - w / 2,
-                y: pos.cy - h / 2,
-                w,
-                h,
-                title: "Image",
-                body: "",
-                type: "image",
-                color: "#1E2226",
-                imageUrl,
-              },
-            ];
-          });
+          const maxExistingId =
+            nodeMapRef.current.size > 0
+              ? Math.max(...nodeMapRef.current.keys())
+              : -1;
+          if (idCounter <= maxExistingId) idCounter = maxExistingId + 1;
+          const newId = idCounter++;
+          setNodes((prev) => [
+            ...prev,
+            {
+              id: newId,
+              x: pos.cx - w / 2,
+              y: pos.cy - h / 2,
+              w,
+              h,
+              title: "Image",
+              body: "",
+              type: "image",
+              color: "#1E2226",
+              imageUrl,
+            },
+          ]);
           pendingImagePos.current = null;
         };
         img.src = imageUrl;
@@ -1190,27 +1159,29 @@ export default function Canvas() {
         if (textFileContent == null) return;
         const w = 200;
         const h = 60;
-        setNodes((prev) => {
-          const maxId = prev.reduce((m, n) => Math.max(m, n.id), -1);
-          if (idCounter <= maxId) idCounter = maxId + 1;
-          return [
-            ...prev,
-            {
-              id: idCounter++,
-              x: pos.cx - w / 2,
-              y: pos.cy - h / 2,
-              w,
-              h,
-              title: fileName,
-              body: "",
-              type: "textfile",
-              color: "#1E2226",
-              fontSize: 13,
-              textFileContent,
-              textFileName: fileName,
-            },
-          ];
-        });
+        const maxExistingId =
+          nodeMapRef.current.size > 0
+            ? Math.max(...nodeMapRef.current.keys())
+            : -1;
+        if (idCounter <= maxExistingId) idCounter = maxExistingId + 1;
+        const newId = idCounter++;
+        setNodes((prev) => [
+          ...prev,
+          {
+            id: newId,
+            x: pos.cx - w / 2,
+            y: pos.cy - h / 2,
+            w,
+            h,
+            title: fileName,
+            body: "",
+            type: "textfile",
+            color: "#1E2226",
+            fontSize: 13,
+            textFileContent,
+            textFileName: fileName,
+          },
+        ]);
         pendingTextFilePos.current = null;
       };
       reader.readAsText(file);
@@ -1278,7 +1249,16 @@ export default function Canvas() {
       try {
         // ① localStorage (synchronous)
         const rawConns = localStorage.getItem(LS_CONNECTIONS);
-        if (rawConns) setConnections(JSON.parse(rawConns) as Connection[]);
+        if (rawConns) {
+          const seen = new Set<string>();
+          const deduped = (JSON.parse(rawConns) as Connection[]).filter((c) => {
+            const key = `${c.from}→${c.to}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          setConnections(deduped);
+        }
 
         const rawNodes = localStorage.getItem(LS_NODES);
         if (rawNodes) {
@@ -1445,9 +1425,7 @@ export default function Canvas() {
   // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const nodeMapRef = useRef(nodeMap);
-  useEffect(() => {
-    nodeMapRef.current = nodeMap;
-  }, [nodeMap]);
+  nodeMapRef.current = nodeMap;
 
   const onNodeMouseDown = useCallback(
     (e: React.MouseEvent, id: number) => {
@@ -1456,6 +1434,9 @@ export default function Canvas() {
       if (t.isContentEditable) return;
       if (t.dataset.role === "connect-dot") return;
       if (t.dataset.role === "resize-handle") return;
+      // Suppress drag when connect-mode is active; onClick handles finalization
+      if (connectDragRef.current) return;
+
       e.stopPropagation();
       setContextMenu(null);
       setSelected(id);
@@ -1490,19 +1471,31 @@ export default function Canvas() {
     [nodeMap],
   );
 
-  // ── Connect: drag-to-connect ──────────────────────────────────────────────────
-  const onDotMouseDown = useCallback(
-    (e: React.MouseEvent, id: number) => {
-      e.stopPropagation();
-      e.preventDefault();
-      if (!canvasRef.current) return;
-      const r = canvasRef.current.getBoundingClientRect();
-      const mx = (e.clientX - r.left - pan.x) / zoom;
-      const my = (e.clientY - r.top - pan.y) / zoom;
-      setConnectDrag({ fromId: id, x: mx, y: my });
-    },
-    [pan, zoom],
-  );
+  // ── Connect: click-to-connect ─────────────────────────────────────────────────
+  const onDotClick = useCallback((e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (connectDragRef.current?.fromId === id) {
+      setConnectDrag(null);
+    } else {
+      setConnectDrag({ fromId: id });
+    }
+  }, []);
+
+  // Finalizes a pending connection on click (fires after mouseup, so
+  // connectDragRef is guaranteed to hold the latest state).
+  const onNodeClick = useCallback((e: React.MouseEvent, id: number) => {
+    const cd = connectDragRef.current;
+    if (!cd) return;
+    e.stopPropagation();
+    if (id !== cd.fromId) {
+      setConnections((prev) => {
+        const dup = prev.some((c) => c.from === cd.fromId && c.to === id);
+        return dup ? prev : [...prev, { from: cd.fromId, to: id }];
+      });
+    }
+    setConnectDrag(null);
+  }, []);
 
   // ── Global mouse move + up ────────────────────────────────────────────────────
 
@@ -1536,23 +1529,11 @@ export default function Canvas() {
         ),
       );
     }
-
-    const cd = pendingConnectPos.current;
-    if (cd) {
-      pendingConnectPos.current = null;
-      setConnectDrag(cd);
-    }
   }, []);
 
   const onMouseMove = useCallback(
     (e: MouseEvent) => {
-      if (
-        !isPanning.current &&
-        !dragging.current &&
-        !resizing.current &&
-        !connectDragRef.current
-      )
-        return;
+      if (!isPanning.current && !dragging.current && !resizing.current) return;
 
       const pan = panRef.current;
       const zoom = zoomRef.current;
@@ -1594,15 +1575,6 @@ export default function Canvas() {
         dirty = true;
       }
 
-      const cd = connectDragRef.current;
-      if (cd && canvasRef.current) {
-        const r = canvasRef.current.getBoundingClientRect();
-        const mx = (e.clientX - r.left - pan.x) / zoom;
-        const my = (e.clientY - r.top - pan.y) / zoom;
-        pendingConnectPos.current = { fromId: cd.fromId, x: mx, y: my };
-        dirty = true;
-      }
-
       if (dirty && rafRef.current === null) {
         rafRef.current = requestAnimationFrame(flushPending);
       }
@@ -1611,31 +1583,11 @@ export default function Canvas() {
   );
 
   const onMouseUp = useCallback(() => {
-    // Cancel any pending frame and commit the final position immediately
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
-    // Clear pending connect pos — connect finalization is handled below
-    pendingConnectPos.current = null;
-    // Flush pending drag / resize / pan
     flushPending();
-
-    // Finalize connect drag using the ref (avoids stale closure)
-    const cd = connectDragRef.current;
-    if (cd) {
-      const targetId = hoveredIdRef.current;
-      if (targetId !== null && targetId !== cd.fromId) {
-        setConnections((prev) => {
-          const dup = prev.some(
-            (c) => c.from === cd.fromId && c.to === targetId,
-          );
-          return dup ? prev : [...prev, { from: cd.fromId, to: targetId }];
-        });
-      }
-      setConnectDrag(null);
-    }
-
     dragging.current = null;
     resizing.current = null;
     isPanning.current = false;
@@ -2126,7 +2078,7 @@ export default function Canvas() {
                   { kbd: "Esc", desc: "Cancel connect" },
                   { kbd: "⌃ Scroll", desc: "Zoom in / out" },
                   { kbd: "Right-click", desc: "Insert shape" },
-                  { kbd: "Drag dot →", desc: "Connect nodes" },
+                  { kbd: "Click dot →", desc: "Connect nodes" },
                 ] as { kbd: string; desc: string }[]
               ).map(({ kbd, desc }) => (
                 <div
@@ -2176,7 +2128,7 @@ export default function Canvas() {
         style={{
           position: "fixed",
           top: 20,
-          left: "50%",
+          left: `calc(${sidebarW}px + (100vw - ${sidebarW}px) / 2)`,
           transform: "translateX(-50%)",
           background: "rgba(20,22,24,0.92)",
           backdropFilter: "blur(20px)",
@@ -2189,19 +2141,122 @@ export default function Canvas() {
           alignItems: "center",
           boxShadow: "0 2px 24px rgba(0,0,0,0.3)",
           zIndex: 201,
-          marginLeft: 320,
         }}
       >
         {/* ── Shape insert buttons ── */}
         {(
           [
-            { type: "block" as NodeType, icon: "▭", label: "Block" },
-            { type: "rounded" as NodeType, icon: "▢", label: "Area (rounded)" },
-            { type: "circle" as NodeType, icon: "○", label: "Circle" },
-            { type: "oval" as NodeType, icon: "◯", label: "Oval" },
-            { type: "diamond" as NodeType, icon: "◇", label: "Diamond" },
-            { type: "text" as NodeType, icon: "T", label: "Free Text" },
-          ] as { type: NodeType; icon: string; label: string }[]
+            {
+              type: "block" as NodeType,
+              label: "Block",
+              icon: (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="6" width="18" height="12" rx="1" />
+                </svg>
+              ),
+            },
+            {
+              type: "rounded" as NodeType,
+              label: "Area (rounded)",
+              icon: (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="5" width="18" height="14" rx="4" />
+                </svg>
+              ),
+            },
+            {
+              type: "circle" as NodeType,
+              label: "Circle",
+              icon: (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                </svg>
+              ),
+            },
+            {
+              type: "oval" as NodeType,
+              label: "Oval",
+              icon: (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <ellipse cx="12" cy="12" rx="9" ry="6" />
+                </svg>
+              ),
+            },
+            {
+              type: "diamond" as NodeType,
+              label: "Diamond",
+              icon: (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polygon points="12,3 21,12 12,21 3,12" />
+                </svg>
+              ),
+            },
+            {
+              type: "text" as NodeType,
+              label: "Free Text",
+              icon: (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="4" y1="7" x2="20" y2="7" />
+                  <line x1="12" y1="7" x2="12" y2="21" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                </svg>
+              ),
+            },
+          ] as { type: NodeType; icon: React.ReactNode; label: string }[]
         ).map(({ type, icon, label }) => (
           <button
             key={type}
@@ -2485,7 +2540,8 @@ export default function Canvas() {
             height: 0,
           }}
         >
-          {/* Connections SVG */}
+          {/* Connections SVG — positioned at (-5000,-5000) so the internal
+              coordinate origin matches world (0,0) via the translate below. */}
           <svg
             style={{
               position: "absolute",
@@ -2493,54 +2549,63 @@ export default function Canvas() {
               top: -5000,
               width: 10000,
               height: 10000,
-              pointerEvents: "none",
               overflow: "visible",
             }}
           >
-            {/* Existing connections */}
-            {connections.map((c) => {
-              const fn = nodeMap.get(c.from);
-              const tn = nodeMap.get(c.to);
-              if (!fn || !tn) return null;
-              const x1 = fn.x + fn.w,
-                y1 = fn.y + fn.h / 2;
-              const x2 = tn.x,
-                y2 = tn.y + tn.h / 2;
-              const cxm = (x1 + x2) / 2;
-              return (
-                <path
-                  key={`${c.from}-${c.to}`}
-                  d={`M ${x1} ${y1} C ${cxm} ${y1}, ${cxm} ${y2}, ${x2} ${y2}`}
-                  stroke="rgba(255,255,255,0.25)"
-                  strokeWidth={1.5 / zoom}
-                  fill="none"
-                  strokeLinecap="round"
-                />
-              );
-            })}
-
-            {/* Live preview line while dragging to connect */}
-            {connectDrag &&
-              (() => {
-                const fn = nodeMap.get(connectDrag.fromId);
-                if (!fn) return null;
+            <g transform="translate(5000, 5000)">
+              {connections.map((c) => {
+                const fn = nodeMap.get(c.from);
+                const tn = nodeMap.get(c.to);
+                if (!fn || !tn) return null;
                 const x1 = fn.x + fn.w,
                   y1 = fn.y + fn.h / 2;
-                const x2 = connectDrag.x,
-                  y2 = connectDrag.y;
+                const x2 = tn.x,
+                  y2 = tn.y + tn.h / 2;
                 const cxm = (x1 + x2) / 2;
+                const key = `${c.from}-${c.to}`;
+                const isHovered = hoveredConnKey === key;
+                const d = `M ${x1} ${y1} C ${cxm} ${y1}, ${cxm} ${y2}, ${x2} ${y2}`;
                 return (
-                  <path
-                    d={`M ${x1} ${y1} C ${cxm} ${y1}, ${cxm} ${y2}, ${x2} ${y2}`}
-                    stroke={ACCENT}
-                    strokeWidth={2 / zoom}
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeDasharray={`${6 / zoom} ${4 / zoom}`}
-                    opacity={0.75}
-                  />
+                  <g key={key}>
+                    {/* Visible path */}
+                    <path
+                      d={d}
+                      stroke={
+                        isHovered
+                          ? "rgba(255,255,255,0.55)"
+                          : "rgba(255,255,255,0.25)"
+                      }
+                      strokeWidth={isHovered ? 2.5 / zoom : 1.5 / zoom}
+                      fill="none"
+                      strokeLinecap="round"
+                      style={{
+                        pointerEvents: "none",
+                        transition: "stroke 0.12s, stroke-width 0.12s",
+                      }}
+                    />
+                    {/* Invisible hit target */}
+                    <path
+                      d={d}
+                      stroke="transparent"
+                      strokeWidth={12 / zoom}
+                      fill="none"
+                      style={{ cursor: "pointer" }}
+                      onMouseEnter={() => setHoveredConnKey(key)}
+                      onMouseLeave={() =>
+                        setHoveredConnKey((k) => (k === key ? null : k))
+                      }
+                      onDoubleClick={() =>
+                        setConnections((prev) =>
+                          prev.filter(
+                            (x) => !(x.from === c.from && x.to === c.to),
+                          ),
+                        )
+                      }
+                    />
+                  </g>
                 );
-              })()}
+              })}
+            </g>
           </svg>
 
           {/* Nodes */}
@@ -2557,32 +2622,23 @@ export default function Canvas() {
               (0.299 * _nr + 0.587 * _ng + 0.114 * _nb) / 255 < 0.45;
             const fs = n.fontSize ?? 13;
 
-            // Highlight potential connection target
-            const isConnectTarget =
-              connectDrag !== null &&
-              hoveredId === n.id &&
-              n.id !== connectDrag.fromId &&
-              !isText;
+            // All non-source nodes glow while connect-mode is active
+            const isPotentialTarget =
+              connectDrag !== null && n.id !== connectDrag.fromId && !isText;
 
             const hostBg =
               isDiamond || isText || isImage ? "transparent" : n.color;
             const hostBorder =
               isDiamond || isText || isImage
                 ? "none"
-                : isTextFile
-                  ? isSel
-                    ? "1px solid rgba(255,255,255,0.28)"
-                    : "0.5px solid rgba(255,255,255,0.13)"
-                  : isConnectTarget
-                    ? `2px solid ${ACCENT}`
-                    : isSel
-                      ? "1px solid rgba(255,255,255,0.28)"
-                      : "0.5px solid rgba(255,255,255,0.13)";
+                : isSel
+                  ? "1px solid rgba(255,255,255,0.28)"
+                  : "0.5px solid rgba(255,255,255,0.13)";
             const hostShadow =
               isDiamond || isText || isImage
                 ? "none"
-                : isConnectTarget
-                  ? `0 0 0 3px ${ACCENT}50, 0 4px 20px rgba(0,0,0,0.3)`
+                : isPotentialTarget
+                  ? "0 0 0 2px rgba(255,177,98,0.35)"
                   : isSel
                     ? "0 4px 24px rgba(0,0,0,0.5), 0 1px 6px rgba(0,0,0,0.3)"
                     : "0 2px 12px rgba(0,0,0,0.4)";
@@ -2598,18 +2654,20 @@ export default function Canvas() {
                 key={n.id}
                 onMouseDown={(e) => onNodeMouseDown(e, n.id)}
                 onContextMenu={(e) => onNodeContextMenu(e, n.id)}
-                onClick={
-                  isTextFile
-                    ? (e) => {
-                        e.stopPropagation();
-                        setTextFileViewer({
-                          nodeId: n.id,
-                          fileName: n.textFileName ?? n.title,
-                          content: n.textFileContent ?? "",
-                        });
-                      }
-                    : undefined
-                }
+                onClick={(e) => {
+                  // Connect finalization always runs first
+                  const wasConnecting = !!connectDragRef.current;
+                  onNodeClick(e, n.id);
+                  // Open text-file viewer only when not in connect-mode
+                  if (!wasConnecting && isTextFile) {
+                    e.stopPropagation();
+                    setTextFileViewer({
+                      nodeId: n.id,
+                      fileName: n.textFileName ?? n.title,
+                      content: n.textFileContent ?? "",
+                    });
+                  }
+                }}
                 onMouseEnter={() => setHoveredId(n.id)}
                 onMouseLeave={() =>
                   setHoveredId((prev) => (prev === n.id ? null : prev))
@@ -2680,13 +2738,13 @@ export default function Canvas() {
                         points={`${n.w / 2},2 ${n.w - 2},${n.h / 2} ${n.w / 2},${n.h - 2} 2,${n.h / 2}`}
                         fill={n.color}
                         stroke={
-                          isConnectTarget
+                          isPotentialTarget
                             ? ACCENT
                             : isSel
                               ? "rgba(255,255,255,0.25)"
                               : "rgba(255,255,255,0.12)"
                         }
-                        strokeWidth={isConnectTarget || isSel ? 1.5 : 0.8}
+                        strokeWidth={isPotentialTarget || isSel ? 1.5 : 0.8}
                         filter={`url(#ds-${n.id})`}
                       />
                     </svg>
@@ -2703,16 +2761,24 @@ export default function Canvas() {
                       }}
                     >
                       <div
+                        ref={(el) => {
+                          if (el && editingNodeIdRef.current !== n.id)
+                            el.textContent = n.title;
+                        }}
                         contentEditable
                         suppressContentEditableWarning
                         onMouseDown={(e) => e.stopPropagation()}
-                        onBlur={(e) =>
+                        onFocus={() => {
+                          editingNodeIdRef.current = n.id;
+                        }}
+                        onBlur={(e) => {
                           updateNodeField(
                             n.id,
                             "title",
                             (e.target as HTMLElement).innerText,
-                          )
-                        }
+                          );
+                          editingNodeIdRef.current = null;
+                        }}
                         style={{
                           fontSize: fs,
                           fontWeight: n.bold ? 700 : 500,
@@ -2723,21 +2789,31 @@ export default function Canvas() {
                           textAlign: "center",
                           letterSpacing: "-0.2px",
                           width: "100%",
+                          overflowWrap: "break-word",
+                          wordBreak: "break-word",
+                          overflow: "hidden",
                         }}
-                        dangerouslySetInnerHTML={{ __html: n.title }}
                       />
                       {n.body && (
                         <div
+                          ref={(el) => {
+                            if (el && editingNodeIdRef.current !== n.id)
+                              el.textContent = n.body;
+                          }}
                           contentEditable
                           suppressContentEditableWarning
                           onMouseDown={(e) => e.stopPropagation()}
-                          onBlur={(e) =>
+                          onFocus={() => {
+                            editingNodeIdRef.current = n.id;
+                          }}
+                          onBlur={(e) => {
                             updateNodeField(
                               n.id,
                               "body",
                               (e.target as HTMLElement).innerText,
-                            )
-                          }
+                            );
+                            editingNodeIdRef.current = null;
+                          }}
                           style={{
                             fontSize: Math.max(11, fs - 2),
                             fontWeight: n.bold ? 600 : 400,
@@ -2752,8 +2828,10 @@ export default function Canvas() {
                             textAlign: "center",
                             marginTop: 3,
                             width: "100%",
+                            overflowWrap: "break-word",
+                            wordBreak: "break-word",
+                            overflow: "hidden",
                           }}
-                          dangerouslySetInnerHTML={{ __html: n.body }}
                         />
                       )}
                     </div>
@@ -2864,16 +2942,24 @@ export default function Canvas() {
                 {!isText && !isDiamond && !isImage && !isTextFile && (
                   <>
                     <div
+                      ref={(el) => {
+                        if (el && editingNodeIdRef.current !== n.id)
+                          el.textContent = n.title;
+                      }}
                       contentEditable
                       suppressContentEditableWarning
                       onMouseDown={(e) => e.stopPropagation()}
-                      onBlur={(e) =>
+                      onFocus={() => {
+                        editingNodeIdRef.current = n.id;
+                      }}
+                      onBlur={(e) => {
                         updateNodeField(
                           n.id,
                           "title",
                           (e.target as HTMLElement).innerText,
-                        )
-                      }
+                        );
+                        editingNodeIdRef.current = null;
+                      }}
                       style={{
                         fontSize: fs,
                         fontWeight: n.bold ? 700 : 500,
@@ -2886,20 +2972,30 @@ export default function Canvas() {
                         zIndex: 1,
                         background: "transparent",
                         minWidth: 40,
+                        overflowWrap: "break-word",
+                        wordBreak: "break-word",
+                        overflow: "hidden",
                       }}
-                      dangerouslySetInnerHTML={{ __html: n.title }}
                     />
                     <div
+                      ref={(el) => {
+                        if (el && editingNodeIdRef.current !== n.id)
+                          el.textContent = n.body;
+                      }}
                       contentEditable
                       suppressContentEditableWarning
                       onMouseDown={(e) => e.stopPropagation()}
-                      onBlur={(e) =>
+                      onFocus={() => {
+                        editingNodeIdRef.current = n.id;
+                      }}
+                      onBlur={(e) => {
                         updateNodeField(
                           n.id,
                           "body",
                           (e.target as HTMLElement).innerText,
-                        )
-                      }
+                        );
+                        editingNodeIdRef.current = null;
+                      }}
                       style={{
                         fontSize: Math.max(11, fs - 2),
                         fontWeight: n.bold ? 600 : 400,
@@ -2918,8 +3014,10 @@ export default function Canvas() {
                         background: "transparent",
                         width: "100%",
                         textAlign: isCircle ? "center" : "left",
+                        overflowWrap: "break-word",
+                        wordBreak: "break-word",
+                        overflow: "hidden",
                       }}
-                      dangerouslySetInnerHTML={{ __html: n.body }}
                     />
                   </>
                 )}
@@ -2927,16 +3025,24 @@ export default function Canvas() {
                 {/* Free text */}
                 {isText && (
                   <div
+                    ref={(el) => {
+                      if (el && editingNodeIdRef.current !== n.id)
+                        el.textContent = n.title;
+                    }}
                     contentEditable
                     suppressContentEditableWarning
                     onMouseDown={(e) => e.stopPropagation()}
-                    onBlur={(e) =>
+                    onFocus={() => {
+                      editingNodeIdRef.current = n.id;
+                    }}
+                    onBlur={(e) => {
                       updateNodeField(
                         n.id,
                         "title",
                         (e.target as HTMLElement).innerText,
-                      )
-                    }
+                      );
+                      editingNodeIdRef.current = null;
+                    }}
                     style={{
                       fontSize: fs,
                       fontWeight: n.bold ? 700 : 400,
@@ -2949,17 +3055,24 @@ export default function Canvas() {
                       letterSpacing: "-0.2px",
                       background: "transparent",
                       width: "100%",
+                      overflowWrap: "break-word",
+                      wordBreak: "break-word",
+                      overflow: "hidden",
                     }}
-                    dangerouslySetInnerHTML={{ __html: n.title }}
                   />
                 )}
 
-                {/* Connect dot — appears on hover, drag to connect */}
+                {/* Connect dot — appears on hover, click to connect */}
                 {showDot && (
                   <div
                     data-role="connect-dot"
-                    onMouseDown={(e) => onDotMouseDown(e, n.id)}
-                    title="Drag to connect"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => onDotClick(e, n.id)}
+                    title={
+                      connectDrag?.fromId === n.id
+                        ? "Cancel connect"
+                        : "Click to connect"
+                    }
                     style={{
                       width: 13,
                       height: 13,
@@ -3557,8 +3670,9 @@ export default function Canvas() {
           zIndex: 100,
         }}
       >
-        Right-click → Shapes & Images · Hover edge → drag to connect · Pinch /
-        Ctrl+Scroll = Zoom
+        {connectDrag
+          ? "Click any node to connect · Esc to cancel"
+          : "Right-click → Shapes & Images · Click dot → select target to connect · Pinch / Ctrl+Scroll = Zoom"}
       </div>
     </div>
   );
