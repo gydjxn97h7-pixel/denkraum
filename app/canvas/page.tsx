@@ -1,10 +1,25 @@
 "use client";
-import { useRef, useState, useCallback, useEffect, useMemo } from "react";
+import {
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useLayoutEffect,
+} from "react";
 import "./canvas.css";
 
 const ACCENT = "#FFB162";
 
-type NodeType = "block" | "text" | "circle" | "diamond" | "rounded" | "image";
+type NodeType =
+  | "block"
+  | "text"
+  | "circle"
+  | "oval"
+  | "diamond"
+  | "rounded"
+  | "image"
+  | "textfile";
 
 type CanvasNode = {
   id: number;
@@ -22,6 +37,8 @@ type CanvasNode = {
   italic?: boolean;
   underline?: boolean;
   textColor?: string;
+  textFileContent?: string;
+  textFileName?: string;
 };
 
 type Connection = { from: number; to: number };
@@ -178,6 +195,16 @@ function isValidHex(s: string) {
   return /^#[0-9a-fA-F]{6}$/.test(s);
 }
 
+// Strips all HTML tags from a string by parsing via a detached div and reading
+// back textContent. Prevents persisted HTML payloads (e.g. manipulated
+// localStorage) from reaching dangerouslySetInnerHTML on load.
+function stripHtml(s: unknown): string {
+  if (typeof s !== "string") return "";
+  const d = document.createElement("div");
+  d.innerHTML = s;
+  return d.textContent ?? "";
+}
+
 // ── Color Picker ──────────────────────────────────────────────────────────────
 function ColorPickerWindow({
   picker,
@@ -188,7 +215,8 @@ function ColorPickerWindow({
   onColorChange: (id: number, color: string) => void;
   onClose: () => void;
 }) {
-  const [pos, setPos] = useState({ x: picker.x, y: picker.y });
+  const divRef = useRef<HTMLDivElement>(null);
+  const posRef = useRef({ x: picker.x, y: picker.y });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hsv, setHsv] = useState<[number, number, number]>(() =>
     hexToHsv(picker.color),
@@ -262,11 +290,11 @@ function ColorPickerWindow({
   useEffect(() => {
     const move = (e: MouseEvent) => {
       if (isDraggingPicker.current) updatePickerPos(e.clientX, e.clientY);
-      if (isDraggingWindow.current) {
-        setPos({
-          x: e.clientX - isDraggingWindow.current.ox,
-          y: e.clientY - isDraggingWindow.current.oy,
-        });
+      if (isDraggingWindow.current && divRef.current) {
+        const x = e.clientX - isDraggingWindow.current.ox;
+        const y = e.clientY - isDraggingWindow.current.oy;
+        posRef.current = { x, y };
+        divRef.current.style.transform = `translate(${x}px, ${y}px)`;
       }
     };
     const up = () => {
@@ -281,19 +309,23 @@ function ColorPickerWindow({
     };
   }, [updatePickerPos]);
 
+  useLayoutEffect(() => {
+    if (divRef.current) {
+      divRef.current.style.transform = `translate(${posRef.current.x}px, ${posRef.current.y}px)`;
+    }
+  }, []);
+
   const W = isFullscreen ? 400 : 272;
   const pickerH = isFullscreen ? 210 : 160;
 
   return (
     <div
+      ref={divRef}
       onClick={(e) => e.stopPropagation()}
       style={{
         position: "fixed",
-        left: Math.max(8, Math.min(pos.x, window.innerWidth - W - 8)),
-        top: Math.max(
-          8,
-          Math.min(pos.y, window.innerHeight - pickerH - 340 - 8),
-        ),
+        left: 0,
+        top: 0,
         width: W,
         background: "rgba(22,24,28,0.97)",
         backdropFilter: "blur(28px)",
@@ -310,8 +342,8 @@ function ColorPickerWindow({
         onMouseDown={(e) => {
           e.preventDefault();
           isDraggingWindow.current = {
-            ox: e.clientX - pos.x,
-            oy: e.clientY - pos.y,
+            ox: e.clientX - posRef.current.x,
+            oy: e.clientY - posRef.current.y,
           };
         }}
         style={{
@@ -661,6 +693,178 @@ function TrafficDot({
   );
 }
 
+// ── Text File Viewer Window ───────────────────────────────────────────────────
+function TextFileViewerWindow({
+  viewer,
+  onClose,
+}: {
+  viewer: {
+    nodeId: number;
+    x: number;
+    y: number;
+    fileName: string;
+    content: string;
+  };
+  onClose: () => void;
+}) {
+  const divRef = useRef<HTMLDivElement>(null);
+  const posRef = useRef({ x: viewer.x, y: viewer.y });
+  const [isMaximized, setIsMaximized] = useState(false);
+  const isDraggingWindow = useRef<{ ox: number; oy: number } | null>(null);
+
+  const W = isMaximized ? Math.round(window.innerWidth * 0.9) : 480;
+  const H = isMaximized ? Math.round(window.innerHeight * 0.9) : 340;
+
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      if (isDraggingWindow.current && divRef.current) {
+        const x = e.clientX - isDraggingWindow.current.ox;
+        const y = e.clientY - isDraggingWindow.current.oy;
+        posRef.current = { x, y };
+        divRef.current.style.transform = `translate(${x}px, ${y}px)`;
+      }
+    };
+    const up = () => {
+      isDraggingWindow.current = null;
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!divRef.current) return;
+    if (isMaximized) {
+      divRef.current.style.transform = "none";
+    } else {
+      divRef.current.style.transform = `translate(${posRef.current.x}px, ${posRef.current.y}px)`;
+    }
+  }, [isMaximized]);
+
+  return (
+    <div
+      ref={divRef}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: "fixed",
+        left: isMaximized ? "5%" : 0,
+        top: isMaximized ? "5%" : 0,
+        width: W,
+        height: H,
+        background: "rgba(18,20,22,0.97)",
+        backdropFilter: "blur(28px)",
+        WebkitBackdropFilter: "blur(28px)",
+        border: "0.5px solid rgba(255,255,255,0.08)",
+        borderRadius: 16,
+        boxShadow: "0 20px 60px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2)",
+        zIndex: 500,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        userSelect: "none",
+        transition: "width 0.2s ease, height 0.2s ease",
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+      }}
+    >
+      {/* Header */}
+      <div
+        onMouseDown={(e) => {
+          if (isMaximized) return;
+          e.preventDefault();
+          isDraggingWindow.current = {
+            ox: e.clientX - posRef.current.x,
+            oy: e.clientY - posRef.current.y,
+          };
+        }}
+        style={{
+          padding: "11px 14px 10px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          cursor: isMaximized ? "default" : "grab",
+          borderBottom: "0.5px solid rgba(255,255,255,0.06)",
+          background: "rgba(255,255,255,0.03)",
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="rgba(255,255,255,0.4)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ flexShrink: 0 }}
+          >
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: "#9CA3AF",
+              letterSpacing: "-0.1px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {viewer.fileName}
+          </span>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            alignItems: "center",
+            flexShrink: 0,
+            marginLeft: 10,
+          }}
+        >
+          <TrafficDot color="#ff5f57" title="Close" onClick={onClose} />
+          <TrafficDot
+            color="#28c840"
+            title={isMaximized ? "Restore" : "Maximize"}
+            onClick={() => setIsMaximized((m) => !m)}
+          />
+        </div>
+      </div>
+
+      {/* Content */}
+      <pre
+        style={{
+          flex: 1,
+          margin: 0,
+          padding: "14px 16px",
+          overflowY: "auto",
+          overflowX: "auto",
+          fontSize: 12,
+          lineHeight: 1.65,
+          fontFamily:
+            "'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace",
+          color: "rgba(255,255,255,0.82)",
+          background: "transparent",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          userSelect: "text",
+        }}
+      >
+        {viewer.content}
+      </pre>
+    </div>
+  );
+}
+
 // ── Bring-to-front helper ─────────────────────────────────────────────────────
 function bringToFront(prev: CanvasNode[], id: number): CanvasNode[] {
   const idx = prev.findIndex((n) => n.id === id);
@@ -686,6 +890,11 @@ export default function Canvas() {
   const [zoom, setZoom] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [textFileViewer, setTextFileViewer] = useState<{
+    nodeId: number;
+    fileName: string;
+    content: string;
+  } | null>(null);
 
   const dragging = useRef<{ id: number; ox: number; oy: number } | null>(null);
   const resizing = useRef<{
@@ -700,7 +909,9 @@ export default function Canvas() {
   const lastPan = useRef({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textFileInputRef = useRef<HTMLInputElement>(null);
   const pendingImagePos = useRef<{ cx: number; cy: number } | null>(null);
+  const pendingTextFilePos = useRef<{ cx: number; cy: number } | null>(null);
   // Ref so onMouseUp can read latest hoveredId without stale closure
   const hoveredIdRef = useRef<number | null>(null);
   useEffect(() => {
@@ -712,6 +923,7 @@ export default function Canvas() {
   const panRef = useRef(pan);
   const zoomRef = useRef(zoom);
   const connectDragRef = useRef(connectDrag);
+  const selectedRef = useRef(selected);
   useEffect(() => {
     panRef.current = pan;
   }, [pan]);
@@ -721,6 +933,9 @@ export default function Canvas() {
   useEffect(() => {
     connectDragRef.current = connectDrag;
   }, [connectDrag]);
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   // Pending values accumulated during a mousemove burst; applied once per frame
   const rafRef = useRef<number | null>(null);
@@ -750,9 +965,26 @@ export default function Canvas() {
   const addNode = useCallback((cx: number, cy: number, type: NodeType) => {
     const isText = type === "text";
     const isCircle = type === "circle";
+    const isOval = type === "oval";
     const isDiamond = type === "diamond";
-    const w = isText ? 160 : isCircle ? 100 : isDiamond ? 130 : 200;
-    const h = isText ? 40 : isCircle ? 100 : isDiamond ? 100 : 80;
+    const w = isText
+      ? 160
+      : isCircle
+        ? 100
+        : isOval
+          ? 160
+          : isDiamond
+            ? 130
+            : 200;
+    const h = isText
+      ? 40
+      : isCircle
+        ? 100
+        : isOval
+          ? 100
+          : isDiamond
+            ? 100
+            : 80;
     // Capture the ID before entering the setNodes updater so setSelected
     // can reference it synchronously without a stale closure.
     let newId: number;
@@ -770,11 +1002,13 @@ export default function Canvas() {
           ? ""
           : type === "circle"
             ? "Circle"
-            : type === "diamond"
-              ? "Diamond"
-              : type === "rounded"
-                ? "Area"
-                : "New Block",
+            : type === "oval"
+              ? "Oval"
+              : type === "diamond"
+                ? "Diamond"
+                : type === "rounded"
+                  ? "Area"
+                  : "New Block",
         body: "",
         type,
         color: isText ? "transparent" : "#1E2226",
@@ -832,6 +1066,52 @@ export default function Canvas() {
         img.src = imageUrl;
       };
       reader.readAsDataURL(file);
+      e.target.value = "";
+    },
+    [],
+  );
+
+  const handleTextFileInsert = useCallback((cx: number, cy: number) => {
+    pendingTextFilePos.current = { cx, cy };
+    setTimeout(() => textFileInputRef.current?.click(), 50);
+  }, []);
+
+  const onTextFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      const pos = pendingTextFilePos.current;
+      if (!file || !pos) return;
+      const fileName = file.name;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const textFileContent = ev.target?.result as string;
+        if (textFileContent == null) return;
+        const w = 200;
+        const h = 60;
+        setNodes((prev) => {
+          const maxId = prev.reduce((m, n) => Math.max(m, n.id), -1);
+          if (idCounter <= maxId) idCounter = maxId + 1;
+          return [
+            ...prev,
+            {
+              id: idCounter++,
+              x: pos.cx - w / 2,
+              y: pos.cy - h / 2,
+              w,
+              h,
+              title: fileName,
+              body: "",
+              type: "textfile",
+              color: "#1E2226",
+              fontSize: 13,
+              textFileContent,
+              textFileName: fileName,
+            },
+          ];
+        });
+        pendingTextFilePos.current = null;
+      };
+      reader.readAsText(file);
       e.target.value = "";
     },
     [],
@@ -896,9 +1176,17 @@ export default function Canvas() {
       const rawNodes = localStorage.getItem(LS_NODES);
       if (rawNodes) {
         const loaded = JSON.parse(rawNodes) as CanvasNode[];
-        const maxId = loaded.reduce((m, n) => Math.max(m, n.id), -1);
+        const sanitized = loaded.map((n) => ({
+          ...n,
+          title: stripHtml(n.title),
+          body: stripHtml(n.body),
+          ...(n.textFileName != null && {
+            textFileName: stripHtml(n.textFileName),
+          }),
+        }));
+        const maxId = sanitized.reduce((m, n) => Math.max(m, n.id), -1);
         if (maxId >= idCounter) idCounter = maxId + 1;
-        setNodes(loaded);
+        setNodes(sanitized);
       }
       const rawConns = localStorage.getItem(LS_CONNECTIONS);
       if (rawConns) setConnections(JSON.parse(rawConns) as Connection[]);
@@ -911,9 +1199,25 @@ export default function Canvas() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       try {
-        localStorage.setItem(LS_NODES, JSON.stringify(nodes));
+        // Strip textFileContent before persisting — file data can be many MB
+        // and would silently overflow the ~5 MB localStorage quota.
+        // The node (position, filename, type) is kept; content must be re-loaded.
+        const nodesToSave = nodes.map(
+          ({ textFileContent: _omit, ...rest }) => rest,
+        );
+        localStorage.setItem(LS_NODES, JSON.stringify(nodesToSave));
         localStorage.setItem(LS_CONNECTIONS, JSON.stringify(connections));
-      } catch {}
+      } catch (err) {
+        if (
+          err instanceof DOMException &&
+          (err.name === "QuotaExceededError" ||
+            err.name === "NS_ERROR_DOM_QUOTA_REACHED")
+        ) {
+          console.warn(
+            "[denkraum] localStorage quota exceeded — canvas not saved.",
+          );
+        }
+      }
     }, 500);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -948,24 +1252,6 @@ export default function Canvas() {
   }, []);
 
   // ── Context menus ─────────────────────────────────────────────────────────────
-  const onCanvasContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (t !== canvasRef.current && !t.dataset.bg) return;
-      e.preventDefault();
-      const r = canvasRef.current!.getBoundingClientRect();
-      const pos = toCanvas(e.clientX - r.left, e.clientY - r.top);
-      setContextMenu({
-        kind: "canvas",
-        x: e.clientX,
-        y: e.clientY,
-        cx: pos.x,
-        cy: pos.y,
-      });
-    },
-    [toCanvas],
-  );
-
   const onNodeContextMenu = useCallback((e: React.MouseEvent, id: number) => {
     e.preventDefault();
     e.stopPropagation();
@@ -985,7 +1271,7 @@ export default function Canvas() {
       if (t !== canvasRef.current && !t.dataset.bg) return;
       if (e.button !== 0) return;
       // Cancel any in-progress connect drag
-      if (connectDrag) {
+      if (connectDragRef.current) {
         setConnectDrag(null);
         return;
       }
@@ -993,11 +1279,15 @@ export default function Canvas() {
       lastPan.current = { x: e.clientX, y: e.clientY };
       setSelected(null);
     },
-    [contextMenu, connectDrag],
+    [contextMenu],
   );
 
   // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  const nodeMapRef = useRef(nodeMap);
+  useEffect(() => {
+    nodeMapRef.current = nodeMap;
+  }, [nodeMap]);
 
   const onNodeMouseDown = useCallback(
     (e: React.MouseEvent, id: number) => {
@@ -1202,13 +1492,12 @@ export default function Canvas() {
 
   // ── Keyboard ──────────────────────────────────────────────────────────────────
   const deleteSelected = useCallback(() => {
-    if (selected === null) return;
-    setNodes((prev) => prev.filter((n) => n.id !== selected));
-    setConnections((prev) =>
-      prev.filter((c) => c.from !== selected && c.to !== selected),
-    );
+    const id = selectedRef.current;
+    if (id === null) return;
+    setNodes((prev) => prev.filter((n) => n.id !== id));
+    setConnections((prev) => prev.filter((c) => c.from !== id && c.to !== id));
     setSelected(null);
-  }, [selected]);
+  }, []);
 
   const updateNodeField = useCallback(
     (id: number, field: "title" | "body", value: string) => {
@@ -1234,20 +1523,17 @@ export default function Canvas() {
     [],
   );
 
-  const focusNode = useCallback(
-    (id: number) => {
-      const n = nodes.find((x) => x.id === id);
-      if (!n) return;
-      setSelected(id);
-      if (!canvasRef.current) return;
-      const r = canvasRef.current.getBoundingClientRect();
-      setPan({
-        x: r.width / 2 - (n.x + n.w / 2) * zoom,
-        y: r.height / 2 - (n.y + n.h / 2) * zoom,
-      });
-    },
-    [nodes, zoom],
-  );
+  const focusNode = useCallback((id: number) => {
+    const n = nodeMapRef.current.get(id);
+    if (!n) return;
+    setSelected(id);
+    if (!canvasRef.current) return;
+    const r = canvasRef.current.getBoundingClientRect();
+    setPan({
+      x: r.width / 2 - (n.x + n.w / 2) * zoomRef.current,
+      y: r.height / 2 - (n.y + n.h / 2) * zoomRef.current,
+    });
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1255,7 +1541,7 @@ export default function Canvas() {
       if (
         (e.key === "Delete" || e.key === "Backspace") &&
         !t.isContentEditable &&
-        selected !== null
+        selectedRef.current !== null
       )
         deleteSelected();
       if (e.key === "Escape") {
@@ -1265,7 +1551,7 @@ export default function Canvas() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, deleteSelected]);
+  }, [deleteSelected]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   const menuItem = (danger = false): React.CSSProperties => ({
@@ -1383,6 +1669,13 @@ export default function Canvas() {
         accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
         style={{ display: "none" }}
         onChange={onImageFileChange}
+      />
+      <input
+        ref={textFileInputRef}
+        type="file"
+        accept="text/plain,text/markdown,text/csv,text/rtf,text/xml,text/html,text/css,text/javascript,application/json,application/xml,application/x-yaml,application/x-sh,.txt,.md,.markdown,.csv,.rtf,.log,.json,.xml,.yaml,.yml,.toml,.ini,.env,.ts,.tsx,.js,.jsx,.html,.css,.py,.rb,.java,.c,.cpp,.h,.sh"
+        style={{ display: "none" }}
+        onChange={onTextFileChange}
       />
 
       {/* ── Sidebar ── */}
@@ -1566,13 +1859,17 @@ export default function Canvas() {
                     ? "T"
                     : n.type === "circle"
                       ? "○"
-                      : n.type === "diamond"
-                        ? "◇"
-                        : n.type === "image"
-                          ? "▣"
-                          : n.type === "rounded"
-                            ? "▢"
-                            : "▭";
+                      : n.type === "oval"
+                        ? "◯"
+                        : n.type === "diamond"
+                          ? "◇"
+                          : n.type === "image"
+                            ? "▣"
+                            : n.type === "rounded"
+                              ? "▢"
+                              : n.type === "textfile"
+                                ? "📄"
+                                : "▭";
                 const label =
                   n.title.replace(/<[^>]*>/g, "").trim() || "Untitled";
                 const isActive = selected === n.id;
@@ -1701,95 +1998,6 @@ export default function Canvas() {
         </div>
       </div>
 
-      {/* ── Toolbar ── */}
-      <div
-        style={{
-          position: "fixed",
-          top: 20,
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "rgba(20,22,24,0.92)",
-          backdropFilter: "blur(20px)",
-          border: "0.5px solid rgba(255,255,255,0.08)",
-          borderRadius: 16,
-          padding: "8px 14px",
-          display: "flex",
-          gap: 4,
-          alignItems: "center",
-          boxShadow: "0 2px 24px rgba(0,0,0,0.3)",
-          zIndex: 200,
-        }}
-      >
-        <button
-          onClick={deleteSelected}
-          style={{
-            padding: "6px 13px",
-            borderRadius: 8,
-            border: "none",
-            fontSize: 12.5,
-            fontFamily: "inherit",
-            cursor: "pointer",
-            background: "transparent",
-            color: "#FF6B6B",
-          }}
-        >
-          Delete
-        </button>
-        <div
-          style={{
-            width: "0.5px",
-            height: 20,
-            background: "rgba(255,255,255,0.1)",
-            margin: "0 4px",
-          }}
-        />
-        <div style={{ fontSize: 11, color: "#4B5563" }}>
-          Right-click → Shapes & Options
-        </div>
-        {/* Live indicator while connecting */}
-        {connectDrag && (
-          <>
-            <div
-              style={{
-                width: "0.5px",
-                height: 20,
-                background: "rgba(255,255,255,0.1)",
-                margin: "0 4px",
-              }}
-            />
-            <div
-              style={{
-                fontSize: 11,
-                color: ACCENT,
-                fontWeight: 500,
-                letterSpacing: "-0.1px",
-              }}
-            >
-              Connecting… drop on a shape
-            </div>
-            <div
-              onClick={() => setConnectDrag(null)}
-              style={{
-                fontSize: 11,
-                color: "#6B7280",
-                cursor: "pointer",
-                padding: "2px 6px",
-                borderRadius: 5,
-                marginLeft: 2,
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "transparent")
-              }
-            >
-              ✕ Cancel
-            </div>
-          </>
-        )}
-      </div>
-
       {/* ── Export Toolbar ── */}
       <div
         style={{
@@ -1811,6 +2019,179 @@ export default function Canvas() {
           marginLeft: 320,
         }}
       >
+        {/* ── Shape insert buttons ── */}
+        {(
+          [
+            { type: "block" as NodeType, icon: "▭", label: "Block" },
+            { type: "rounded" as NodeType, icon: "▢", label: "Area (rounded)" },
+            { type: "circle" as NodeType, icon: "○", label: "Circle" },
+            { type: "oval" as NodeType, icon: "◯", label: "Oval" },
+            { type: "diamond" as NodeType, icon: "◇", label: "Diamond" },
+            { type: "text" as NodeType, icon: "T", label: "Free Text" },
+          ] as { type: NodeType; icon: string; label: string }[]
+        ).map(({ type, icon, label }) => (
+          <button
+            key={type}
+            title={label}
+            onClick={() => {
+              if (!canvasRef.current) return;
+              const cx =
+                (canvasRef.current.clientWidth / 2 - panRef.current.x) /
+                zoomRef.current;
+              const cy =
+                (canvasRef.current.clientHeight / 2 - panRef.current.y) /
+                zoomRef.current;
+              addNode(cx, cy, type);
+            }}
+            style={{
+              width: 28,
+              height: 28,
+              border: "none",
+              background: "transparent",
+              color: "#9CA3AF",
+              cursor: "pointer",
+              fontSize: 14,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 7,
+              padding: 0,
+              fontFamily: "inherit",
+              transition: "color 0.12s, background 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
+              (e.currentTarget as HTMLElement).style.background =
+                "rgba(255,255,255,0.07)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+              (e.currentTarget as HTMLElement).style.background = "transparent";
+            }}
+          >
+            {icon}
+          </button>
+        ))}
+
+        {/* Image insert button */}
+        <button
+          title="Insert Image"
+          onClick={() => {
+            if (!canvasRef.current) return;
+            const cx =
+              (canvasRef.current.clientWidth / 2 - panRef.current.x) /
+              zoomRef.current;
+            const cy =
+              (canvasRef.current.clientHeight / 2 - panRef.current.y) /
+              zoomRef.current;
+            handleImageInsert(cx, cy);
+          }}
+          style={{
+            width: 28,
+            height: 28,
+            border: "none",
+            background: "transparent",
+            color: "#9CA3AF",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 7,
+            padding: 0,
+            transition: "color 0.12s, background 0.12s",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
+            (e.currentTarget as HTMLElement).style.background =
+              "rgba(255,255,255,0.07)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
+          </svg>
+        </button>
+
+        {/* Text file insert button */}
+        <button
+          title="Insert Text File"
+          onClick={() => {
+            if (!canvasRef.current) return;
+            const cx =
+              (canvasRef.current.clientWidth / 2 - panRef.current.x) /
+              zoomRef.current;
+            const cy =
+              (canvasRef.current.clientHeight / 2 - panRef.current.y) /
+              zoomRef.current;
+            handleTextFileInsert(cx, cy);
+          }}
+          style={{
+            width: 28,
+            height: 28,
+            border: "none",
+            background: "transparent",
+            color: "#9CA3AF",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 7,
+            padding: 0,
+            transition: "color 0.12s, background 0.12s",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
+            (e.currentTarget as HTMLElement).style.background =
+              "rgba(255,255,255,0.07)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
+        </button>
+
+        {/* Divider */}
+        <div
+          style={{
+            width: "0.5px",
+            height: 16,
+            background: "rgba(255,255,255,0.1)",
+            margin: "0 4px",
+            flexShrink: 0,
+          }}
+        />
+
         <button
           onClick={handleExportPDF}
           disabled={exporting}
@@ -1840,14 +2221,33 @@ export default function Canvas() {
         >
           {exporting ? (
             <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}>
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ animation: "spin 1s linear infinite" }}
+              >
                 <path d="M21 12a9 9 0 1 1-6.219-8.56" />
               </svg>
               Exporting…
             </>
           ) : (
             <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
@@ -1863,7 +2263,6 @@ export default function Canvas() {
         ref={canvasRef}
         data-bg="true"
         onMouseDown={onCanvasMouseDown}
-        onContextMenu={onCanvasContextMenu}
         style={{
           position: "absolute",
           top: 0,
@@ -1975,10 +2374,11 @@ export default function Canvas() {
           {nodes.map((n) => {
             const isSel = selected === n.id;
             const isText = n.type === "text";
-            const isCircle = n.type === "circle";
+            const isCircle = n.type === "circle" || n.type === "oval";
             const isDiamond = n.type === "diamond";
             const isRounded = n.type === "rounded";
             const isImage = n.type === "image";
+            const isTextFile = n.type === "textfile";
             const [_nr, _ng, _nb] = hexToRgb(n.color);
             const isDark =
               (0.299 * _nr + 0.587 * _ng + 0.114 * _nb) / 255 < 0.45;
@@ -1996,11 +2396,15 @@ export default function Canvas() {
             const hostBorder =
               isDiamond || isText || isImage
                 ? "none"
-                : isConnectTarget
-                  ? `2px solid ${ACCENT}`
-                  : isSel
+                : isTextFile
+                  ? isSel
                     ? "1px solid rgba(255,255,255,0.28)"
-                    : "0.5px solid rgba(255,255,255,0.13)";
+                    : "0.5px solid rgba(255,255,255,0.13)"
+                  : isConnectTarget
+                    ? `2px solid ${ACCENT}`
+                    : isSel
+                      ? "1px solid rgba(255,255,255,0.28)"
+                      : "0.5px solid rgba(255,255,255,0.13)";
             const hostShadow =
               isDiamond || isText || isImage
                 ? "none"
@@ -2021,6 +2425,18 @@ export default function Canvas() {
                 key={n.id}
                 onMouseDown={(e) => onNodeMouseDown(e, n.id)}
                 onContextMenu={(e) => onNodeContextMenu(e, n.id)}
+                onClick={
+                  isTextFile
+                    ? (e) => {
+                        e.stopPropagation();
+                        setTextFileViewer({
+                          nodeId: n.id,
+                          fileName: n.textFileName ?? n.title,
+                          content: n.textFileContent ?? "",
+                        });
+                      }
+                    : undefined
+                }
                 onMouseEnter={() => setHoveredId(n.id)}
                 onMouseLeave={() =>
                   setHoveredId((prev) => (prev === n.id ? null : prev))
@@ -2225,7 +2641,54 @@ export default function Canvas() {
                 )}
 
                 {/* Block / Rounded / Circle */}
-                {!isText && !isDiamond && !isImage && (
+                {/* Text File */}
+                {isTextFile && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "0 12px",
+                      width: "100%",
+                      height: "100%",
+                      boxSizing: "border-box",
+                      cursor: "pointer",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.45)"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    <span
+                      style={{
+                        fontSize: fs,
+                        color: "rgba(255,255,255,0.82)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        flex: 1,
+                        letterSpacing: "-0.1px",
+                      }}
+                    >
+                      {n.textFileName ?? n.title}
+                    </span>
+                  </div>
+                )}
+
+                {!isText && !isDiamond && !isImage && !isTextFile && (
                   <>
                     <div
                       contentEditable
@@ -2421,110 +2884,6 @@ export default function Canvas() {
           })}
         </div>
       </div>
-
-      {/* ── Canvas Context Menu ── */}
-      {contextMenu?.kind === "canvas" && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            position: "fixed",
-            left: contextMenu.x,
-            top: contextMenu.y,
-            background: "rgba(22,24,28,0.97)",
-            backdropFilter: "blur(24px)",
-            border: "0.5px solid rgba(255,255,255,0.08)",
-            borderRadius: 14,
-            boxShadow: "0 8px 40px rgba(0,0,0,0.35)",
-            zIndex: 300,
-            minWidth: 210,
-            padding: "6px 0",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              color: "#4B5563",
-              padding: "6px 14px 4px",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-            }}
-          >
-            Insert Shape
-          </div>
-          {(
-            [
-              { type: "block" as NodeType, label: "Block", icon: "▭" },
-              {
-                type: "rounded" as NodeType,
-                label: "Area (rounded)",
-                icon: "▢",
-              },
-              { type: "circle" as NodeType, label: "Circle", icon: "○" },
-              { type: "diamond" as NodeType, label: "Diamond", icon: "◇" },
-              { type: "text" as NodeType, label: "Free Text", icon: "T" },
-            ] as { type: NodeType; label: string; icon: string }[]
-          ).map(({ type, label, icon }) => (
-            <div
-              key={type}
-              onClick={() => addNode(contextMenu.cx, contextMenu.cy, type)}
-              onMouseEnter={(e) => hoverMenu(e, true)}
-              onMouseLeave={(e) => hoverMenu(e, false)}
-              style={menuItem()}
-            >
-              <span
-                style={{
-                  fontSize: 15,
-                  color: "#6B7280",
-                  width: 22,
-                  textAlign: "center",
-                }}
-              >
-                {icon}
-              </span>
-              {label}
-            </div>
-          ))}
-          <div
-            style={{
-              height: "0.5px",
-              background: "rgba(255,255,255,0.10)",
-              margin: "4px 0",
-            }}
-          />
-          <div
-            onClick={() => handleImageInsert(contextMenu.cx, contextMenu.cy)}
-            onMouseEnter={(e) => hoverMenu(e, true)}
-            onMouseLeave={(e) => hoverMenu(e, false)}
-            style={menuItem()}
-          >
-            <span
-              style={{
-                width: 22,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#6B7280",
-              }}
-            >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-            </span>
-            Insert Image
-          </div>
-        </div>
-      )}
 
       {/* ── Node Context Menu ── */}
       {contextMenu?.kind === "node" &&
@@ -2839,6 +3198,24 @@ export default function Canvas() {
           onClose={() => setTextColorPicker(null)}
         />
       )}
+
+      {/* ── Text File Viewer ── */}
+      {textFileViewer &&
+        (() => {
+          const tn = nodeMap.get(textFileViewer.nodeId);
+          const spawnX = tn
+            ? tn.x * zoom + pan.x + 20
+            : window.innerWidth / 2 - 240;
+          const spawnY = tn
+            ? tn.y * zoom + pan.y - 40
+            : window.innerHeight / 2 - 170;
+          return (
+            <TextFileViewerWindow
+              viewer={{ ...textFileViewer, x: spawnX, y: spawnY }}
+              onClose={() => setTextFileViewer(null)}
+            />
+          );
+        })()}
 
       {/* ── Zoom controls ── */}
       <div
