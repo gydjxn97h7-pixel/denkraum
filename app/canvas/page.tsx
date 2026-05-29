@@ -1089,6 +1089,15 @@ export default function Canvas() {
     ]);
     setSelected(newId);
     setContextMenu(null);
+    if (isText) {
+      editingNodeIdRef.current = newId;
+      setTimeout(() => {
+        const el = document.querySelector<HTMLElement>(
+          `[data-node-id="${newId}"] [contenteditable]`,
+        );
+        el?.focus();
+      }, 50);
+    }
   }, []);
 
   const handleImageInsert = useCallback((cx: number, cy: number) => {
@@ -1427,17 +1436,8 @@ export default function Canvas() {
   const nodeMapRef = useRef(nodeMap);
   nodeMapRef.current = nodeMap;
 
-  const onNodeMouseDown = useCallback(
+  const startNodeDrag = useCallback(
     (e: React.MouseEvent, id: number) => {
-      if (e.button !== 0) return;
-      const t = e.target as HTMLElement;
-      if (t.isContentEditable) return;
-      if (t.dataset.role === "connect-dot") return;
-      if (t.dataset.role === "resize-handle") return;
-      // Suppress drag when connect-mode is active; onClick handles finalization
-      if (connectDragRef.current) return;
-
-      e.stopPropagation();
       setContextMenu(null);
       setSelected(id);
       setNodes((prev) => bringToFront(prev, id));
@@ -1450,6 +1450,21 @@ export default function Canvas() {
       e.preventDefault();
     },
     [nodeMap, pan, zoom],
+  );
+
+  const onNodeMouseDown = useCallback(
+    (e: React.MouseEvent, id: number) => {
+      if (e.button !== 0) return;
+      const t = e.target as HTMLElement;
+      if (t.isContentEditable) return;
+      if (t.dataset.role === "connect-dot") return;
+      if (t.dataset.role === "resize-handle") return;
+      if (t.dataset.role === "move-handle") return;
+      if (connectDragRef.current) return;
+      e.stopPropagation();
+      startNodeDrag(e, id);
+    },
+    [startNodeDrag],
   );
 
   const onResizeMouseDown = useCallback(
@@ -2652,6 +2667,7 @@ export default function Canvas() {
             return (
               <div
                 key={n.id}
+                data-node-id={n.id}
                 onMouseDown={(e) => onNodeMouseDown(e, n.id)}
                 onContextMenu={(e) => onNodeContextMenu(e, n.id)}
                 onClick={(e) => {
@@ -2678,12 +2694,13 @@ export default function Canvas() {
                   top: n.y,
                   width: n.w,
                   height: isText ? "auto" : n.h,
+                  minHeight: isText ? Math.max(32, n.h) : undefined,
                   background: hostBg,
                   border: hostBorder,
                   borderRadius: hostRadius,
                   boxShadow: hostShadow,
                   padding: isText
-                    ? "2px 0"
+                    ? "8px 12px"
                     : isCircle
                       ? 0
                       : isDiamond
@@ -2691,11 +2708,15 @@ export default function Canvas() {
                         : "14px 18px",
                   cursor: connectDrag ? "crosshair" : "grab",
                   userSelect: "none",
+                  outline:
+                    isText && (isSel || n.title === "")
+                      ? "1.5px dashed rgba(255,255,255,0.45)"
+                      : "none",
                   transition: "box-shadow 0.15s ease, border-color 0.15s ease",
                   display: "flex",
                   flexDirection: "column",
-                  justifyContent: isCircle ? "center" : "flex-start",
-                  alignItems: isCircle ? "center" : "flex-start",
+                  justifyContent: isCircle || isText ? "center" : "flex-start",
+                  alignItems: isCircle || isText ? "center" : "flex-start",
                   overflow: "visible",
                   isolation: "isolate",
                 }}
@@ -3050,16 +3071,63 @@ export default function Canvas() {
                       textDecoration: n.underline ? "underline" : "none",
                       color: n.textColor ?? "#E8E6E1",
                       outline: "none",
+                      textAlign: "center",
                       lineHeight: 1.55,
-                      minHeight: 22,
+                      minHeight: 32,
+                      minWidth: 120,
                       letterSpacing: "-0.2px",
                       background: "transparent",
                       width: "100%",
                       overflowWrap: "break-word",
                       wordBreak: "break-word",
-                      overflow: "hidden",
+                      overflow: "visible",
                     }}
                   />
+                )}
+
+                {/* Move handle — text nodes only, top-left, visible on hover/select */}
+                {isText && (hoveredId === n.id || isSel) && (
+                  <div
+                    data-role="move-handle"
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      startNodeDrag(e, n.id);
+                    }}
+                    style={{
+                      position: "absolute",
+                      left: -8,
+                      top: -8,
+                      width: 16,
+                      height: 16,
+                      background: "rgba(28,32,36,0.97)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 4,
+                      cursor: "move",
+                      zIndex: 20,
+                      boxShadow: "0 1px 6px rgba(0,0,0,0.6)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <svg
+                      width="8"
+                      height="8"
+                      viewBox="0 0 8 8"
+                      fill="none"
+                      style={{ pointerEvents: "none", display: "block" }}
+                    >
+                      <circle cx="2" cy="2" r="0.8" fill="rgba(255,255,255,0.55)" />
+                      <circle cx="4" cy="2" r="0.8" fill="rgba(255,255,255,0.55)" />
+                      <circle cx="6" cy="2" r="0.8" fill="rgba(255,255,255,0.55)" />
+                      <circle cx="2" cy="4" r="0.8" fill="rgba(255,255,255,0.55)" />
+                      <circle cx="4" cy="4" r="0.8" fill="rgba(255,255,255,0.55)" />
+                      <circle cx="6" cy="4" r="0.8" fill="rgba(255,255,255,0.55)" />
+                      <circle cx="2" cy="6" r="0.8" fill="rgba(255,255,255,0.55)" />
+                      <circle cx="4" cy="6" r="0.8" fill="rgba(255,255,255,0.55)" />
+                      <circle cx="6" cy="6" r="0.8" fill="rgba(255,255,255,0.55)" />
+                    </svg>
+                  </div>
                 )}
 
                 {/* Connect dot — appears on hover, click to connect */}
