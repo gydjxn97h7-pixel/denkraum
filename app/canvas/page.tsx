@@ -150,17 +150,7 @@ export default function Canvas() {
         y: cy - h / 2,
         w,
         h,
-        title: isText
-          ? ""
-          : type === "circle"
-            ? "Circle"
-            : type === "oval"
-              ? "Oval"
-              : type === "diamond"
-                ? "Diamond"
-                : type === "rounded"
-                  ? "Area"
-                  : "New Block",
+        title: "",
         body: "",
         type,
         color: isText ? "transparent" : "#1E2226",
@@ -1870,6 +1860,7 @@ export default function Canvas() {
                         }}
                         contentEditable
                         suppressContentEditableWarning
+                        data-placeholder="Diamond"
                         onMouseDown={(e) => e.stopPropagation()}
                         onFocus={() => {
                           editingNodeIdRef.current = n.id;
@@ -2051,6 +2042,15 @@ export default function Canvas() {
                       }}
                       contentEditable
                       suppressContentEditableWarning
+                      data-placeholder={
+                        n.type === "circle"
+                          ? "Circle"
+                          : n.type === "oval"
+                            ? "Oval"
+                            : n.type === "rounded"
+                              ? "Area"
+                              : "Block"
+                      }
                       onMouseDown={(e) => e.stopPropagation()}
                       onFocus={() => {
                         editingNodeIdRef.current = n.id;
@@ -2302,10 +2302,12 @@ export default function Canvas() {
                     onMouseDown={(e) => onResizeMouseDown(e, n.id)}
                     style={{
                       position: "absolute",
-                      right: -8,
-                      bottom: -8,
-                      width: 16,
-                      height: 16,
+                      right: -11,
+                      bottom: -11,
+                      width: 22,
+                      height: 22,
+                      padding: 6,
+                      boxSizing: "content-box",
                       background: "rgba(28,32,36,0.97)",
                       border: "1px solid rgba(255,255,255,0.12)",
                       borderRadius: 4,
@@ -2333,8 +2335,8 @@ export default function Canvas() {
                     }}
                   >
                     <svg
-                      width="8"
-                      height="8"
+                      width="11"
+                      height="11"
                       viewBox="0 0 8 8"
                       fill="none"
                       style={{ pointerEvents: "none", display: "block" }}
