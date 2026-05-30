@@ -38,6 +38,7 @@ import {
 import { setAsset, deleteAsset, getAllAssets } from "./lib/idb";
 import { ColorPickerWindow } from "./components/ColorPickerWindow";
 import { TextFileViewerWindow } from "./components/TextFileViewerWindow";
+import { NodeView } from "./components/NodeView";
 
 // ── Main Canvas ───────────────────────────────────────────────────────────────
 export default function Canvas() {
@@ -63,6 +64,9 @@ export default function Canvas() {
   } | null>(null);
   const [copiedNode, setCopiedNode] = useState<CanvasNode | null>(null);
   const [snapGuides, setSnapGuides] = useState<{ x?: number; y?: number }>({});
+  const [editingSidebarNodeId, setEditingSidebarNodeId] = useState<
+    number | null
+  >(null);
 
   const dragging = useRef<{ id: number; ox: number; oy: number } | null>(null);
   const resizing = useRef<{
@@ -145,6 +149,29 @@ export default function Canvas() {
     const newId = idCounter;
     setIdCounter(idCounter + 1);
 
+    const TYPE_LABEL: Partial<Record<NodeType, string>> = {
+      block: "Block",
+      rounded: "Area",
+      circle: "Circle",
+      oval: "Oval",
+      diamond: "Diamond",
+      text: "Text",
+      image: "Image",
+    };
+    const baseLabel = TYPE_LABEL[type];
+    let autoLabel = "";
+    if (baseLabel) {
+      const re = new RegExp(`^${baseLabel}\\s+(\\d+)$`);
+      let maxIdx = 0;
+      for (const node of nodeMapRef.current.values()) {
+        if (node.type === type) {
+          const m = (node.label ?? "").match(re);
+          if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
+        }
+      }
+      autoLabel = `${baseLabel} ${maxIdx + 1}`;
+    }
+
     setNodes((prev) => [
       ...prev,
       {
@@ -154,6 +181,7 @@ export default function Canvas() {
         w,
         h,
         title: "",
+        label: autoLabel,
         body: "",
         type,
         color: isText ? "transparent" : "#1E2226",
@@ -208,7 +236,18 @@ export default function Canvas() {
               y: pos.cy - h / 2,
               w,
               h,
-              title: "Image",
+              title: "",
+              label: (() => {
+                const re = /^Image\s+(\d+)$/;
+                let maxIdx = 0;
+                for (const node of nodeMapRef.current.values()) {
+                  if (node.type === "image") {
+                    const m = (node.label ?? "").match(re);
+                    if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
+                  }
+                }
+                return `Image ${maxIdx + 1}`;
+              })(),
               body: "",
               type: "image",
               color: "#1E2226",
@@ -257,7 +296,8 @@ export default function Canvas() {
             y: pos.cy - h / 2,
             w,
             h,
-            title: fileName,
+            title: "",
+            label: fileName,
             body: "",
             type: "textfile",
             color: "#1E2226",
@@ -352,6 +392,7 @@ export default function Canvas() {
             ...n,
             title: stripHtml(n.title),
             body: stripHtml(n.body),
+            ...(n.label != null && { label: stripHtml(n.label) }),
             ...(n.textFileName != null && {
               textFileName: stripHtml(n.textFileName),
             }),
@@ -793,7 +834,9 @@ export default function Canvas() {
       const rows: CanvasNode[][] = [];
       for (const node of sorted) {
         const cy = node.y + node.h / 2;
-        const row = rows.find((r) => Math.abs(cy - (r[0].y + r[0].h / 2)) < 150);
+        const row = rows.find(
+          (r) => Math.abs(cy - (r[0].y + r[0].h / 2)) < 150,
+        );
         if (row) row.push(node);
         else rows.push([node]);
       }
@@ -859,6 +902,10 @@ export default function Canvas() {
     [],
   );
 
+  const updateNodeLabel = useCallback((id: number, label: string) => {
+    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, label } : n)));
+  }, []);
+
   const updateFontSize = useCallback((id: number, size: number) => {
     setNodes((prev) =>
       prev.map((n) => (n.id === id ? { ...n, fontSize: size } : n)),
@@ -903,38 +950,104 @@ export default function Canvas() {
         copySelected();
       if ((e.metaKey || e.ctrlKey) && e.key === "v" && !t.isContentEditable)
         pasteNode();
-      if (e.key === "Tab" && !t.isContentEditable && selectedRef.current !== null) {
+      if (
+        e.key === "Tab" &&
+        !t.isContentEditable &&
+        selectedRef.current !== null
+      ) {
         e.preventDefault();
         const selId = selectedRef.current;
         const n = nodeMapRef.current.get(selId);
         if (n) {
-          const maxId = nodeMapRef.current.size > 0 ? Math.max(...nodeMapRef.current.keys()) : -1;
+          const maxId =
+            nodeMapRef.current.size > 0
+              ? Math.max(...nodeMapRef.current.keys())
+              : -1;
           if (idCounter <= maxId) setIdCounter(maxId + 1);
           const newId = idCounter;
           setIdCounter(idCounter + 1);
-          setNodes((prev) => [...prev, { id: newId, x: n.x + n.w + 80, y: n.y, w: 200, h: 80, title: "", body: "", type: "block", color: "#1E2226", fontSize: 13 }]);
+          const re1 = /^Block\s+(\d+)$/;
+          let maxBlockIdx1 = 0;
+          for (const node of nodeMapRef.current.values())
+            if (node.type === "block") {
+              const m = (node.label ?? "").match(re1);
+              if (m) maxBlockIdx1 = Math.max(maxBlockIdx1, parseInt(m[1], 10));
+            }
+          setNodes((prev) => [
+            ...prev,
+            {
+              id: newId,
+              x: n.x + n.w + 80,
+              y: n.y,
+              w: 200,
+              h: 80,
+              title: "",
+              label: `Block ${maxBlockIdx1 + 1}`,
+              body: "",
+              type: "block",
+              color: "#1E2226",
+              fontSize: 13,
+            },
+          ]);
           setConnections((prev) => [...prev, { from: selId, to: newId }]);
           setSelected(newId);
           editingNodeIdRef.current = newId;
           setTimeout(() => {
-            document.querySelector<HTMLElement>(`[data-node-id="${newId}"] [contenteditable]`)?.focus();
+            document
+              .querySelector<HTMLElement>(
+                `[data-node-id="${newId}"] [contenteditable]`,
+              )
+              ?.focus();
           }, 50);
         }
       }
-      if (e.key === "Enter" && !t.isContentEditable && selectedRef.current !== null) {
+      if (
+        e.key === "Enter" &&
+        !t.isContentEditable &&
+        selectedRef.current !== null
+      ) {
         e.preventDefault();
         const selId = selectedRef.current;
         const n = nodeMapRef.current.get(selId);
         if (n) {
-          const maxId = nodeMapRef.current.size > 0 ? Math.max(...nodeMapRef.current.keys()) : -1;
+          const maxId =
+            nodeMapRef.current.size > 0
+              ? Math.max(...nodeMapRef.current.keys())
+              : -1;
           if (idCounter <= maxId) setIdCounter(maxId + 1);
           const newId = idCounter;
           setIdCounter(idCounter + 1);
-          setNodes((prev) => [...prev, { id: newId, x: n.x, y: n.y + n.h + 40, w: 200, h: 80, title: "", body: "", type: "block", color: "#1E2226", fontSize: 13 }]);
+          const re2 = /^Block\s+(\d+)$/;
+          let maxBlockIdx2 = 0;
+          for (const node of nodeMapRef.current.values())
+            if (node.type === "block") {
+              const m = (node.label ?? "").match(re2);
+              if (m) maxBlockIdx2 = Math.max(maxBlockIdx2, parseInt(m[1], 10));
+            }
+          setNodes((prev) => [
+            ...prev,
+            {
+              id: newId,
+              x: n.x,
+              y: n.y + n.h + 40,
+              w: 200,
+              h: 80,
+              title: "",
+              label: `Block ${maxBlockIdx2 + 1}`,
+              body: "",
+              type: "block",
+              color: "#1E2226",
+              fontSize: 13,
+            },
+          ]);
           setSelected(newId);
           editingNodeIdRef.current = newId;
           setTimeout(() => {
-            document.querySelector<HTMLElement>(`[data-node-id="${newId}"] [contenteditable]`)?.focus();
+            document
+              .querySelector<HTMLElement>(
+                `[data-node-id="${newId}"] [contenteditable]`,
+              )
+              ?.focus();
           }, 50);
         }
       }
@@ -1261,12 +1374,19 @@ export default function Canvas() {
                                 ? "📄"
                                 : "▭";
                 const label =
-                  n.title.replace(/<[^>]*>/g, "").trim() || "Untitled";
+                  (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() ||
+                  "Untitled";
                 const isActive = selected === n.id;
+                const isEditingSidebar = editingSidebarNodeId === n.id;
                 return (
                   <div
                     key={n.id}
                     onClick={() => focusNode(n.id)}
+                    onDoubleClick={(e) => {
+                      if (!sidebarOpen) return;
+                      e.stopPropagation();
+                      setEditingSidebarNodeId(n.id);
+                    }}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1301,21 +1421,59 @@ export default function Canvas() {
                     >
                       {icon}
                     </span>
-                    {sidebarOpen && (
-                      <span
-                        style={{
-                          fontSize: 12.5,
-                          color: isActive ? "#E8E6E1" : "#9CA3AF",
-                          fontWeight: isActive ? 500 : 400,
-                          flex: 1,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {label}
-                      </span>
-                    )}
+                    {sidebarOpen &&
+                      (isEditingSidebar ? (
+                        <input
+                          autoFocus
+                          defaultValue={n.label ?? n.title}
+                          maxLength={50}
+                          onFocus={(e) => e.target.select()}
+                          onClick={(e) => e.stopPropagation()}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            updateNodeLabel(n.id, v);
+                            setEditingSidebarNodeId(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const v = (
+                                e.target as HTMLInputElement
+                              ).value.trim();
+                              updateNodeLabel(n.id, v);
+                              setEditingSidebarNodeId(null);
+                            }
+                            if (e.key === "Escape")
+                              setEditingSidebarNodeId(null);
+                            e.stopPropagation();
+                          }}
+                          style={{
+                            flex: 1,
+                            fontSize: 12.5,
+                            fontFamily: "inherit",
+                            background: "rgba(255,255,255,0.07)",
+                            border: "none",
+                            outline: "1px solid rgba(255,177,98,0.4)",
+                            borderRadius: 5,
+                            padding: "1px 5px",
+                            color: "#E8E6E1",
+                            minWidth: 0,
+                          }}
+                        />
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: 12.5,
+                            color: isActive ? "#E8E6E1" : "#9CA3AF",
+                            fontWeight: isActive ? 500 : 400,
+                            flex: 1,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {label}
+                        </span>
+                      ))}
                   </div>
                 );
               })
@@ -1780,7 +1938,8 @@ export default function Canvas() {
           }}
           onMouseEnter={(e) => {
             (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
-            (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+            (e.currentTarget as HTMLElement).style.background =
+              "rgba(255,255,255,0.06)";
           }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
@@ -1925,675 +2084,26 @@ export default function Canvas() {
           </svg>
 
           {/* Nodes */}
-          {nodes.map((n) => {
-            const isSel = selected === n.id;
-            const isText = n.type === "text";
-            const isCircle = n.type === "circle" || n.type === "oval";
-            const isDiamond = n.type === "diamond";
-            const isRounded = n.type === "rounded";
-            const isImage = n.type === "image";
-            const isTextFile = n.type === "textfile";
-            const [_nr, _ng, _nb] = hexToRgb(n.color);
-            const isDark =
-              (0.299 * _nr + 0.587 * _ng + 0.114 * _nb) / 255 < 0.45;
-            const fs = n.fontSize ?? 13;
-
-            // All non-source nodes glow while connect-mode is active
-            const isPotentialTarget =
-              connectDrag !== null && n.id !== connectDrag.fromId && !isText;
-
-            const hostBg =
-              isDiamond || isText || isImage ? "transparent" : n.color;
-            const hostBorder =
-              isDiamond || isText || isImage
-                ? "none"
-                : isSel
-                  ? "1px solid rgba(255,255,255,0.28)"
-                  : "0.5px solid rgba(255,255,255,0.13)";
-            const hostShadow =
-              isDiamond || isText || isImage
-                ? "none"
-                : isPotentialTarget
-                  ? "0 0 0 2px rgba(255,177,98,0.35)"
-                  : isSel
-                    ? "0 4px 24px rgba(0,0,0,0.5), 0 1px 6px rgba(0,0,0,0.3)"
-                    : "0 2px 12px rgba(0,0,0,0.4)";
-            const hostRadius = isCircle ? "50%" : isRounded ? 24 : 12;
-
-            const showResize = (hoveredId === n.id || isSel) && !isText;
-            // Show connect dot on hover (or when it's the active source)
-            const showDot =
-              !isText && (hoveredId === n.id || connectDrag?.fromId === n.id);
-
-            return (
-              <div
-                key={n.id}
-                data-node-id={n.id}
-                onMouseDown={(e) => onNodeMouseDown(e, n.id)}
-                onContextMenu={(e) => onNodeContextMenu(e, n.id)}
-                onClick={(e) => {
-                  // Connect finalization always runs first
-                  const wasConnecting = !!connectDragRef.current;
-                  onNodeClick(e, n.id);
-                  // Open text-file viewer only when not in connect-mode
-                  if (!wasConnecting && isTextFile) {
-                    e.stopPropagation();
-                    setTextFileViewer({
-                      nodeId: n.id,
-                      fileName: n.textFileName ?? n.title,
-                      content: n.textFileContent ?? "",
-                    });
-                  }
-                }}
-                onMouseEnter={() => setHoveredId(n.id)}
-                onMouseLeave={() =>
-                  setHoveredId((prev) => (prev === n.id ? null : prev))
-                }
-                style={{
-                  position: "absolute",
-                  left: n.x,
-                  top: n.y,
-                  width: n.w,
-                  height: isText ? "auto" : n.h,
-                  minHeight: isText ? Math.max(32, n.h) : undefined,
-                  background: hostBg,
-                  border: hostBorder,
-                  borderRadius: hostRadius,
-                  boxShadow: hostShadow,
-                  padding: isText
-                    ? "8px 12px"
-                    : isCircle
-                      ? 0
-                      : isDiamond
-                        ? 0
-                        : "14px 18px",
-                  cursor: connectDrag ? "crosshair" : "grab",
-                  userSelect: "none",
-                  outline:
-                    isText && (isSel || n.title === "")
-                      ? "1.5px dashed rgba(255,255,255,0.45)"
-                      : "none",
-                  transition: "box-shadow 0.15s ease, border-color 0.15s ease",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: isCircle || isText ? "center" : "flex-start",
-                  alignItems: isCircle || isText ? "center" : "flex-start",
-                  overflow: "visible",
-                  isolation: "isolate",
-                }}
-              >
-                {/* Diamond */}
-                {isDiamond && (
-                  <>
-                    <svg
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: "100%",
-                        overflow: "visible",
-                        pointerEvents: "none",
-                      }}
-                      viewBox={`0 0 ${n.w} ${n.h}`}
-                      preserveAspectRatio="none"
-                    >
-                      <defs>
-                        <filter
-                          id={`ds-${n.id}`}
-                          x="-20%"
-                          y="-20%"
-                          width="140%"
-                          height="140%"
-                        >
-                          <feDropShadow
-                            dx="0"
-                            dy="1"
-                            stdDeviation={isSel ? 5 : 3}
-                            floodColor={
-                              isSel ? "rgba(0,0,0,0.13)" : "rgba(0,0,0,0.08)"
-                            }
-                          />
-                        </filter>
-                      </defs>
-                      <polygon
-                        points={`${n.w / 2},2 ${n.w - 2},${n.h / 2} ${n.w / 2},${n.h - 2} 2,${n.h / 2}`}
-                        fill={n.color}
-                        stroke={
-                          isPotentialTarget
-                            ? ACCENT
-                            : isSel
-                              ? "rgba(255,255,255,0.25)"
-                              : "rgba(255,255,255,0.12)"
-                        }
-                        strokeWidth={isPotentialTarget || isSel ? 1.5 : 0.8}
-                        filter={`url(#ds-${n.id})`}
-                      />
-                    </svg>
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        zIndex: 1,
-                        padding: "0 28px",
-                      }}
-                    >
-                      <div
-                        ref={(el) => {
-                          if (el && editingNodeIdRef.current !== n.id)
-                            el.textContent = n.title;
-                        }}
-                        contentEditable
-                        suppressContentEditableWarning
-                        data-placeholder="Diamond"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onFocus={() => {
-                          editingNodeIdRef.current = n.id;
-                        }}
-                        onBlur={(e) => {
-                          updateNodeField(
-                            n.id,
-                            "title",
-                            (e.target as HTMLElement).innerText,
-                          );
-                          editingNodeIdRef.current = null;
-                        }}
-                        style={{
-                          fontSize: fs,
-                          fontWeight: n.bold ? 700 : 500,
-                          fontStyle: n.italic ? "italic" : "normal",
-                          textDecoration: n.underline ? "underline" : "none",
-                          color: n.textColor ?? (isDark ? "#E8E6E1" : "#111"),
-                          outline: "none",
-                          textAlign: "center",
-                          letterSpacing: "-0.2px",
-                          width: "100%",
-                          overflowWrap: "break-word",
-                          wordBreak: "break-word",
-                          overflow: "hidden",
-                        }}
-                      />
-                      {n.body && (
-                        <div
-                          ref={(el) => {
-                            if (el && editingNodeIdRef.current !== n.id)
-                              el.textContent = n.body;
-                          }}
-                          contentEditable
-                          suppressContentEditableWarning
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onFocus={() => {
-                            editingNodeIdRef.current = n.id;
-                          }}
-                          onBlur={(e) => {
-                            updateNodeField(
-                              n.id,
-                              "body",
-                              (e.target as HTMLElement).innerText,
-                            );
-                            editingNodeIdRef.current = null;
-                          }}
-                          style={{
-                            fontSize: Math.max(11, fs - 2),
-                            fontWeight: n.bold ? 600 : 400,
-                            fontStyle: n.italic ? "italic" : "normal",
-                            textDecoration: n.underline ? "underline" : "none",
-                            color: n.textColor
-                              ? n.textColor + "bb"
-                              : isDark
-                                ? "rgba(255,255,255,0.82)"
-                                : "#888",
-                            outline: "none",
-                            textAlign: "center",
-                            marginTop: 3,
-                            width: "100%",
-                            overflowWrap: "break-word",
-                            wordBreak: "break-word",
-                            overflow: "hidden",
-                          }}
-                        />
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {/* Image */}
-                {isImage && (
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      position: "relative",
-                    }}
-                  >
-                    {n.imageUrl ? (
-                      <img
-                        src={n.imageUrl}
-                        alt=""
-                        draggable={false}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          display: "block",
-                          borderRadius: 12,
-                          pointerEvents: "none",
-                        }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "#6B7280",
-                          fontSize: 13,
-                        }}
-                      >
-                        No Image
-                      </div>
-                    )}
-                    {isSel && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          borderRadius: 12,
-                          border: "1.5px solid rgba(255,255,255,0.2)",
-                          pointerEvents: "none",
-                          zIndex: 5,
-                        }}
-                      />
-                    )}
-                  </div>
-                )}
-
-                {/* Block / Rounded / Circle */}
-                {/* Text File */}
-                {isTextFile && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "0 12px",
-                      width: "100%",
-                      height: "100%",
-                      boxSizing: "border-box",
-                      cursor: "pointer",
-                      pointerEvents: "none",
-                    }}
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="rgba(255,255,255,0.45)"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      style={{ flexShrink: 0 }}
-                    >
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="16" y1="13" x2="8" y2="13" />
-                      <line x1="16" y1="17" x2="8" y2="17" />
-                    </svg>
-                    <span
-                      style={{
-                        fontSize: fs,
-                        color: "rgba(255,255,255,0.82)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        flex: 1,
-                        letterSpacing: "-0.1px",
-                      }}
-                    >
-                      {n.textFileName ?? n.title}
-                    </span>
-                  </div>
-                )}
-
-                {!isText && !isDiamond && !isImage && !isTextFile && (
-                  <>
-                    <div
-                      ref={(el) => {
-                        if (el && editingNodeIdRef.current !== n.id)
-                          el.textContent = n.title;
-                      }}
-                      contentEditable
-                      suppressContentEditableWarning
-                      data-placeholder={
-                        n.type === "circle"
-                          ? "Circle"
-                          : n.type === "oval"
-                            ? "Oval"
-                            : n.type === "rounded"
-                              ? "Area"
-                              : "Block"
-                      }
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onFocus={() => {
-                        editingNodeIdRef.current = n.id;
-                      }}
-                      onBlur={(e) => {
-                        updateNodeField(
-                          n.id,
-                          "title",
-                          (e.target as HTMLElement).innerText,
-                        );
-                        editingNodeIdRef.current = null;
-                      }}
-                      style={{
-                        fontSize: fs,
-                        fontWeight: n.bold ? 700 : 500,
-                        fontStyle: n.italic ? "italic" : "normal",
-                        textDecoration: n.underline ? "underline" : "none",
-                        color: n.textColor ?? (isDark ? "#E8E6E1" : "#111"),
-                        outline: "none",
-                        letterSpacing: "-0.2px",
-                        textAlign: isCircle ? "center" : "left",
-                        zIndex: 1,
-                        background: "transparent",
-                        minWidth: 40,
-                        overflowWrap: "break-word",
-                        wordBreak: "break-word",
-                        overflow: "hidden",
-                      }}
-                    />
-                    <div
-                      ref={(el) => {
-                        if (el && editingNodeIdRef.current !== n.id)
-                          el.textContent = n.body;
-                      }}
-                      contentEditable
-                      suppressContentEditableWarning
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onFocus={() => {
-                        editingNodeIdRef.current = n.id;
-                      }}
-                      onBlur={(e) => {
-                        updateNodeField(
-                          n.id,
-                          "body",
-                          (e.target as HTMLElement).innerText,
-                        );
-                        editingNodeIdRef.current = null;
-                      }}
-                      style={{
-                        fontSize: Math.max(11, fs - 2),
-                        fontWeight: n.bold ? 600 : 400,
-                        fontStyle: n.italic ? "italic" : "normal",
-                        textDecoration: n.underline ? "underline" : "none",
-                        color: n.textColor
-                          ? n.textColor + "bb"
-                          : isDark
-                            ? "rgba(255,255,255,0.82)"
-                            : "#888",
-                        marginTop: 5,
-                        outline: "none",
-                        lineHeight: 1.55,
-                        minHeight: 16,
-                        zIndex: 1,
-                        background: "transparent",
-                        width: "100%",
-                        textAlign: isCircle ? "center" : "left",
-                        overflowWrap: "break-word",
-                        wordBreak: "break-word",
-                        overflow: "hidden",
-                      }}
-                    />
-                  </>
-                )}
-
-                {/* Free text */}
-                {isText && (
-                  <div
-                    ref={(el) => {
-                      if (el && editingNodeIdRef.current !== n.id)
-                        el.textContent = n.title;
-                    }}
-                    contentEditable
-                    suppressContentEditableWarning
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onFocus={() => {
-                      editingNodeIdRef.current = n.id;
-                    }}
-                    onBlur={(e) => {
-                      updateNodeField(
-                        n.id,
-                        "title",
-                        (e.target as HTMLElement).innerText,
-                      );
-                      editingNodeIdRef.current = null;
-                    }}
-                    style={{
-                      fontSize: fs,
-                      fontWeight: n.bold ? 700 : 400,
-                      fontStyle: n.italic ? "italic" : "normal",
-                      textDecoration: n.underline ? "underline" : "none",
-                      color: n.textColor ?? "#E8E6E1",
-                      outline: "none",
-                      textAlign: "center",
-                      lineHeight: 1.55,
-                      minHeight: 32,
-                      minWidth: 120,
-                      letterSpacing: "-0.2px",
-                      background: "transparent",
-                      width: "100%",
-                      overflowWrap: "break-word",
-                      wordBreak: "break-word",
-                      overflow: "visible",
-                    }}
-                  />
-                )}
-
-                {/* Move handle — text nodes only, top-left, visible on hover/select */}
-                {isText && (hoveredId === n.id || isSel) && (
-                  <div
-                    data-role="move-handle"
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      startNodeDrag(e, n.id);
-                    }}
-                    style={{
-                      position: "absolute",
-                      left: -8,
-                      top: -8,
-                      width: 16,
-                      height: 16,
-                      background: "rgba(28,32,36,0.97)",
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      borderRadius: 4,
-                      cursor: "move",
-                      zIndex: 20,
-                      boxShadow: "0 1px 6px rgba(0,0,0,0.6)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <svg
-                      width="8"
-                      height="8"
-                      viewBox="0 0 8 8"
-                      fill="none"
-                      style={{ pointerEvents: "none", display: "block" }}
-                    >
-                      <circle
-                        cx="2"
-                        cy="2"
-                        r="0.8"
-                        fill="rgba(255,255,255,0.55)"
-                      />
-                      <circle
-                        cx="4"
-                        cy="2"
-                        r="0.8"
-                        fill="rgba(255,255,255,0.55)"
-                      />
-                      <circle
-                        cx="6"
-                        cy="2"
-                        r="0.8"
-                        fill="rgba(255,255,255,0.55)"
-                      />
-                      <circle
-                        cx="2"
-                        cy="4"
-                        r="0.8"
-                        fill="rgba(255,255,255,0.55)"
-                      />
-                      <circle
-                        cx="4"
-                        cy="4"
-                        r="0.8"
-                        fill="rgba(255,255,255,0.55)"
-                      />
-                      <circle
-                        cx="6"
-                        cy="4"
-                        r="0.8"
-                        fill="rgba(255,255,255,0.55)"
-                      />
-                      <circle
-                        cx="2"
-                        cy="6"
-                        r="0.8"
-                        fill="rgba(255,255,255,0.55)"
-                      />
-                      <circle
-                        cx="4"
-                        cy="6"
-                        r="0.8"
-                        fill="rgba(255,255,255,0.55)"
-                      />
-                      <circle
-                        cx="6"
-                        cy="6"
-                        r="0.8"
-                        fill="rgba(255,255,255,0.55)"
-                      />
-                    </svg>
-                  </div>
-                )}
-
-                {/* Connect dot — appears on hover, click to connect */}
-                {showDot && (
-                  <div
-                    data-role="connect-dot"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => onDotClick(e, n.id)}
-                    title={
-                      connectDrag?.fromId === n.id
-                        ? "Cancel connect"
-                        : "Click to connect"
-                    }
-                    style={{
-                      width: 13,
-                      height: 13,
-                      borderRadius: "50%",
-                      background:
-                        connectDrag?.fromId === n.id ? ACCENT : "#2A2E34",
-                      border: `2px solid ${ACCENT}`,
-                      position: "absolute",
-                      right: isCircle ? -9 : isDiamond ? -8 : -7,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      cursor: "crosshair",
-                      zIndex: 10,
-                      boxShadow: "0 1px 5px rgba(0,0,0,0.5)",
-                      transition: "background 0.12s, transform 0.12s",
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.transform =
-                        "translateY(-50%) scale(1.2)";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.transform =
-                        "translateY(-50%) scale(1)";
-                    }}
-                  />
-                )}
-
-                {/* Resize handle — outside node boundary, appears on hover */}
-                {showResize && (
-                  <div
-                    data-role="resize-handle"
-                    onMouseDown={(e) => onResizeMouseDown(e, n.id)}
-                    style={{
-                      position: "absolute",
-                      right: -11,
-                      bottom: -11,
-                      width: 22,
-                      height: 22,
-                      padding: 6,
-                      boxSizing: "content-box",
-                      background: "rgba(28,32,36,0.97)",
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      borderRadius: 4,
-                      cursor: "nwse-resize",
-                      zIndex: 20,
-                      boxShadow: "0 1px 6px rgba(0,0,0,0.6)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      opacity: hoveredId === n.id || isSel ? 1 : 0,
-                      transition:
-                        "opacity 0.15s ease, box-shadow 0.15s ease, background 0.1s ease",
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.boxShadow =
-                        "0 2px 10px rgba(0,0,0,0.7)";
-                      (e.currentTarget as HTMLElement).style.background =
-                        "rgba(40,46,54,0.99)";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.boxShadow =
-                        "0 1px 6px rgba(0,0,0,0.6)";
-                      (e.currentTarget as HTMLElement).style.background =
-                        "rgba(28,32,36,0.97)";
-                    }}
-                  >
-                    <svg
-                      width="11"
-                      height="11"
-                      viewBox="0 0 8 8"
-                      fill="none"
-                      style={{ pointerEvents: "none", display: "block" }}
-                    >
-                      <line
-                        x1="1.5"
-                        y1="7"
-                        x2="7"
-                        y2="1.5"
-                        stroke="rgba(255,255,255,0.5)"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                      <line
-                        x1="4.5"
-                        y1="7"
-                        x2="7"
-                        y2="4.5"
-                        stroke="rgba(255,255,255,0.5)"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {nodes.map((n) => (
+            <NodeView
+              key={n.id}
+              n={n}
+              selected={selected}
+              connectDrag={connectDrag}
+              hoveredId={hoveredId}
+              editingNodeIdRef={editingNodeIdRef}
+              connectDragRef={connectDragRef}
+              onNodeMouseDown={onNodeMouseDown}
+              onNodeContextMenu={onNodeContextMenu}
+              onNodeClick={onNodeClick}
+              setTextFileViewer={setTextFileViewer}
+              setHoveredId={setHoveredId}
+              updateNodeField={updateNodeField}
+              startNodeDrag={startNodeDrag}
+              onDotClick={onDotClick}
+              onResizeMouseDown={onResizeMouseDown}
+            />
+          ))}
         </div>
       </div>
 
@@ -2652,15 +2162,26 @@ export default function Canvas() {
             >
               {/* ── Copy ── */}
               <div
-                onClick={() => { copySelected(); setContextMenu(null); }}
+                onClick={() => {
+                  copySelected();
+                  setContextMenu(null);
+                }}
                 onMouseEnter={(e) => hoverMenu(e, true)}
                 onMouseLeave={(e) => hoverMenu(e, false)}
                 style={menuItem()}
               >
-                <span style={{ width: 22, textAlign: "center", fontSize: 14 }}>⎘</span>
+                <span style={{ width: 22, textAlign: "center", fontSize: 14 }}>
+                  ⎘
+                </span>
                 Copy
               </div>
-              <div style={{ height: "0.5px", background: "rgba(255,255,255,0.10)", margin: "2px 0" }} />
+              <div
+                style={{
+                  height: "0.5px",
+                  background: "rgba(255,255,255,0.10)",
+                  margin: "2px 0",
+                }}
+              />
               {/* ── Text formatting ── */}
               <div style={{ padding: "8px 14px 10px" }}>
                 <div
@@ -3031,10 +2552,18 @@ export default function Canvas() {
               cursor: copiedNode ? "pointer" : "default",
             }}
           >
-            <span style={{ width: 22, textAlign: "center", fontSize: 14 }}>⎘</span>
+            <span style={{ width: 22, textAlign: "center", fontSize: 14 }}>
+              ⎘
+            </span>
             Paste
           </div>
-          <div style={{ height: "0.5px", background: "rgba(255,255,255,0.10)", margin: "2px 0" }} />
+          <div
+            style={{
+              height: "0.5px",
+              background: "rgba(255,255,255,0.10)",
+              margin: "2px 0",
+            }}
+          />
           <div
             style={{
               fontSize: 11,
@@ -3048,12 +2577,103 @@ export default function Canvas() {
           </div>
           {(
             [
-              { type: "block" as const, label: "Block", icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.3"/></svg> },
-              { type: "rounded" as const, label: "Area", icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="11" rx="5" stroke="currentColor" strokeWidth="1.3"/></svg> },
-              { type: "circle" as const, label: "Circle", icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/></svg> },
-              { type: "oval" as const, label: "Oval", icon: <svg width="13" height="9" viewBox="0 0 13 9" fill="none"><ellipse cx="6.5" cy="4.5" rx="5.5" ry="3.5" stroke="currentColor" strokeWidth="1.3"/></svg> },
-              { type: "diamond" as const, label: "Diamond", icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><polygon points="6.5,1 12,6.5 6.5,12 1,6.5" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg> },
-              { type: "text" as const, label: "Free Text", icon: <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><text x="1" y="11" fontSize="11" fill="currentColor" fontFamily="serif" fontWeight="bold">T</text></svg> },
+              {
+                type: "block" as const,
+                label: "Block",
+                icon: (
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <rect
+                      x="1"
+                      y="1"
+                      width="11"
+                      height="11"
+                      rx="2"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                    />
+                  </svg>
+                ),
+              },
+              {
+                type: "rounded" as const,
+                label: "Area",
+                icon: (
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <rect
+                      x="1"
+                      y="1"
+                      width="11"
+                      height="11"
+                      rx="5"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                    />
+                  </svg>
+                ),
+              },
+              {
+                type: "circle" as const,
+                label: "Circle",
+                icon: (
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <circle
+                      cx="6.5"
+                      cy="6.5"
+                      r="5.5"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                    />
+                  </svg>
+                ),
+              },
+              {
+                type: "oval" as const,
+                label: "Oval",
+                icon: (
+                  <svg width="13" height="9" viewBox="0 0 13 9" fill="none">
+                    <ellipse
+                      cx="6.5"
+                      cy="4.5"
+                      rx="5.5"
+                      ry="3.5"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                    />
+                  </svg>
+                ),
+              },
+              {
+                type: "diamond" as const,
+                label: "Diamond",
+                icon: (
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <polygon
+                      points="6.5,1 12,6.5 6.5,12 1,6.5"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      fill="none"
+                    />
+                  </svg>
+                ),
+              },
+              {
+                type: "text" as const,
+                label: "Free Text",
+                icon: (
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <text
+                      x="1"
+                      y="11"
+                      fontSize="11"
+                      fill="currentColor"
+                      fontFamily="serif"
+                      fontWeight="bold"
+                    >
+                      T
+                    </text>
+                  </svg>
+                ),
+              },
             ] as const
           ).map(({ type, label, icon }) => (
             <div
@@ -3066,32 +2686,101 @@ export default function Canvas() {
               onMouseLeave={(e) => hoverMenu(e, false)}
               style={menuItem()}
             >
-              <span style={{ width: 22, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.5)" }}>
+              <span
+                style={{
+                  width: 22,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "rgba(255,255,255,0.5)",
+                }}
+              >
                 {icon}
               </span>
               {label}
             </div>
           ))}
-          <div style={{ height: "0.5px", background: "rgba(255,255,255,0.10)", margin: "2px 0" }} />
           <div
-            onClick={() => { addNode(contextMenu.cx, contextMenu.cy, "image"); setContextMenu(null); }}
+            style={{
+              height: "0.5px",
+              background: "rgba(255,255,255,0.10)",
+              margin: "2px 0",
+            }}
+          />
+          <div
+            onClick={() => {
+              addNode(contextMenu.cx, contextMenu.cy, "image");
+              setContextMenu(null);
+            }}
             onMouseEnter={(e) => hoverMenu(e, true)}
             onMouseLeave={(e) => hoverMenu(e, false)}
             style={menuItem()}
           >
-            <span style={{ width: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="11" rx="2" stroke="rgba(255,255,255,0.5)" strokeWidth="1.3"/><circle cx="4.5" cy="4.5" r="1.2" fill="rgba(255,255,255,0.5)"/><path d="M1 9l3-3 2.5 2.5L9 6l3 4" stroke="rgba(255,255,255,0.5)" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span
+              style={{
+                width: 22,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                <rect
+                  x="1"
+                  y="1"
+                  width="11"
+                  height="11"
+                  rx="2"
+                  stroke="rgba(255,255,255,0.5)"
+                  strokeWidth="1.3"
+                />
+                <circle
+                  cx="4.5"
+                  cy="4.5"
+                  r="1.2"
+                  fill="rgba(255,255,255,0.5)"
+                />
+                <path
+                  d="M1 9l3-3 2.5 2.5L9 6l3 4"
+                  stroke="rgba(255,255,255,0.5)"
+                  strokeWidth="1.1"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </span>
             Image
           </div>
           <div
-            onClick={() => { addNode(contextMenu.cx, contextMenu.cy, "textfile"); setContextMenu(null); }}
+            onClick={() => {
+              addNode(contextMenu.cx, contextMenu.cy, "textfile");
+              setContextMenu(null);
+            }}
             onMouseEnter={(e) => hoverMenu(e, true)}
             onMouseLeave={(e) => hoverMenu(e, false)}
             style={menuItem()}
           >
-            <span style={{ width: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="11" height="13" viewBox="0 0 11 13" fill="none"><path d="M2 1h5l3 3v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" stroke="rgba(255,255,255,0.5)" strokeWidth="1.2"/><path d="M7 1v3h3" stroke="rgba(255,255,255,0.5)" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            <span
+              style={{
+                width: 22,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <svg width="11" height="13" viewBox="0 0 11 13" fill="none">
+                <path
+                  d="M2 1h5l3 3v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"
+                  stroke="rgba(255,255,255,0.5)"
+                  strokeWidth="1.2"
+                />
+                <path
+                  d="M7 1v3h3"
+                  stroke="rgba(255,255,255,0.5)"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
+              </svg>
             </span>
             Text File
           </div>

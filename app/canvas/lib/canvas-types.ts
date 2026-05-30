@@ -28,6 +28,7 @@ export type CanvasNode = {
   textColor?: string;
   textFileContent?: string;
   textFileName?: string;
+  label?: string;
 };
 
 export type Connection = { from: number; to: number };
