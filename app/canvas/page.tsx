@@ -903,6 +903,41 @@ export default function Canvas() {
         copySelected();
       if ((e.metaKey || e.ctrlKey) && e.key === "v" && !t.isContentEditable)
         pasteNode();
+      if (e.key === "Tab" && !t.isContentEditable && selectedRef.current !== null) {
+        e.preventDefault();
+        const selId = selectedRef.current;
+        const n = nodeMapRef.current.get(selId);
+        if (n) {
+          const maxId = nodeMapRef.current.size > 0 ? Math.max(...nodeMapRef.current.keys()) : -1;
+          if (idCounter <= maxId) setIdCounter(maxId + 1);
+          const newId = idCounter;
+          setIdCounter(idCounter + 1);
+          setNodes((prev) => [...prev, { id: newId, x: n.x + n.w + 80, y: n.y, w: 200, h: 80, title: "", body: "", type: "block", color: "#1E2226", fontSize: 13 }]);
+          setConnections((prev) => [...prev, { from: selId, to: newId }]);
+          setSelected(newId);
+          editingNodeIdRef.current = newId;
+          setTimeout(() => {
+            document.querySelector<HTMLElement>(`[data-node-id="${newId}"] [contenteditable]`)?.focus();
+          }, 50);
+        }
+      }
+      if (e.key === "Enter" && !t.isContentEditable && selectedRef.current !== null) {
+        e.preventDefault();
+        const selId = selectedRef.current;
+        const n = nodeMapRef.current.get(selId);
+        if (n) {
+          const maxId = nodeMapRef.current.size > 0 ? Math.max(...nodeMapRef.current.keys()) : -1;
+          if (idCounter <= maxId) setIdCounter(maxId + 1);
+          const newId = idCounter;
+          setIdCounter(idCounter + 1);
+          setNodes((prev) => [...prev, { id: newId, x: n.x, y: n.y + n.h + 40, w: 200, h: 80, title: "", body: "", type: "block", color: "#1E2226", fontSize: 13 }]);
+          setSelected(newId);
+          editingNodeIdRef.current = newId;
+          setTimeout(() => {
+            document.querySelector<HTMLElement>(`[data-node-id="${newId}"] [contenteditable]`)?.focus();
+          }, 50);
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1305,6 +1340,8 @@ export default function Canvas() {
               {(
                 [
                   { kbd: "⌫  Delete", desc: "Delete selected" },
+                  { kbd: "Tab", desc: "Add child node" },
+                  { kbd: "Enter", desc: "Add sibling node" },
                   { kbd: "Esc", desc: "Cancel connect" },
                   { kbd: "⌃ Scroll", desc: "Zoom in / out" },
                   { kbd: "Right-click", desc: "Insert shape" },
