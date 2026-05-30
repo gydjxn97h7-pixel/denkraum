@@ -22,6 +22,8 @@ interface NodeViewProps {
   startNodeDrag: (e: React.MouseEvent, id: number) => void;
   onDotClick: (e: React.MouseEvent, id: number) => void;
   onResizeMouseDown: (e: React.MouseEvent, id: number) => void;
+  dimmed?: boolean;
+  isMultiSelected?: boolean;
 }
 
 export function NodeView({
@@ -40,6 +42,8 @@ export function NodeView({
   startNodeDrag,
   onDotClick,
   onResizeMouseDown,
+  dimmed,
+  isMultiSelected,
 }: NodeViewProps) {
   const isSel = selected === n.id;
   const isText = n.type === "text";
@@ -118,11 +122,15 @@ export function NodeView({
               : "14px 18px",
         cursor: connectDrag ? "crosshair" : "grab",
         userSelect: "none",
-        outline:
-          isText && (isSel || n.title === "")
+        outline: isMultiSelected
+          ? `2px solid ${ACCENT}`
+          : isText && (isSel || n.title === "")
             ? "1.5px dashed rgba(255,255,255,0.45)"
             : "none",
-        transition: "box-shadow 0.15s ease, border-color 0.15s ease",
+        opacity: dimmed ? 0.15 : 1,
+        pointerEvents: dimmed ? "none" : undefined,
+        transition:
+          "box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.2s ease",
         display: "flex",
         flexDirection: "column",
         justifyContent: isCircle || isText ? "center" : "flex-start",

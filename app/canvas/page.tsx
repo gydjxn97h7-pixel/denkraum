@@ -67,6 +67,17 @@ export default function Canvas() {
   const [editingSidebarNodeId, setEditingSidebarNodeId] = useState<
     number | null
   >(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [marqueeRect, setMarqueeRect] = useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterText, setFilterText] = useState("");
+  const [filterType, setFilterType] = useState<NodeType | "all">("all");
+  const [filterJumpIndex, setFilterJumpIndex] = useState(0);
 
   const dragging = useRef<{ id: number; ox: number; oy: number } | null>(null);
   const resizing = useRef<{
@@ -82,6 +93,26 @@ export default function Canvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFileInputRef = useRef<HTMLInputElement>(null);
+  const filterInputRef = useRef<HTMLInputElement>(null);
+  const filterOpenRef = useRef(false);
+  const filterActiveRef = useRef(false);
+  const filterJumpIndexRef = useRef(0);
+  const matchedNodesSortedRef = useRef<CanvasNode[]>([]);
+  const selectedIdsRef = useRef<Set<number>>(new Set());
+  const marquee = useRef<{
+    startX: number;
+    startY: number;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const multiDragging = useRef<{
+    startMouseX: number;
+    startMouseY: number;
+    startPositions: Map<number, { x: number; y: number }>;
+  } | null>(null);
+  const pendingMultiDragDelta = useRef<{ dx: number; dy: number } | null>(null);
   const pendingImagePos = useRef<{ cx: number; cy: number } | null>(null);
   const pendingTextFilePos = useRef<{ cx: number; cy: number } | null>(null);
   // Tracks which node is actively being edited so ref callbacks never clobber
@@ -102,6 +133,7 @@ export default function Canvas() {
     zoomRef.current = zoom;
   }, [zoom]);
   connectDragRef.current = connectDrag;
+  selectedIdsRef.current = selectedIds;
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
@@ -522,7 +554,6 @@ export default function Canvas() {
     e.stopPropagation();
     setSelected(id);
     setContextMenu({ kind: "node", x: e.clientX, y: e.clientY, id });
-    setNodes((prev) => bringToFront(prev, id));
   }, []);
 
   const onCanvasContextMenu = useCallback(
@@ -546,19 +577,23 @@ export default function Canvas() {
         setContextMenu(null);
         return;
       }
-      const t = e.target as HTMLElement;
-      if (t !== canvasRef.current && !t.dataset.bg) return;
       if (e.button !== 0) return;
+      const t = e.target as HTMLElement;
+      if (t.closest("[data-node-id]")) return;
       // Cancel any in-progress connect drag
       if (connectDragRef.current) {
         setConnectDrag(null);
         return;
       }
-      isPanning.current = true;
-      lastPan.current = { x: e.clientX, y: e.clientY };
+      if (!canvasRef.current) return;
+      const r = canvasRef.current.getBoundingClientRect();
+      const cx = (e.clientX - r.left - pan.x) / zoom;
+      const cy = (e.clientY - r.top - pan.y) / zoom;
+      marquee.current = { startX: cx, startY: cy, x: cx, y: cy, w: 0, h: 0 };
       setSelected(null);
+      setSelectedIds(new Set());
     },
-    [contextMenu],
+    [contextMenu, pan, zoom],
   );
 
   // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
@@ -566,11 +601,35 @@ export default function Canvas() {
   const nodeMapRef = useRef(nodeMap);
   nodeMapRef.current = nodeMap;
 
+  const filterActive = filterText !== "" || filterType !== "all";
+  const matchedNodeIds = useMemo(() => {
+    const s = new Set<number>();
+    for (const n of nodes) {
+      const typeOk = filterType === "all" || n.type === filterType;
+      const q = filterText.toLowerCase();
+      const textOk =
+        !q ||
+        n.title.toLowerCase().includes(q) ||
+        n.body.toLowerCase().includes(q) ||
+        (n.label ?? "").toLowerCase().includes(q);
+      if (typeOk && textOk) s.add(n.id);
+    }
+    return s;
+  }, [nodes, filterText, filterType]);
+  const matchedNodes = useMemo(
+    () => nodes.filter((n) => matchedNodeIds.has(n.id)),
+    [nodes, matchedNodeIds],
+  );
+  filterOpenRef.current = filterOpen;
+  filterActiveRef.current = filterActive;
+  filterJumpIndexRef.current = filterJumpIndex;
+  matchedNodesSortedRef.current = matchedNodes;
+
   const startNodeDrag = useCallback(
     (e: React.MouseEvent, id: number) => {
       setContextMenu(null);
       setSelected(id);
-      setNodes((prev) => bringToFront(prev, id));
+      setSelectedIds(new Set());
       const n = nodeMap.get(id);
       if (!n || !canvasRef.current) return;
       const r = canvasRef.current.getBoundingClientRect();
@@ -592,7 +651,22 @@ export default function Canvas() {
       if (t.dataset.role === "move-handle") return;
       if (connectDragRef.current) return;
       e.stopPropagation();
-      startNodeDrag(e, id);
+      if (selectedIdsRef.current.size > 0 && selectedIdsRef.current.has(id)) {
+        // Multi-drag: move all selected nodes together
+        if (!canvasRef.current) return;
+        const r = canvasRef.current.getBoundingClientRect();
+        const mx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
+        const my = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
+        const startPositions = new Map<number, { x: number; y: number }>();
+        for (const nid of selectedIdsRef.current) {
+          const node = nodeMapRef.current.get(nid);
+          if (node) startPositions.set(nid, { x: node.x, y: node.y });
+        }
+        multiDragging.current = { startMouseX: mx, startMouseY: my, startPositions };
+        e.preventDefault();
+      } else {
+        startNodeDrag(e, id);
+      }
     },
     [startNodeDrag],
   );
@@ -601,7 +675,6 @@ export default function Canvas() {
     (e: React.MouseEvent, id: number) => {
       e.stopPropagation();
       e.preventDefault();
-      setNodes((prev) => bringToFront(prev, id));
       const n = nodeMap.get(id);
       if (!n) return;
       resizing.current = {
@@ -724,6 +797,20 @@ export default function Canvas() {
         ),
       );
     }
+
+    const multiDelta = pendingMultiDragDelta.current;
+    if (multiDelta && multiDragging.current) {
+      pendingMultiDragDelta.current = null;
+      const { startPositions } = multiDragging.current;
+      const { dx, dy } = multiDelta;
+      setNodes((prev) =>
+        prev.map((n) => {
+          const start = startPositions.get(n.id);
+          return start ? { ...n, x: start.x + dx, y: start.y + dy } : n;
+        }),
+      );
+    }
+
   }, []);
 
   const onMouseMove = useCallback(
@@ -735,7 +822,14 @@ export default function Canvas() {
           y: (e.clientY - r.top - panRef.current.y) / zoomRef.current,
         };
       }
-      if (!isPanning.current && !dragging.current && !resizing.current) return;
+      if (
+        !isPanning.current &&
+        !dragging.current &&
+        !resizing.current &&
+        !marquee.current &&
+        !multiDragging.current
+      )
+        return;
 
       const pan = panRef.current;
       const zoom = zoomRef.current;
@@ -756,6 +850,31 @@ export default function Canvas() {
         const my = (e.clientY - r.top - pan.y) / zoom;
         const { id, ox, oy } = dragging.current;
         pendingDragPos.current = { id, x: mx - ox, y: my - oy };
+        dirty = true;
+      }
+
+      if (multiDragging.current && canvasRef.current) {
+        const r = canvasRef.current.getBoundingClientRect();
+        const mx = (e.clientX - r.left - pan.x) / zoom;
+        const my = (e.clientY - r.top - pan.y) / zoom;
+        pendingMultiDragDelta.current = {
+          dx: mx - multiDragging.current.startMouseX,
+          dy: my - multiDragging.current.startMouseY,
+        };
+        dirty = true;
+      }
+
+      if (marquee.current && canvasRef.current) {
+        const r = canvasRef.current.getBoundingClientRect();
+        const cx = (e.clientX - r.left - pan.x) / zoom;
+        const cy = (e.clientY - r.top - pan.y) / zoom;
+        const { startX, startY } = marquee.current;
+        const x = Math.min(startX, cx);
+        const y = Math.min(startY, cy);
+        const w = Math.abs(cx - startX);
+        const h = Math.abs(cy - startY);
+        marquee.current = { startX, startY, x, y, w, h };
+        setMarqueeRect({ x, y, w, h });
         dirty = true;
       }
 
@@ -790,9 +909,35 @@ export default function Canvas() {
       rafRef.current = null;
     }
     flushPending();
+
+    // Marquee completion: select all intersecting nodes
+    if (marquee.current) {
+      const { x, y, w, h } = marquee.current;
+      if (w > 4 || h > 4) {
+        const matchingIds: number[] = [];
+        for (const [, node] of nodeMapRef.current) {
+          if (
+            node.x < x + w &&
+            node.x + node.w > x &&
+            node.y < y + h &&
+            node.y + node.h > y
+          ) {
+            matchingIds.push(node.id);
+          }
+        }
+        setSelectedIds(new Set(matchingIds));
+      } else {
+        setSelectedIds(new Set());
+      }
+      marquee.current = null;
+      setMarqueeRect(null);
+    }
+
     dragging.current = null;
     resizing.current = null;
     isPanning.current = false;
+    multiDragging.current = null;
+    pendingMultiDragDelta.current = null;
     setSnapGuides({});
   }, [flushPending]);
 
@@ -804,6 +949,14 @@ export default function Canvas() {
       window.removeEventListener("mouseup", onMouseUp);
     };
   }, [onMouseMove, onMouseUp]);
+
+  useEffect(() => {
+    if (filterOpen) setTimeout(() => filterInputRef.current?.focus(), 50);
+  }, [filterOpen]);
+
+  useEffect(() => {
+    setFilterJumpIndex(0);
+  }, [filterText, filterType]);
 
   // ── Keyboard ──────────────────────────────────────────────────────────────────
   const arrangeBringToFront = useCallback((id: number) => {
@@ -820,11 +973,23 @@ export default function Canvas() {
   }, []);
 
   const deleteSelected = useCallback(() => {
-    const id = selectedRef.current;
-    if (id === null) return;
-    setNodes((prev) => prev.filter((n) => n.id !== id));
-    setConnections((prev) => prev.filter((c) => c.from !== id && c.to !== id));
-    setSelected(null);
+    if (selectedIdsRef.current.size > 0) {
+      const ids = selectedIdsRef.current;
+      setNodes((prev) => prev.filter((n) => !ids.has(n.id)));
+      setConnections((prev) =>
+        prev.filter((c) => !ids.has(c.from) && !ids.has(c.to)),
+      );
+      setSelectedIds(new Set());
+      setSelected(null);
+    } else {
+      const id = selectedRef.current;
+      if (id === null) return;
+      setNodes((prev) => prev.filter((n) => n.id !== id));
+      setConnections((prev) =>
+        prev.filter((c) => c.from !== id && c.to !== id),
+      );
+      setSelected(null);
+    }
   }, []);
 
   const cleanUpCanvas = useCallback(() => {
@@ -936,15 +1101,57 @@ export default function Canvas() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
+
+      if (
+        (e.key === "f" || e.key === "F") &&
+        !t.isContentEditable &&
+        t.tagName !== "INPUT"
+      ) {
+        e.preventDefault();
+        if (filterOpenRef.current) {
+          setFilterOpen(false);
+          setFilterText("");
+          setFilterType("all");
+        } else {
+          setFilterOpen(true);
+        }
+        return;
+      }
+
+      if (filterOpenRef.current && filterActiveRef.current) {
+        const matched = matchedNodesSortedRef.current;
+        if (e.key === "ArrowDown" && matched.length > 0) {
+          e.preventDefault();
+          const next = (filterJumpIndexRef.current + 1) % matched.length;
+          setFilterJumpIndex(next);
+          focusNode(matched[next].id);
+          return;
+        }
+        if (e.key === "ArrowUp" && matched.length > 0) {
+          e.preventDefault();
+          const next =
+            (filterJumpIndexRef.current - 1 + matched.length) % matched.length;
+          setFilterJumpIndex(next);
+          focusNode(matched[next].id);
+          return;
+        }
+      }
+
       if (
         (e.key === "Delete" || e.key === "Backspace") &&
         !t.isContentEditable &&
-        selectedRef.current !== null
+        t.tagName !== "INPUT" &&
+        (selectedRef.current !== null || selectedIdsRef.current.size > 0)
       )
         deleteSelected();
       if (e.key === "Escape") {
         setConnectDrag(null);
         setContextMenu(null);
+        if (filterOpenRef.current) {
+          setFilterOpen(false);
+          setFilterText("");
+          setFilterType("all");
+        }
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "c" && !t.isContentEditable)
         copySelected();
@@ -1054,7 +1261,7 @@ export default function Canvas() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [deleteSelected, copySelected, pasteNode]);
+  }, [deleteSelected, copySelected, pasteNode, focusNode]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   const menuItem = (danger = false): React.CSSProperties => ({
@@ -1958,7 +2165,227 @@ export default function Canvas() {
             <circle cx="11.5" cy="11.5" r="1.2" fill="currentColor" />
           </svg>
         </button>
+
+        {/* Divider */}
+        <div
+          style={{
+            width: "0.5px",
+            height: 16,
+            background: "rgba(255,255,255,0.1)",
+            margin: "0 4px",
+            flexShrink: 0,
+          }}
+        />
+
+        {/* Filter button */}
+        <button
+          title="Filter nodes (F)"
+          onClick={() => setFilterOpen((o) => !o)}
+          style={{
+            width: 28,
+            height: 28,
+            border: "none",
+            background: filterOpen ? `${ACCENT}22` : "transparent",
+            color: filterOpen ? ACCENT : "#9CA3AF",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 7,
+            padding: 0,
+            transition: "color 0.12s, background 0.12s",
+          }}
+          onMouseEnter={(e) => {
+            if (!filterOpen) {
+              (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
+              (e.currentTarget as HTMLElement).style.background =
+                "rgba(255,255,255,0.07)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!filterOpen) {
+              (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+              (e.currentTarget as HTMLElement).style.background = "transparent";
+            }
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
       </div>
+
+      {/* ── Filter Bar ── */}
+      {filterOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: 68,
+            left: `calc(${sidebarW}px + (100vw - ${sidebarW}px) / 2)`,
+            transform: "translateX(-50%)",
+            background: "rgba(20,22,24,0.95)",
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            border: "0.5px solid rgba(255,255,255,0.1)",
+            borderRadius: 14,
+            padding: "8px 12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 7,
+            boxShadow: "0 4px 24px rgba(0,0,0,0.35)",
+            zIndex: 202,
+            minWidth: 420,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Search row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="rgba(255,255,255,0.35)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ flexShrink: 0 }}
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              ref={filterInputRef}
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              placeholder="Suchen…"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setFilterOpen(false);
+                  setFilterText("");
+                  setFilterType("all");
+                }
+                e.stopPropagation();
+              }}
+              style={{
+                flex: 1,
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                color: "#E8E6E1",
+                fontSize: 13,
+                fontFamily: "inherit",
+                caretColor: ACCENT,
+              }}
+            />
+            <span
+              style={{
+                fontSize: 11,
+                color: "#6B7280",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              {filterActive
+                ? `${matchedNodeIds.size} Treffer`
+                : `${nodes.length} Nodes`}
+            </span>
+            <button
+              onClick={() => {
+                setFilterOpen(false);
+                setFilterText("");
+                setFilterType("all");
+              }}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "#6B7280",
+                cursor: "pointer",
+                fontSize: 14,
+                lineHeight: 1,
+                padding: 2,
+                borderRadius: 4,
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onMouseEnter={(e) =>
+                ((e.currentTarget as HTMLElement).style.color = "#9CA3AF")
+              }
+              onMouseLeave={(e) =>
+                ((e.currentTarget as HTMLElement).style.color = "#6B7280")
+              }
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Type buttons */}
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {(
+              [
+                { value: "all", label: "Alle" },
+                { value: "block", label: "Block" },
+                { value: "rounded", label: "Area" },
+                { value: "circle", label: "Circle" },
+                { value: "oval", label: "Oval" },
+                { value: "diamond", label: "Diamond" },
+                { value: "text", label: "Text" },
+                { value: "image", label: "Image" },
+                { value: "textfile", label: "File" },
+              ] as { value: NodeType | "all"; label: string }[]
+            ).map(({ value, label }) => {
+              const active = filterType === value;
+              return (
+                <button
+                  key={value}
+                  onClick={() => setFilterType(value)}
+                  style={{
+                    padding: "3px 9px",
+                    borderRadius: 6,
+                    border: active
+                      ? `1px solid ${ACCENT}66`
+                      : "1px solid rgba(255,255,255,0.07)",
+                    background: active ? `${ACCENT}22` : "transparent",
+                    color: active ? ACCENT : "#6B7280",
+                    fontSize: 11.5,
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                    transition: "all 0.1s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) {
+                      (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+                      (e.currentTarget as HTMLElement).style.borderColor =
+                        "rgba(255,255,255,0.15)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) {
+                      (e.currentTarget as HTMLElement).style.color = "#6B7280";
+                      (e.currentTarget as HTMLElement).style.borderColor =
+                        "rgba(255,255,255,0.07)";
+                    }
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Canvas ── */}
       <div
@@ -2025,9 +2452,10 @@ export default function Canvas() {
               width: 10000,
               height: 10000,
               overflow: "visible",
+              pointerEvents: "none",
             }}
           >
-            <g transform="translate(5000, 5000)">
+            <g transform="translate(5000, 5000)" style={{ pointerEvents: "auto" }}>
               {connections.map((c) => {
                 const fn = nodeMap.get(c.from);
                 const tn = nodeMap.get(c.to);
@@ -2040,8 +2468,18 @@ export default function Canvas() {
                 const key = `${c.from}-${c.to}`;
                 const isHovered = hoveredConnKey === key;
                 const d = `M ${x1} ${y1} C ${cxm} ${y1}, ${cxm} ${y2}, ${x2} ${y2}`;
+                const connDimmed =
+                  filterActive &&
+                  !matchedNodeIds.has(c.from) &&
+                  !matchedNodeIds.has(c.to);
                 return (
-                  <g key={key}>
+                  <g
+                    key={key}
+                    style={{
+                      opacity: connDimmed ? 0.15 : 1,
+                      transition: "opacity 0.2s ease",
+                    }}
+                  >
                     {/* Visible path */}
                     <path
                       d={d}
@@ -2083,6 +2521,23 @@ export default function Canvas() {
             </g>
           </svg>
 
+          {/* Marquee selection rect */}
+          {marqueeRect && (
+            <div
+              style={{
+                position: "absolute",
+                left: marqueeRect.x,
+                top: marqueeRect.y,
+                width: marqueeRect.w,
+                height: marqueeRect.h,
+                border: `1px solid ${ACCENT}`,
+                background: "rgba(255,177,98,0.08)",
+                pointerEvents: "none",
+                zIndex: 999,
+              }}
+            />
+          )}
+
           {/* Nodes */}
           {nodes.map((n) => (
             <NodeView
@@ -2102,6 +2557,8 @@ export default function Canvas() {
               startNodeDrag={startNodeDrag}
               onDotClick={onDotClick}
               onResizeMouseDown={onResizeMouseDown}
+              dimmed={filterActive && !matchedNodeIds.has(n.id)}
+              isMultiSelected={selectedIds.has(n.id)}
             />
           ))}
         </div>
