@@ -62,6 +62,7 @@ export default function Canvas() {
     content: string;
   } | null>(null);
   const [copiedNode, setCopiedNode] = useState<CanvasNode | null>(null);
+  const [snapGuides, setSnapGuides] = useState<{ x?: number; y?: number }>({});
 
   const dragging = useRef<{ id: number; ox: number; oy: number } | null>(null);
   const resizing = useRef<{
@@ -616,9 +617,59 @@ export default function Canvas() {
     const drag = pendingDragPos.current;
     if (drag) {
       pendingDragPos.current = null;
+      const SNAP_T = 8;
+      let finalX = drag.x;
+      let finalY = drag.y;
+      const guides: { x?: number; y?: number } = {};
+      const dragNode = nodeMapRef.current.get(drag.id);
+      if (dragNode) {
+        const dw = dragNode.w;
+        const dh = dragNode.h;
+        outer: for (const node of nodeMapRef.current.values()) {
+          if (node.id === drag.id) continue;
+          const xPairs: [number, number][] = [
+            [finalX, node.x],
+            [finalX, node.x + node.w],
+            [finalX + dw, node.x],
+            [finalX + dw, node.x + node.w],
+            [finalX + dw / 2, node.x + node.w / 2],
+          ];
+          for (const [a, b] of xPairs) {
+            if (Math.abs(a - b) < SNAP_T) {
+              finalX += b - a;
+              guides.x = b;
+              break;
+            }
+          }
+          const yPairs: [number, number][] = [
+            [finalY, node.y],
+            [finalY, node.y + node.h],
+            [finalY + dh, node.y],
+            [finalY + dh, node.y + node.h],
+            [finalY + dh / 2, node.y + node.h / 2],
+          ];
+          for (const [a, b] of yPairs) {
+            if (Math.abs(a - b) < SNAP_T) {
+              finalY += b - a;
+              guides.y = b;
+              break;
+            }
+          }
+          if (guides.x !== undefined && guides.y !== undefined) break outer;
+        }
+        if (guides.x === undefined) {
+          const gx = Math.round(finalX / 20) * 20;
+          if (Math.abs(finalX - gx) < SNAP_T) finalX = gx;
+        }
+        if (guides.y === undefined) {
+          const gy = Math.round(finalY / 20) * 20;
+          if (Math.abs(finalY - gy) < SNAP_T) finalY = gy;
+        }
+      }
+      setSnapGuides(guides);
       setNodes((prev) =>
         prev.map((n) =>
-          n.id === drag.id ? { ...n, x: drag.x, y: drag.y } : n,
+          n.id === drag.id ? { ...n, x: finalX, y: finalY } : n,
         ),
       );
     }
@@ -701,6 +752,7 @@ export default function Canvas() {
     dragging.current = null;
     resizing.current = null;
     isPanning.current = false;
+    setSnapGuides({});
   }, [flushPending]);
 
   useEffect(() => {
@@ -732,6 +784,38 @@ export default function Canvas() {
     setNodes((prev) => prev.filter((n) => n.id !== id));
     setConnections((prev) => prev.filter((c) => c.from !== id && c.to !== id));
     setSelected(null);
+  }, []);
+
+  const cleanUpCanvas = useCallback(() => {
+    setNodes((prev) => {
+      if (prev.length === 0) return prev;
+      const sorted = [...prev].sort((a, b) => a.x - b.x);
+      const rows: CanvasNode[][] = [];
+      for (const node of sorted) {
+        const cy = node.y + node.h / 2;
+        const row = rows.find((r) => Math.abs(cy - (r[0].y + r[0].h / 2)) < 150);
+        if (row) row.push(node);
+        else rows.push([node]);
+      }
+      rows.sort((a, b) => {
+        const ay = a.reduce((s, n) => s + n.y + n.h / 2, 0) / a.length;
+        const by = b.reduce((s, n) => s + n.y + n.h / 2, 0) / b.length;
+        return ay - by;
+      });
+      let curY = rows[0][0].y;
+      const result: CanvasNode[] = [];
+      for (const row of rows) {
+        row.sort((a, b) => a.x - b.x);
+        const rowH = Math.max(...row.map((n) => n.h));
+        let curX = row[0].x;
+        for (const node of row) {
+          result.push({ ...node, x: curX, y: curY });
+          curX += node.w + 40;
+        }
+        curY += rowH + 60;
+      }
+      return result;
+    });
   }, []);
 
   const copySelected = useCallback(() => {
@@ -1630,6 +1714,54 @@ export default function Canvas() {
             </>
           )}
         </button>
+
+        {/* Divider */}
+        <div
+          style={{
+            width: "0.5px",
+            height: 16,
+            background: "rgba(255,255,255,0.1)",
+            margin: "0 4px",
+            flexShrink: 0,
+          }}
+        />
+
+        <button
+          onClick={cleanUpCanvas}
+          title="Clean up layout"
+          style={{
+            padding: "6px 8px",
+            borderRadius: 8,
+            border: "none",
+            cursor: "pointer",
+            background: "transparent",
+            color: "#9CA3AF",
+            transition: "color 0.15s",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
+            (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <circle cx="2.5" cy="2.5" r="1.2" fill="currentColor" />
+            <circle cx="7" cy="2.5" r="1.2" fill="currentColor" />
+            <circle cx="11.5" cy="2.5" r="1.2" fill="currentColor" />
+            <circle cx="2.5" cy="7" r="1.2" fill="currentColor" />
+            <circle cx="7" cy="7" r="1.2" fill="currentColor" />
+            <circle cx="11.5" cy="7" r="1.2" fill="currentColor" />
+            <circle cx="2.5" cy="11.5" r="1.2" fill="currentColor" />
+            <circle cx="7" cy="11.5" r="1.2" fill="currentColor" />
+            <circle cx="11.5" cy="11.5" r="1.2" fill="currentColor" />
+          </svg>
+        </button>
       </div>
 
       {/* ── Canvas ── */}
@@ -2427,6 +2559,36 @@ export default function Canvas() {
           })}
         </div>
       </div>
+
+      {/* ── Snap Guides ── */}
+      {snapGuides.x !== undefined && (
+        <div
+          style={{
+            position: "fixed",
+            left: Math.round(snapGuides.x * zoom + pan.x + sidebarW),
+            top: 0,
+            width: 1,
+            height: "100%",
+            background: "rgba(255,177,98,0.6)",
+            pointerEvents: "none",
+            zIndex: 50,
+          }}
+        />
+      )}
+      {snapGuides.y !== undefined && (
+        <div
+          style={{
+            position: "fixed",
+            left: sidebarW,
+            top: Math.round(snapGuides.y * zoom + pan.y),
+            width: "100%",
+            height: 1,
+            background: "rgba(255,177,98,0.6)",
+            pointerEvents: "none",
+            zIndex: 50,
+          }}
+        />
+      )}
 
       {/* ── Node Context Menu ── */}
       {contextMenu?.kind === "node" &&
