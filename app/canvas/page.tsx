@@ -1546,6 +1546,9 @@ export default function Canvas() {
       )
         deleteSelected();
       if (e.key === "Escape") {
+        if (editingNodeIdRef.current !== null) {
+          (document.activeElement as HTMLElement)?.blur();
+        }
         setConnectDrag(null);
         setContextMenu(null);
         if (filterOpenRef.current) {

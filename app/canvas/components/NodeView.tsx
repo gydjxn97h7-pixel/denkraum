@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { ACCENT } from "../lib/canvas-types";
 import type { CanvasNode, ConnectDrag } from "../lib/canvas-types";
 import { parseColor } from "../lib/color-helpers";
@@ -56,6 +56,13 @@ export const NodeView = React.memo(function NodeView({
   const isDark = (0.299 * _nr + 0.587 * _ng + 0.114 * _nb) / 255 < 0.45;
   const fs = n.fontSize ?? 13;
 
+  const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    if (!isText && editingNodeIdRef.current === n.id) setIsEditing(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const isPotentialTarget =
     connectDrag !== null && n.id !== connectDrag.fromId && !isText;
 
@@ -100,6 +107,31 @@ export const NodeView = React.memo(function NodeView({
           });
         }
       }}
+      onDoubleClick={(e) => {
+        if (isText) return;
+        const t = e.target as HTMLElement;
+        if (t.dataset.role === "connect-dot") return;
+        if (t.dataset.role === "resize-handle") return;
+        if (t.dataset.role === "move-handle") return;
+        e.stopPropagation();
+        editingNodeIdRef.current = n.id;
+        setIsEditing(true);
+        setTimeout(() => {
+          const el = document.querySelector<HTMLElement>(
+            `[data-node-id="${n.id}"] [contenteditable="true"]`,
+          );
+          if (!el) return;
+          el.focus();
+          const range = document.createRange();
+          const sel = window.getSelection();
+          if (sel) {
+            range.selectNodeContents(el);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        }, 0);
+      }}
       onMouseEnter={() => setHoveredId(n.id)}
       onMouseLeave={() =>
         setHoveredId((prev) => (prev === n.id ? null : prev))
@@ -131,9 +163,11 @@ export const NodeView = React.memo(function NodeView({
           ? "1.5px solid rgba(255,177,98,0.5)"
           : isMultiSelected
             ? `2px solid ${ACCENT}`
-            : isText && (isSel || n.title === "")
-              ? "1.5px dashed rgba(255,255,255,0.45)"
-              : "none",
+            : isEditing
+              ? "1.5px solid rgba(255,255,255,0.15)"
+              : isText && (isSel || n.title === "")
+                ? "1.5px dashed rgba(255,255,255,0.45)"
+                : "none",
         opacity: dimmed ? 0.15 : 1,
         pointerEvents: dimmed ? "none" : undefined,
         transition:
@@ -211,7 +245,7 @@ export const NodeView = React.memo(function NodeView({
                 if (el && editingNodeIdRef.current !== n.id)
                   el.textContent = n.title;
               }}
-              contentEditable
+              contentEditable={isEditing}
               suppressContentEditableWarning
               data-placeholder="Diamond"
               onMouseDown={(e) => e.stopPropagation()}
@@ -225,6 +259,7 @@ export const NodeView = React.memo(function NodeView({
                   (e.target as HTMLElement).innerText,
                 );
                 editingNodeIdRef.current = null;
+                setIsEditing(false);
               }}
               style={{
                 fontSize: fs,
@@ -239,6 +274,8 @@ export const NodeView = React.memo(function NodeView({
                 overflowWrap: "break-word",
                 wordBreak: "break-word",
                 overflow: "hidden",
+                pointerEvents: isEditing ? "auto" : "none",
+                cursor: isEditing ? "text" : "default",
               }}
             />
             {n.body && (
@@ -247,7 +284,7 @@ export const NodeView = React.memo(function NodeView({
                   if (el && editingNodeIdRef.current !== n.id)
                     el.textContent = n.body;
                 }}
-                contentEditable
+                contentEditable={isEditing}
                 suppressContentEditableWarning
                 onMouseDown={(e) => e.stopPropagation()}
                 onFocus={() => {
@@ -260,6 +297,7 @@ export const NodeView = React.memo(function NodeView({
                     (e.target as HTMLElement).innerText,
                   );
                   editingNodeIdRef.current = null;
+                  setIsEditing(false);
                 }}
                 style={{
                   fontSize: Math.max(11, fs - 2),
@@ -278,6 +316,8 @@ export const NodeView = React.memo(function NodeView({
                   overflowWrap: "break-word",
                   wordBreak: "break-word",
                   overflow: "hidden",
+                  pointerEvents: isEditing ? "auto" : "none",
+                  cursor: isEditing ? "text" : "default",
                 }}
               />
             )}
@@ -393,7 +433,7 @@ export const NodeView = React.memo(function NodeView({
               if (el && editingNodeIdRef.current !== n.id)
                 el.textContent = n.title;
             }}
-            contentEditable
+            contentEditable={isEditing}
             suppressContentEditableWarning
             data-placeholder={
               n.type === "circle"
@@ -415,6 +455,7 @@ export const NodeView = React.memo(function NodeView({
                 (e.target as HTMLElement).innerText,
               );
               editingNodeIdRef.current = null;
+              setIsEditing(false);
             }}
             style={{
               fontSize: fs,
@@ -431,6 +472,8 @@ export const NodeView = React.memo(function NodeView({
               overflowWrap: "break-word",
               wordBreak: "break-word",
               overflow: "hidden",
+              pointerEvents: isEditing ? "auto" : "none",
+              cursor: isEditing ? "text" : "default",
             }}
           />
           <div
@@ -438,7 +481,7 @@ export const NodeView = React.memo(function NodeView({
               if (el && editingNodeIdRef.current !== n.id)
                 el.textContent = n.body;
             }}
-            contentEditable
+            contentEditable={isEditing}
             suppressContentEditableWarning
             onMouseDown={(e) => e.stopPropagation()}
             onFocus={() => {
@@ -451,6 +494,7 @@ export const NodeView = React.memo(function NodeView({
                 (e.target as HTMLElement).innerText,
               );
               editingNodeIdRef.current = null;
+              setIsEditing(false);
             }}
             style={{
               fontSize: Math.max(11, fs - 2),
@@ -473,6 +517,8 @@ export const NodeView = React.memo(function NodeView({
               overflowWrap: "break-word",
               wordBreak: "break-word",
               overflow: "hidden",
+              pointerEvents: isEditing ? "auto" : "none",
+              cursor: isEditing ? "text" : "default",
             }}
           />
         </>
