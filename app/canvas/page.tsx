@@ -5,12 +5,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useLayoutEffect,
+  memo,
 } from "react";
 import "./canvas.css";
 import {
   ACCENT,
-  PRESET_COLORS,
   SIDEBAR_W,
   LS_NODES,
   LS_CONNECTIONS,
@@ -27,7 +26,7 @@ import type {
   ColorPicker,
   AssetRecord,
 } from "./lib/canvas-types";
-import { hexToRgb, stripHtml } from "./lib/color-helpers";
+import { stripHtml } from "./lib/color-helpers";
 import {
   bringToFront,
   bringForward,
@@ -43,36 +42,14 @@ import { SidebarNodeItem } from "./components/SidebarNodeItem";
 
 // ── Toolbar helpers ───────────────────────────────────────────────────────────
 
-const SHAPE_GRAD_IDS: Record<string, [string, string]> = {
-  block: ["gBlkN", "gBlkA"],
-  rounded: ["gRndN", "gRndA"],
-  circle: ["gCrcN", "gCrcA"],
-  oval: ["gOvlN", "gOvlA"],
-  diamond: ["gDmdN", "gDmdA"],
-  text: ["gTxtN", "gTxtA"],
-  image: ["gImgN", "gImgA"],
-  textfile: ["gTfN", "gTfA"],
-};
-
 function renderShapeIcon(
   type: string,
   stroke: string,
   active: boolean,
 ): React.ReactNode {
-  const [normId, actId] = SHAPE_GRAD_IDS[type] ?? ["gDefN", "gDefA"];
-  const fid = active ? actId : normId;
+  const fid = active ? "gShapeA" : "gShapeN";
   return (
     <svg width="20" height="20" viewBox="0 0 20 20">
-      <defs>
-        <linearGradient id={normId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#2E3338" />
-          <stop offset="100%" stopColor="#1A1E22" />
-        </linearGradient>
-        <linearGradient id={actId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#2A2418" />
-          <stop offset="100%" stopColor="#1A1710" />
-        </linearGradient>
-      </defs>
       {type === "block" && (
         <>
           <rect
@@ -307,6 +284,58 @@ function ShapeButton({
   );
 }
 
+// ── Connection line ───────────────────────────────────────────────────────────
+const ConnectionLine = memo(function ConnectionLine({
+  connKey,
+  fromNode,
+  toNode,
+  isHovered,
+  zoom,
+  connDimmed,
+  onHoverEnter,
+  onHoverLeave,
+  onDelete,
+}: {
+  connKey: string;
+  fromNode: CanvasNode;
+  toNode: CanvasNode;
+  isHovered: boolean;
+  zoom: number;
+  connDimmed: boolean;
+  onHoverEnter: (key: string) => void;
+  onHoverLeave: (key: string) => void;
+  onDelete: (from: number, to: number) => void;
+}) {
+  const x1 = fromNode.x + fromNode.w;
+  const y1 = fromNode.y + fromNode.h / 2;
+  const x2 = toNode.x;
+  const y2 = toNode.y + toNode.h / 2;
+  const cxm = (x1 + x2) / 2;
+  const d = `M ${x1} ${y1} C ${cxm} ${y1}, ${cxm} ${y2}, ${x2} ${y2}`;
+  return (
+    <g style={{ opacity: connDimmed ? 0.15 : 1, transition: "opacity 0.2s ease" }}>
+      <path
+        d={d}
+        stroke={isHovered ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.25)"}
+        strokeWidth={isHovered ? 2.5 / zoom : 1.5 / zoom}
+        fill="none"
+        strokeLinecap="round"
+        style={{ pointerEvents: "none", transition: "stroke 0.12s, stroke-width 0.12s" }}
+      />
+      <path
+        d={d}
+        stroke="transparent"
+        strokeWidth={12 / zoom}
+        fill="none"
+        style={{ cursor: "pointer" }}
+        onMouseEnter={() => onHoverEnter(connKey)}
+        onMouseLeave={() => onHoverLeave(connKey)}
+        onDoubleClick={() => onDelete(fromNode.id, toNode.id)}
+      />
+    </g>
+  );
+});
+
 // ── Main Canvas ───────────────────────────────────────────────────────────────
 export default function Canvas() {
   const [nodes, setNodes] = useState<CanvasNode[]>(DEFAULT_NODES);
@@ -481,6 +510,12 @@ export default function Canvas() {
           setConnections(data.connections);
           setSelected(null);
           setSelectedIds(new Set());
+          setColorPicker(null);
+          setTextColorPicker(null);
+          setHoveredId(null);
+          setConnectDrag(null);
+          setContextMenu(null);
+          setSnapGuides({});
           const maxId = (data.nodes as CanvasNode[]).reduce(
             (m: number, n: CanvasNode) => Math.max(m, n.id),
             -1,
@@ -577,6 +612,7 @@ export default function Canvas() {
     ]);
     setSelected(newId);
     setContextMenu(null);
+    setTimeout(() => setActiveShapeType(null), 600);
     if (isText) {
       editingNodeIdRef.current = newId;
       setTimeout(() => {
@@ -958,6 +994,7 @@ export default function Canvas() {
 
   const filterActive = filterText !== "" || filterType !== "all";
   const matchedNodeIds = useMemo(() => {
+    if (filterText === "" && filterType === "all") return new Set<number>();
     const s = new Set<number>();
     for (const n of nodes) {
       const typeOk = filterType === "all" || n.type === filterType;
@@ -985,15 +1022,15 @@ export default function Canvas() {
       setContextMenu(null);
       setSelected(id);
       setSelectedIds(new Set());
-      const n = nodeMap.get(id);
+      const n = nodeMapRef.current.get(id);
       if (!n || !canvasRef.current) return;
       const r = canvasRef.current.getBoundingClientRect();
-      const mx = (e.clientX - r.left - pan.x) / zoom;
-      const my = (e.clientY - r.top - pan.y) / zoom;
+      const mx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
+      const my = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
       dragging.current = { id, ox: mx - n.x, oy: my - n.y };
       e.preventDefault();
     },
-    [nodeMap, pan, zoom],
+    [],
   );
 
   const onNodeMouseDown = useCallback(
@@ -1027,14 +1064,14 @@ export default function Canvas() {
         startNodeDrag(e, id);
       }
     },
-    [startNodeDrag],
+    [],
   );
 
   const onResizeMouseDown = useCallback(
     (e: React.MouseEvent, id: number) => {
       e.stopPropagation();
       e.preventDefault();
-      const n = nodeMap.get(id);
+      const n = nodeMapRef.current.get(id);
       if (!n) return;
       resizing.current = {
         id,
@@ -1045,7 +1082,7 @@ export default function Canvas() {
         constrain: n.type === "circle",
       };
     },
-    [nodeMap],
+    [],
   );
 
   const onDotClick = useCallback((e: React.MouseEvent, id: number) => {
@@ -1056,6 +1093,16 @@ export default function Canvas() {
     } else {
       setConnectDrag({ fromId: id });
     }
+  }, []);
+
+  const onConnHoverEnter = useCallback((key: string) => {
+    setHoveredConnKey(key);
+  }, []);
+  const onConnHoverLeave = useCallback((key: string) => {
+    setHoveredConnKey((k) => (k === key ? null : k));
+  }, []);
+  const onConnDelete = useCallback((from: number, to: number) => {
+    setConnections((prev) => prev.filter((x) => !(x.from === from && x.to === to)));
   }, []);
 
   // Finalizes a pending connection on click (fires after mouseup, so
@@ -1747,6 +1794,23 @@ export default function Canvas() {
         style={{ display: "none" }}
         onChange={onDenkraumFileChange}
       />
+
+      {/* Shared gradient defs for shape icons */}
+      <svg
+        style={{ position: "absolute", width: 0, height: 0, pointerEvents: "none" }}
+        aria-hidden="true"
+      >
+        <defs>
+          <linearGradient id="gShapeN" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#2E3338" />
+            <stop offset="100%" stopColor="#1A1E22" />
+          </linearGradient>
+          <linearGradient id="gShapeA" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#2A2418" />
+            <stop offset="100%" stopColor="#1A1710" />
+          </linearGradient>
+        </defs>
+      </svg>
 
       {/* ── Sidebar ── */}
       <div
@@ -2900,62 +2964,20 @@ export default function Canvas() {
                 const fn = nodeMap.get(c.from);
                 const tn = nodeMap.get(c.to);
                 if (!fn || !tn) return null;
-                const x1 = fn.x + fn.w,
-                  y1 = fn.y + fn.h / 2;
-                const x2 = tn.x,
-                  y2 = tn.y + tn.h / 2;
-                const cxm = (x1 + x2) / 2;
                 const key = `${c.from}-${c.to}`;
-                const isHovered = hoveredConnKey === key;
-                const d = `M ${x1} ${y1} C ${cxm} ${y1}, ${cxm} ${y2}, ${x2} ${y2}`;
-                const connDimmed =
-                  filterActive &&
-                  !matchedNodeIds.has(c.from) &&
-                  !matchedNodeIds.has(c.to);
                 return (
-                  <g
+                  <ConnectionLine
                     key={key}
-                    style={{
-                      opacity: connDimmed ? 0.15 : 1,
-                      transition: "opacity 0.2s ease",
-                    }}
-                  >
-                    {/* Visible path */}
-                    <path
-                      d={d}
-                      stroke={
-                        isHovered
-                          ? "rgba(255,255,255,0.55)"
-                          : "rgba(255,255,255,0.25)"
-                      }
-                      strokeWidth={isHovered ? 2.5 / zoom : 1.5 / zoom}
-                      fill="none"
-                      strokeLinecap="round"
-                      style={{
-                        pointerEvents: "none",
-                        transition: "stroke 0.12s, stroke-width 0.12s",
-                      }}
-                    />
-                    {/* Invisible hit target */}
-                    <path
-                      d={d}
-                      stroke="transparent"
-                      strokeWidth={12 / zoom}
-                      fill="none"
-                      style={{ cursor: "pointer" }}
-                      onMouseEnter={() => setHoveredConnKey(key)}
-                      onMouseLeave={() =>
-                        setHoveredConnKey((k) => (k === key ? null : k))
-                      }
-                      onDoubleClick={() =>
-                        setConnections((prev) =>
-                          prev.filter(
-                            (x) => !(x.from === c.from && x.to === c.to),
-                          ),
-                        )
-                      }
-                    />
-                  </g>
+                    connKey={key}
+                    fromNode={fn}
+                    toNode={tn}
+                    isHovered={hoveredConnKey === key}
+                    zoom={zoom}
+                    connDimmed={filterActive && !matchedNodeIds.has(c.from) && !matchedNodeIds.has(c.to)}
+                    onHoverEnter={onConnHoverEnter}
+                    onHoverLeave={onConnHoverLeave}
+                    onDelete={onConnDelete}
+                  />
                 );
               })}
             </g>
@@ -3605,10 +3627,7 @@ export default function Canvas() {
             }}
           />
           <div
-            onClick={() => {
-              addNode(contextMenu.cx, contextMenu.cy, "image");
-              setContextMenu(null);
-            }}
+            onClick={() => handleImageInsert(contextMenu.cx, contextMenu.cy)}
             onMouseEnter={(e) => hoverMenu(e, true)}
             onMouseLeave={(e) => hoverMenu(e, false)}
             style={menuItem()}
@@ -3650,8 +3669,8 @@ export default function Canvas() {
           </div>
           <div
             onClick={() => {
-              addNode(contextMenu.cx, contextMenu.cy, "textfile");
               setContextMenu(null);
+              handleTextFileInsert(contextMenu.cx, contextMenu.cy);
             }}
             onMouseEnter={(e) => hoverMenu(e, true)}
             onMouseLeave={(e) => hoverMenu(e, false)}

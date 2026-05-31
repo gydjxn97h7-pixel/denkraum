@@ -26,7 +26,7 @@ interface NodeViewProps {
   isMultiSelected?: boolean;
 }
 
-export function NodeView({
+export const NodeView = React.memo(function NodeView({
   n,
   selected,
   connectDrag,
@@ -694,4 +694,4 @@ export function NodeView({
       )}
     </div>
   );
-}
+});
