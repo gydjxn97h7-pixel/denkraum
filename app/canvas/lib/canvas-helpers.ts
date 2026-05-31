@@ -1,5 +1,13 @@
 import type { CanvasNode } from "./canvas-types";
 
+export function getMaxNodeId(nodeMap: Map<number, CanvasNode>): number {
+  let max = -1;
+  for (const id of nodeMap.keys()) {
+    if (id > max) max = id;
+  }
+  return max;
+}
+
 export function bringToFront(prev: CanvasNode[], id: number): CanvasNode[] {
   const idx = prev.findIndex((n) => n.id === id);
   if (idx === -1 || idx === prev.length - 1) return prev;

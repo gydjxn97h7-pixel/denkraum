@@ -2,7 +2,7 @@
 import React from "react";
 import { ACCENT } from "../lib/canvas-types";
 import type { CanvasNode, ConnectDrag } from "../lib/canvas-types";
-import { hexToRgb } from "../lib/color-helpers";
+import { parseColor } from "../lib/color-helpers";
 
 interface NodeViewProps {
   n: CanvasNode;
@@ -52,7 +52,7 @@ export function NodeView({
   const isRounded = n.type === "rounded";
   const isImage = n.type === "image";
   const isTextFile = n.type === "textfile";
-  const [_nr, _ng, _nb] = hexToRgb(n.color);
+  const { r: _nr, g: _ng, b: _nb } = parseColor(n.color);
   const isDark = (0.299 * _nr + 0.587 * _ng + 0.114 * _nb) / 255 < 0.45;
   const fs = n.fontSize ?? 13;
 
@@ -77,8 +77,10 @@ export function NodeView({
   const hostRadius = isCircle ? "50%" : isRounded ? 24 : 12;
 
   const showResize = (hoveredId === n.id || isSel) && !isText;
-  const showDot =
-    !isText && (hoveredId === n.id || connectDrag?.fromId === n.id);
+  const isSource = connectDrag?.fromId === n.id;
+  const showDots =
+    !isText &&
+    ((hoveredId === n.id && !connectDrag) || isSource);
 
   return (
     <div
@@ -120,13 +122,18 @@ export function NodeView({
             : isDiamond
               ? 0
               : "14px 18px",
-        cursor: connectDrag ? "crosshair" : "grab",
+        cursor:
+          connectDrag !== null && n.id !== connectDrag.fromId
+            ? "crosshair"
+            : "default",
         userSelect: "none",
-        outline: isMultiSelected
-          ? `2px solid ${ACCENT}`
-          : isText && (isSel || n.title === "")
-            ? "1.5px dashed rgba(255,255,255,0.45)"
-            : "none",
+        outline: isSource
+          ? "1.5px solid rgba(255,177,98,0.5)"
+          : isMultiSelected
+            ? `2px solid ${ACCENT}`
+            : isText && (isSel || n.title === "")
+              ? "1.5px dashed rgba(255,255,255,0.45)"
+              : "none",
         opacity: dimmed ? 0.15 : 1,
         pointerEvents: dimmed ? "none" : undefined,
         transition:
@@ -558,42 +565,65 @@ export function NodeView({
         </div>
       )}
 
-      {/* Connect dot — appears on hover, click to connect */}
-      {showDot && (
-        <div
-          data-role="connect-dot"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => onDotClick(e, n.id)}
-          title={
-            connectDrag?.fromId === n.id
-              ? "Cancel connect"
-              : "Click to connect"
-          }
-          style={{
-            width: 13,
-            height: 13,
-            borderRadius: "50%",
-            background: connectDrag?.fromId === n.id ? ACCENT : "#2A2E34",
-            border: `2px solid ${ACCENT}`,
-            position: "absolute",
-            right: isCircle ? -9 : isDiamond ? -8 : -7,
-            top: "50%",
-            transform: "translateY(-50%)",
-            cursor: "crosshair",
-            zIndex: 10,
-            boxShadow: "0 1px 5px rgba(0,0,0,0.5)",
-            transition: "background 0.12s, transform 0.12s",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.transform =
-              "translateY(-50%) scale(1.2)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.transform =
-              "translateY(-50%) scale(1)";
-          }}
-        />
-      )}
+      {/* Connect dots — four cardinal positions, conditional render only */}
+      {showDots &&
+        ([
+          { key: "top",    top: -19,           left: n.w / 2 - 11 },
+          { key: "bottom", top: n.h - 3,       left: n.w / 2 - 11 },
+          { key: "left",   top: n.h / 2 - 11,  left: -19 },
+          { key: "right",  top: n.h / 2 - 11,  left: n.w - 3 },
+        ] as { key: string; top: number; left: number }[]).map(({ key, top, left }) => (
+          <div
+            key={key}
+            data-role="connect-dot"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDotClick(e, n.id);
+            }}
+            style={{
+              position: "absolute",
+              top,
+              left,
+              width: 22,
+              height: 22,
+              cursor: "crosshair",
+              pointerEvents: "all",
+              zIndex: 10,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 22 22"
+              className="connect-dot-svg"
+              style={{ display: "block" }}
+            >
+              <circle
+                cx="11"
+                cy="11"
+                r="9"
+                fill="#141618"
+                stroke={
+                  isSource ? "rgba(255,177,98,0.85)" : "rgba(255,177,98,0.3)"
+                }
+                strokeWidth={isSource ? "2" : "1.5"}
+              />
+              <circle
+                cx="11"
+                cy="11"
+                r={isSource ? "6.5" : "5.5"}
+                fill={isSource ? "#FFB162" : "rgba(255,177,98,0.65)"}
+              />
+            </svg>
+          </div>
+        ))}
 
       {/* Resize handle — outside node boundary, appears on hover */}
       {showResize && (

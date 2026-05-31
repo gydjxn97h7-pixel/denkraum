@@ -8,6 +8,8 @@ import {
   hexToRgb,
   rgbToHex,
   isValidHex,
+  parseColor,
+  toRgbaString,
 } from "../lib/color-helpers";
 
 export function TrafficDot({
@@ -40,6 +42,12 @@ export function TrafficDot({
   );
 }
 
+const CHECKER =
+  "linear-gradient(45deg,#808080 25%,transparent 25%)," +
+  "linear-gradient(-45deg,#808080 25%,transparent 25%)," +
+  "linear-gradient(45deg,transparent 75%,#808080 75%)," +
+  "linear-gradient(-45deg,transparent 75%,#808080 75%)";
+
 export function ColorPickerWindow({
   picker,
   onColorChange,
@@ -52,27 +60,56 @@ export function ColorPickerWindow({
   const divRef = useRef<HTMLDivElement>(null);
   const posRef = useRef({ x: picker.x, y: picker.y });
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const initParsed = parseColor(picker.color);
+  const initHex = rgbToHex(initParsed.r, initParsed.g, initParsed.b);
+
   const [hsv, setHsv] = useState<[number, number, number]>(() =>
-    hexToHsv(picker.color),
+    hexToHsv(initHex),
   );
-  const [hexInput, setHexInput] = useState(picker.color);
-  const [rgbInput, setRgbInput] = useState<[string, string, string]>(() => {
-    const [r, g, b] = hexToRgb(picker.color);
-    return [String(r), String(g), String(b)];
-  });
+  const [hexInput, setHexInput] = useState(initHex);
+  const [rgbInput, setRgbInput] = useState<[string, string, string]>([
+    String(initParsed.r),
+    String(initParsed.g),
+    String(initParsed.b),
+  ]);
+  const [alpha, setAlpha] = useState(initParsed.a);
+  const alphaRef = useRef(initParsed.a);
 
   const currentHex = hsvToHex(hsv[0], hsv[1], hsv[2]);
   const pureHueHex = hsvToHex(hsv[0], 100, 100);
+  const [currentR, currentG, currentB] = hexToRgb(currentHex);
 
   useEffect(() => {
-    setHsv(hexToHsv(picker.color));
-    setHexInput(picker.color);
-    const [r, g, b] = hexToRgb(picker.color);
-    setRgbInput([String(r), String(g), String(b)]);
+    const parsed = parseColor(picker.color);
+    const hex = rgbToHex(parsed.r, parsed.g, parsed.b);
+    setHsv(hexToHsv(hex));
+    setHexInput(hex);
+    setRgbInput([String(parsed.r), String(parsed.g), String(parsed.b)]);
+    setAlpha(parsed.a);
+    alphaRef.current = parsed.a;
   }, [picker.nodeId, picker.color]);
+
+  useEffect(() => {
+    alphaRef.current = alpha;
+  }, [alpha]);
 
   const applyHex = useCallback(
     (hex: string) => {
+      setHsv(hexToHsv(hex));
+      setHexInput(hex);
+      const [r, g, b] = hexToRgb(hex);
+      setRgbInput([String(r), String(g), String(b)]);
+      const a = alphaRef.current;
+      onColorChange(picker.nodeId, a >= 1 ? hex : toRgbaString(r, g, b, a));
+    },
+    [picker.nodeId, onColorChange],
+  );
+
+  const applyPreset = useCallback(
+    (hex: string) => {
+      setAlpha(1);
+      alphaRef.current = 1;
       setHsv(hexToHsv(hex));
       setHexInput(hex);
       const [r, g, b] = hexToRgb(hex);
@@ -89,7 +126,8 @@ export function ColorPickerWindow({
       setHexInput(hex);
       const [r, g, b] = hexToRgb(hex);
       setRgbInput([String(r), String(g), String(b)]);
-      onColorChange(picker.nodeId, hex);
+      const a = alphaRef.current;
+      onColorChange(picker.nodeId, a >= 1 ? hex : toRgbaString(r, g, b, a));
     },
     [picker.nodeId, onColorChange],
   );
@@ -211,18 +249,42 @@ export function ColorPickerWindow({
       </div>
 
       <div style={{ padding: "14px 16px 16px" }}>
+        {/* Swatch — checkerboard reveals alpha */}
         <div
           style={{
             height: 44,
             borderRadius: 10,
-            background: currentHex,
-            border: "0.5px solid rgba(255,255,255,0.08)",
             marginBottom: 12,
+            border: "0.5px solid rgba(255,255,255,0.08)",
+            overflow: "hidden",
+            position: "relative",
             boxShadow: "inset 0 1px 4px rgba(0,0,0,0.07)",
-            transition: "background 0.05s",
           }}
-        />
+        >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundImage: CHECKER,
+              backgroundSize: "10px 10px",
+              backgroundPosition: "0 0,0 5px,5px -5px,-5px 0px",
+              backgroundColor: "#b0b0b0",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                alpha < 1
+                  ? toRgbaString(currentR, currentG, currentB, alpha)
+                  : currentHex,
+              transition: "background 0.05s",
+            }}
+          />
+        </div>
 
+        {/* HSV picker area */}
         <div
           ref={pickerAreaRef}
           onMouseDown={(e) => {
@@ -275,6 +337,7 @@ export function ColorPickerWindow({
           />
         </div>
 
+        {/* Hue slider */}
         <div style={{ position: "relative", height: 18, marginBottom: 14 }}>
           <div
             style={{
@@ -369,6 +432,110 @@ export function ColorPickerWindow({
               letterSpacing: "0.3px",
             }}
           />
+        </div>
+
+        {/* Opacity slider */}
+        <div style={{ marginBottom: 14 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 5,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 10,
+                color: "#6B7280",
+                letterSpacing: "0.5px",
+                textTransform: "uppercase",
+              }}
+            >
+              Opacity
+            </span>
+            <span
+              style={{ fontSize: 10, color: "#9CA3AF", fontFamily: "monospace" }}
+            >
+              {Math.round(alpha * 100)}%
+            </span>
+          </div>
+          <div style={{ position: "relative", height: 18 }}>
+            <div
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: 0,
+                right: 0,
+                height: 12,
+                transform: "translateY(-50%)",
+                borderRadius: 6,
+                overflow: "hidden",
+                border: "0.5px solid rgba(255,255,255,0.08)",
+                pointerEvents: "none",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundImage: CHECKER,
+                  backgroundSize: "10px 10px",
+                  backgroundPosition: "0 0,0 5px,5px -5px,-5px 0px",
+                  backgroundColor: "#b0b0b0",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: `linear-gradient(to right,rgba(${currentR},${currentG},${currentB},0),${currentHex})`,
+                }}
+              />
+            </div>
+            <div
+              style={{
+                position: "absolute",
+                left: `calc(${alpha * 100}% - 8px)`,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 16,
+                height: 16,
+                borderRadius: "50%",
+                background: currentHex,
+                border: "2px solid #fff",
+                boxShadow:
+                  "0 0 0 1px rgba(0,0,0,0.18), 0 2px 4px rgba(0,0,0,0.22)",
+                pointerEvents: "none",
+              }}
+            />
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={alpha}
+              onChange={(e) => {
+                const a = parseFloat(e.target.value);
+                setAlpha(a);
+                alphaRef.current = a;
+                const color =
+                  a >= 1
+                    ? currentHex
+                    : toRgbaString(currentR, currentG, currentB, a);
+                onColorChange(picker.nodeId, color);
+              }}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                opacity: 0,
+                cursor: "pointer",
+                margin: 0,
+              }}
+            />
+          </div>
         </div>
 
         {/* RGB row */}
@@ -467,7 +634,7 @@ export function ColorPickerWindow({
               return (
                 <div
                   key={c}
-                  onClick={() => applyHex(c)}
+                  onClick={() => applyPreset(c)}
                   style={{
                     height: 24,
                     borderRadius: 6,

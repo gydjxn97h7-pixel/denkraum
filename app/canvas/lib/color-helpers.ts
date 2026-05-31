@@ -66,6 +66,19 @@ export function isValidHex(s: string) {
   return /^#[0-9a-fA-F]{6}$/.test(s);
 }
 
+export function parseColor(color: string): { r: number; g: number; b: number; a: number } {
+  if (color.startsWith("rgba")) {
+    const m = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+    if (m) return { r: +m[1], g: +m[2], b: +m[3], a: parseFloat(m[4]) };
+  }
+  const [r, g, b] = hexToRgb(color);
+  return { r, g, b, a: 1 };
+}
+
+export function toRgbaString(r: number, g: number, b: number, a: number): string {
+  return `rgba(${r},${g},${b},${Math.round(a * 100) / 100})`;
+}
+
 // Strips HTML tags from untrusted loaded strings (e.g. manipulated localStorage)
 // so persisted payloads are stored and rendered as plain text.
 export function stripHtml(s: unknown): string {

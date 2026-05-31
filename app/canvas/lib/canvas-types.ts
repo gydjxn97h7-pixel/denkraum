@@ -72,6 +72,7 @@ export const SIDEBAR_W = 220;
 
 export const LS_NODES = "denkraum_nodes";
 export const LS_CONNECTIONS = "denkraum_connections";
+export const LS_BOARD_NAME = "denkraum_board_name";
 
 export const DEFAULT_NODES: CanvasNode[] = [
   {
@@ -117,7 +118,3 @@ export const DEFAULT_CONNECTIONS: Connection[] = [
   { from: 1, to: 2 },
 ];
 
-export let idCounter = 3;
-export function setIdCounter(v: number) {
-  idCounter = v;
-}

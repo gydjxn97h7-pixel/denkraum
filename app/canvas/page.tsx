@@ -14,10 +14,9 @@ import {
   SIDEBAR_W,
   LS_NODES,
   LS_CONNECTIONS,
+  LS_BOARD_NAME,
   DEFAULT_NODES,
   DEFAULT_CONNECTIONS,
-  idCounter,
-  setIdCounter,
 } from "./lib/canvas-types";
 import type {
   NodeType,
@@ -34,11 +33,279 @@ import {
   bringForward,
   sendBackward,
   sendToBack,
+  getMaxNodeId,
 } from "./lib/canvas-helpers";
 import { setAsset, deleteAsset, getAllAssets } from "./lib/idb";
 import { ColorPickerWindow } from "./components/ColorPickerWindow";
 import { TextFileViewerWindow } from "./components/TextFileViewerWindow";
 import { NodeView } from "./components/NodeView";
+import { SidebarNodeItem } from "./components/SidebarNodeItem";
+
+// ── Toolbar helpers ───────────────────────────────────────────────────────────
+
+const SHAPE_GRAD_IDS: Record<string, [string, string]> = {
+  block: ["gBlkN", "gBlkA"],
+  rounded: ["gRndN", "gRndA"],
+  circle: ["gCrcN", "gCrcA"],
+  oval: ["gOvlN", "gOvlA"],
+  diamond: ["gDmdN", "gDmdA"],
+  text: ["gTxtN", "gTxtA"],
+  image: ["gImgN", "gImgA"],
+  textfile: ["gTfN", "gTfA"],
+};
+
+function renderShapeIcon(
+  type: string,
+  stroke: string,
+  active: boolean,
+): React.ReactNode {
+  const [normId, actId] = SHAPE_GRAD_IDS[type] ?? ["gDefN", "gDefA"];
+  const fid = active ? actId : normId;
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20">
+      <defs>
+        <linearGradient id={normId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#2E3338" />
+          <stop offset="100%" stopColor="#1A1E22" />
+        </linearGradient>
+        <linearGradient id={actId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#2A2418" />
+          <stop offset="100%" stopColor="#1A1710" />
+        </linearGradient>
+      </defs>
+      {type === "block" && (
+        <>
+          <rect
+            x="1"
+            y="1"
+            width="18"
+            height="18"
+            rx="1.5"
+            fill={`url(#${fid})`}
+            stroke={stroke}
+            strokeWidth="1.8"
+          />
+          <rect
+            x="2"
+            y="2"
+            width="16"
+            height="4"
+            rx="1"
+            fill="rgba(255,255,255,0.07)"
+          />
+        </>
+      )}
+      {type === "rounded" && (
+        <>
+          <rect
+            x="1"
+            y="1"
+            width="18"
+            height="18"
+            rx="6"
+            fill={`url(#${fid})`}
+            stroke={stroke}
+            strokeWidth="1.8"
+          />
+          <rect
+            x="2"
+            y="2"
+            width="16"
+            height="4"
+            rx="2"
+            fill="rgba(255,255,255,0.07)"
+          />
+        </>
+      )}
+      {type === "circle" && (
+        <>
+          <circle
+            cx="10"
+            cy="10"
+            r="9"
+            fill={`url(#${fid})`}
+            stroke={stroke}
+            strokeWidth="1.8"
+          />
+          <ellipse
+            cx="7"
+            cy="6"
+            rx="4"
+            ry="2.5"
+            fill="rgba(255,255,255,0.07)"
+          />
+        </>
+      )}
+      {type === "oval" && (
+        <>
+          <ellipse
+            cx="10"
+            cy="10"
+            rx="9"
+            ry="6"
+            fill={`url(#${fid})`}
+            stroke={stroke}
+            strokeWidth="1.8"
+          />
+          <ellipse cx="7" cy="7" rx="4" ry="2" fill="rgba(255,255,255,0.07)" />
+        </>
+      )}
+      {type === "diamond" && (
+        <>
+          <polygon
+            points="10,1 19,10 10,19 1,10"
+            fill={`url(#${fid})`}
+            stroke={stroke}
+            strokeWidth="1.8"
+            strokeLinejoin="miter"
+          />
+          <polygon
+            points="10,1 19,10 10,10 1,10"
+            fill="rgba(255,255,255,0.05)"
+            stroke="none"
+          />
+          <line
+            x1="10"
+            y1="1"
+            x2="10"
+            y2="19"
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth="0.8"
+          />
+        </>
+      )}
+      {type === "text" && (
+        <>
+          <rect
+            x="1"
+            y="1"
+            width="18"
+            height="18"
+            rx="1.5"
+            fill={`url(#${fid})`}
+            stroke={stroke}
+            strokeWidth="1.8"
+          />
+          <rect
+            x="3"
+            y="5"
+            width="14"
+            height="3.5"
+            rx="0.5"
+            fill="rgba(255,255,255,0.82)"
+          />
+          <rect
+            x="8.5"
+            y="5"
+            width="3"
+            height="11"
+            rx="0.5"
+            fill="rgba(255,255,255,0.82)"
+          />
+        </>
+      )}
+      {type === "image" && (
+        <>
+          <rect
+            x="1"
+            y="1"
+            width="18"
+            height="18"
+            rx="1.5"
+            fill={`url(#${fid})`}
+            stroke={stroke}
+            strokeWidth="1.8"
+          />
+          <circle cx="5.5" cy="5.5" r="2.5" fill="rgba(255,255,255,0.55)" />
+          <polyline
+            points="1,14 6,9 10,13 14,8 19,14"
+            fill="none"
+            stroke="rgba(255,255,255,0.5)"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
+      {type === "textfile" && (
+        <>
+          <path
+            d="M3 1 L13 1 L19 7 L19 19 L3 19 Z"
+            fill={`url(#${fid})`}
+            stroke={stroke}
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M13 1 L13 7 L19 7"
+            fill="none"
+            stroke={stroke}
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+          <rect
+            x="6"
+            y="10"
+            width="9"
+            height="2"
+            rx="1"
+            fill="rgba(255,255,255,0.55)"
+          />
+          <rect
+            x="6"
+            y="14"
+            width="7"
+            height="2"
+            rx="1"
+            fill="rgba(255,255,255,0.35)"
+          />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function ShapeButton({
+  label,
+  isActive,
+  onClick,
+  children,
+}: {
+  label: string;
+  isActive: boolean;
+  onClick: () => void;
+  children: (stroke: string, isActive: boolean) => React.ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const stroke = isActive
+    ? "#A07030"
+    : hovered
+      ? "rgba(255,255,255,0.62)"
+      : "rgba(255,255,255,0.42)";
+  return (
+    <button
+      title={label}
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: 36,
+        height: 36,
+        border: "none",
+        background: isActive ? "rgba(255,177,98,0.06)" : "transparent",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 8,
+        padding: 0,
+        transition: "background 0.12s",
+      }}
+    >
+      {children(stroke, isActive)}
+    </button>
+  );
+}
 
 // ── Main Canvas ───────────────────────────────────────────────────────────────
 export default function Canvas() {
@@ -78,6 +345,13 @@ export default function Canvas() {
   const [filterText, setFilterText] = useState("");
   const [filterType, setFilterType] = useState<NodeType | "all">("all");
   const [filterJumpIndex, setFilterJumpIndex] = useState(0);
+  const [activeShapeType, setActiveShapeType] = useState<NodeType | null>(null);
+  const [boardName, setBoardName] = useState("Untitled Board");
+  const [editingBoardName, setEditingBoardName] = useState(false);
+  const [toast, setToast] = useState<{
+    msg: string;
+    variant: "success" | "error";
+  } | null>(null);
 
   const dragging = useRef<{ id: number; ox: number; oy: number } | null>(null);
   const resizing = useRef<{
@@ -93,6 +367,8 @@ export default function Canvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFileInputRef = useRef<HTMLInputElement>(null);
+  const denkraumFileInputRef = useRef<HTMLInputElement>(null);
+  const saveBoardRef = useRef<() => void>(() => {});
   const filterInputRef = useRef<HTMLInputElement>(null);
   const filterOpenRef = useRef(false);
   const filterActiveRef = useRef(false);
@@ -119,6 +395,8 @@ export default function Canvas() {
   // in-progress input (more reliable than document.activeElement checks).
   const editingNodeIdRef = useRef<number | null>(null);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+  const idCounterRef = useRef(3);
+  const copiedNodeRef = useRef<CanvasNode | null>(null);
 
   // ── rAF-based interaction refs ────────────────────────────────────────────────
   // Mirror latest state into refs so mouse handlers never capture stale closures
@@ -134,6 +412,7 @@ export default function Canvas() {
   }, [zoom]);
   connectDragRef.current = connectDrag;
   selectedIdsRef.current = selectedIds;
+  copiedNodeRef.current = copiedNode;
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
@@ -151,6 +430,82 @@ export default function Canvas() {
   // Tracks which node IDs currently have an entry in IndexedDB so we can
   // delete stale records when a node is removed or loses its asset fields.
   const prevAssetNodeIdsRef = useRef(new Set<number>());
+
+  const saveBoard = useCallback(() => {
+    try {
+      const slug =
+        boardName
+          .toLowerCase()
+          .replace(/\s+/g, "-")
+          .replace(/[^a-z0-9-]/g, "")
+          .slice(0, 40) || "untitled-board";
+      const date = new Date().toISOString().slice(0, 10);
+      const payload = JSON.stringify(
+        {
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          boardName,
+          nodes,
+          connections,
+        },
+        null,
+        2,
+      );
+      const blob = new Blob([payload], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${slug}-${date}.dnkrm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setToast({ msg: "Board saved", variant: "success" });
+    } catch {
+      setToast({ msg: "Save failed", variant: "error" });
+    }
+  }, [nodes, connections, boardName]);
+
+  saveBoardRef.current = saveBoard;
+
+  const onDenkraumFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      e.target.value = "";
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target?.result as string);
+          if (!Array.isArray(data.nodes) || !Array.isArray(data.connections))
+            throw new Error("bad format");
+          setNodes(data.nodes);
+          setConnections(data.connections);
+          setSelected(null);
+          setSelectedIds(new Set());
+          const maxId = (data.nodes as CanvasNode[]).reduce(
+            (m: number, n: CanvasNode) => Math.max(m, n.id),
+            -1,
+          );
+          if (maxId >= idCounterRef.current) idCounterRef.current = maxId + 1;
+          if (typeof data.boardName === "string" && data.boardName.trim()) {
+            const name = data.boardName.trim();
+            setBoardName(name);
+            localStorage.setItem(LS_BOARD_NAME, name);
+          }
+          setToast({ msg: "Board loaded", variant: "success" });
+        } catch {
+          setToast({ msg: "Invalid .dnkrm file", variant: "error" });
+        }
+      };
+      reader.readAsText(file);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2800);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const addNode = useCallback((cx: number, cy: number, type: NodeType) => {
     const isText = type === "text";
@@ -175,11 +530,11 @@ export default function Canvas() {
           : isDiamond
             ? 100
             : 80;
-    const maxExistingId =
-      nodeMapRef.current.size > 0 ? Math.max(...nodeMapRef.current.keys()) : -1;
-    if (idCounter <= maxExistingId) setIdCounter(maxExistingId + 1);
-    const newId = idCounter;
-    setIdCounter(idCounter + 1);
+    const maxExistingId = getMaxNodeId(nodeMapRef.current);
+    if (idCounterRef.current <= maxExistingId)
+      idCounterRef.current = maxExistingId + 1;
+    const newId = idCounterRef.current;
+    idCounterRef.current += 1;
 
     const TYPE_LABEL: Partial<Record<NodeType, string>> = {
       block: "Block",
@@ -253,13 +608,11 @@ export default function Canvas() {
           const aspect = img.naturalWidth / img.naturalHeight;
           const w = 300;
           const h = Math.round(w / aspect);
-          const maxExistingId =
-            nodeMapRef.current.size > 0
-              ? Math.max(...nodeMapRef.current.keys())
-              : -1;
-          if (idCounter <= maxExistingId) setIdCounter(maxExistingId + 1);
-          const newId = idCounter;
-          setIdCounter(idCounter + 1);
+          const maxExistingId = getMaxNodeId(nodeMapRef.current);
+          if (idCounterRef.current <= maxExistingId)
+            idCounterRef.current = maxExistingId + 1;
+          const newId = idCounterRef.current;
+          idCounterRef.current += 1;
           setNodes((prev) => [
             ...prev,
             {
@@ -313,13 +666,11 @@ export default function Canvas() {
         if (textFileContent == null) return;
         const w = 200;
         const h = 60;
-        const maxExistingId =
-          nodeMapRef.current.size > 0
-            ? Math.max(...nodeMapRef.current.keys())
-            : -1;
-        if (idCounter <= maxExistingId) setIdCounter(maxExistingId + 1);
-        const newId = idCounter;
-        setIdCounter(idCounter + 1);
+        const maxExistingId = getMaxNodeId(nodeMapRef.current);
+        if (idCounterRef.current <= maxExistingId)
+          idCounterRef.current = maxExistingId + 1;
+        const newId = idCounterRef.current;
+        idCounterRef.current += 1;
         setNodes((prev) => [
           ...prev,
           {
@@ -404,6 +755,9 @@ export default function Canvas() {
     void (async () => {
       try {
         // ① localStorage (synchronous)
+        const savedBoardName = localStorage.getItem(LS_BOARD_NAME);
+        if (savedBoardName) setBoardName(savedBoardName);
+
         const rawConns = localStorage.getItem(LS_CONNECTIONS);
         if (rawConns) {
           const seen = new Set<string>();
@@ -430,7 +784,7 @@ export default function Canvas() {
             }),
           }));
           const maxId = loadedNodes.reduce((m, n) => Math.max(m, n.id), -1);
-          if (maxId >= idCounter) setIdCounter(maxId + 1);
+          if (maxId >= idCounterRef.current) idCounterRef.current = maxId + 1;
 
           // ② IndexedDB (async) — merge textFileContent / imageUrl back in
           try {
@@ -486,6 +840,7 @@ export default function Canvas() {
         );
         localStorage.setItem(LS_NODES, JSON.stringify(nodesToSave));
         localStorage.setItem(LS_CONNECTIONS, JSON.stringify(connections));
+        localStorage.setItem(LS_BOARD_NAME, boardName);
       } catch (err) {
         if (
           err instanceof DOMException &&
@@ -493,7 +848,7 @@ export default function Canvas() {
             err.name === "NS_ERROR_DOM_QUOTA_REACHED")
         ) {
           console.warn(
-            "[denkraum] localStorage quota exceeded — canvas not saved.",
+            "[dnkrm] localStorage quota exceeded — canvas not saved.",
           );
         }
       }
@@ -519,7 +874,7 @@ export default function Canvas() {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [nodes, connections, hydrated]);
+  }, [nodes, connections, boardName, hydrated]);
 
   // ── Wheel ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -662,7 +1017,11 @@ export default function Canvas() {
           const node = nodeMapRef.current.get(nid);
           if (node) startPositions.set(nid, { x: node.x, y: node.y });
         }
-        multiDragging.current = { startMouseX: mx, startMouseY: my, startPositions };
+        multiDragging.current = {
+          startMouseX: mx,
+          startMouseY: my,
+          startPositions,
+        };
         e.preventDefault();
       } else {
         startNodeDrag(e, id);
@@ -689,7 +1048,6 @@ export default function Canvas() {
     [nodeMap],
   );
 
-  // ── Connect: click-to-connect ─────────────────────────────────────────────────
   const onDotClick = useCallback((e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     e.preventDefault();
@@ -810,7 +1168,6 @@ export default function Canvas() {
         }),
       );
     }
-
   }, []);
 
   const onMouseMove = useCallback(
@@ -822,6 +1179,7 @@ export default function Canvas() {
           y: (e.clientY - r.top - panRef.current.y) / zoomRef.current,
         };
       }
+
       if (
         !isPanning.current &&
         !dragging.current &&
@@ -1033,30 +1391,26 @@ export default function Canvas() {
     if (n) setCopiedNode(n);
   }, []);
 
-  const pasteNode = useCallback(
-    (cx?: number, cy?: number) => {
-      if (!copiedNode) return;
-      const maxExistingId =
-        nodeMapRef.current.size > 0
-          ? Math.max(...nodeMapRef.current.keys())
-          : -1;
-      if (idCounter <= maxExistingId) setIdCounter(maxExistingId + 1);
-      const newId = idCounter;
-      setIdCounter(idCounter + 1);
-      const tx =
-        cx !== undefined
-          ? cx - copiedNode.w / 2
-          : lastMousePosRef.current.x - copiedNode.w / 2 + 10;
-      const ty =
-        cy !== undefined
-          ? cy - copiedNode.h / 2
-          : lastMousePosRef.current.y - copiedNode.h / 2 + 10;
-      setNodes((prev) => [...prev, { ...copiedNode, id: newId, x: tx, y: ty }]);
-      setSelected(newId);
-      setContextMenu(null);
-    },
-    [copiedNode],
-  );
+  const pasteNode = useCallback((cx?: number, cy?: number) => {
+    const node = copiedNodeRef.current;
+    if (!node) return;
+    const maxExistingId = getMaxNodeId(nodeMapRef.current);
+    if (idCounterRef.current <= maxExistingId)
+      idCounterRef.current = maxExistingId + 1;
+    const newId = idCounterRef.current;
+    idCounterRef.current += 1;
+    const tx =
+      cx !== undefined
+        ? cx - node.w / 2
+        : lastMousePosRef.current.x - node.w / 2 + 10;
+    const ty =
+      cy !== undefined
+        ? cy - node.h / 2
+        : lastMousePosRef.current.y - node.h / 2 + 10;
+    setNodes((prev) => [...prev, { ...node, id: newId, x: tx, y: ty }]);
+    setSelected(newId);
+    setContextMenu(null);
+  }, []);
 
   const updateNodeField = useCallback(
     (id: number, field: "title" | "body", value: string) => {
@@ -1153,6 +1507,11 @@ export default function Canvas() {
           setFilterType("all");
         }
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        saveBoardRef.current();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === "c" && !t.isContentEditable)
         copySelected();
       if ((e.metaKey || e.ctrlKey) && e.key === "v" && !t.isContentEditable)
@@ -1166,13 +1525,10 @@ export default function Canvas() {
         const selId = selectedRef.current;
         const n = nodeMapRef.current.get(selId);
         if (n) {
-          const maxId =
-            nodeMapRef.current.size > 0
-              ? Math.max(...nodeMapRef.current.keys())
-              : -1;
-          if (idCounter <= maxId) setIdCounter(maxId + 1);
-          const newId = idCounter;
-          setIdCounter(idCounter + 1);
+          const maxId = getMaxNodeId(nodeMapRef.current);
+          if (idCounterRef.current <= maxId) idCounterRef.current = maxId + 1;
+          const newId = idCounterRef.current;
+          idCounterRef.current += 1;
           const re1 = /^Block\s+(\d+)$/;
           let maxBlockIdx1 = 0;
           for (const node of nodeMapRef.current.values())
@@ -1217,13 +1573,10 @@ export default function Canvas() {
         const selId = selectedRef.current;
         const n = nodeMapRef.current.get(selId);
         if (n) {
-          const maxId =
-            nodeMapRef.current.size > 0
-              ? Math.max(...nodeMapRef.current.keys())
-              : -1;
-          if (idCounter <= maxId) setIdCounter(maxId + 1);
-          const newId = idCounter;
-          setIdCounter(idCounter + 1);
+          const maxId = getMaxNodeId(nodeMapRef.current);
+          if (idCounterRef.current <= maxId) idCounterRef.current = maxId + 1;
+          const newId = idCounterRef.current;
+          idCounterRef.current += 1;
           const re2 = /^Block\s+(\d+)$/;
           let maxBlockIdx2 = 0;
           for (const node of nodeMapRef.current.values())
@@ -1343,7 +1696,7 @@ export default function Canvas() {
         format: [contentW, contentH],
       });
       pdf.addImage(imgData, "JPEG", 0, 0, contentW, contentH);
-      pdf.save("denkraum.pdf");
+      pdf.save("dnkrm.pdf");
     } finally {
       // Always restore canvas size in case the try block threw before cleanup
       if (canvasRef.current) {
@@ -1387,6 +1740,13 @@ export default function Canvas() {
         style={{ display: "none" }}
         onChange={onTextFileChange}
       />
+      <input
+        ref={denkraumFileInputRef}
+        type="file"
+        accept=".dnkrm,.json"
+        style={{ display: "none" }}
+        onChange={onDenkraumFileChange}
+      />
 
       {/* ── Sidebar ── */}
       <div
@@ -1400,8 +1760,7 @@ export default function Canvas() {
           background: "rgba(18,20,22,0.97)",
           backdropFilter: "blur(24px)",
           WebkitBackdropFilter: "blur(24px)",
-          borderRight: "0.5px solid rgba(255,255,255,0.12)",
-          boxShadow: "4px 0 32px rgba(0,0,0,0.3)",
+          borderRight: "0.5px solid rgba(255,255,255,0.06)",
           zIndex: 150,
           display: "flex",
           flexDirection: "column",
@@ -1410,294 +1769,536 @@ export default function Canvas() {
             "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
         }}
       >
-        {/* App name header */}
+        {/* ── Header ── */}
         <div
           style={{
-            padding: "0 10px",
             height: 58,
-            borderBottom: "0.5px solid rgba(255,255,255,0.06)",
             flexShrink: 0,
+            background: "rgba(0,0,0,0.15)",
+            borderBottom: "0.5px solid rgba(255,255,255,0.05)",
             display: "flex",
             alignItems: "center",
             justifyContent: sidebarOpen ? "space-between" : "center",
+            padding: sidebarOpen ? "0 12px 0 16px" : "0",
           }}
         >
-          {sidebarOpen && (
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 700,
-                color: "#E8E6E1",
-                letterSpacing: "-0.4px",
-                paddingLeft: 6,
-              }}
-            >
-              denkraum
-            </div>
-          )}
-          <button
-            onClick={() => setSidebarOpen((o) => !o)}
+          {/* Logo mark — always visible */}
+          <div
             style={{
-              border: "none",
-              background: "transparent",
-              color: "#6B7280",
-              cursor: "pointer",
-              fontSize: 14,
-              padding: 0,
-              borderRadius: 6,
-              lineHeight: 1,
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              width: 26,
-              height: 26,
+              gap: 9,
               flexShrink: 0,
             }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
-              (e.currentTarget as HTMLElement).style.background =
-                "rgba(255,255,255,0.07)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "#6B7280";
-              (e.currentTarget as HTMLElement).style.background = "transparent";
-            }}
           >
-            {sidebarOpen ? "‹" : "›"}
-          </button>
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 22 22"
+              fill="none"
+              style={{ flexShrink: 0 }}
+            >
+              <rect
+                x="0.5"
+                y="0.5"
+                width="21"
+                height="21"
+                rx="5"
+                stroke="rgba(255,177,98,0.3)"
+                strokeWidth="1"
+              />
+              <rect
+                x="4"
+                y="4"
+                width="14"
+                height="14"
+                rx="3"
+                fill="rgba(255,177,98,0.12)"
+              />
+              <rect
+                x="7"
+                y="7"
+                width="8"
+                height="8"
+                rx="2"
+                fill="rgba(255,177,98,0.45)"
+              />
+            </svg>
+            {sidebarOpen && (
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  letterSpacing: "2.5px",
+                  color: "#E8E6E1",
+                }}
+              >
+                DNKRM
+              </span>
+            )}
+          </div>
+
+          {/* Collapse button */}
+          {sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen((o) => !o)}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "#3A3D42",
+                cursor: "pointer",
+                fontSize: 14,
+                padding: 0,
+                borderRadius: 6,
+                lineHeight: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 26,
+                height: 26,
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "#6B7280";
+                (e.currentTarget as HTMLElement).style.background =
+                  "rgba(255,255,255,0.05)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "#3A3D42";
+                (e.currentTarget as HTMLElement).style.background =
+                  "transparent";
+              }}
+            >
+              ‹
+            </button>
+          )}
+          {!sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen((o) => !o)}
+              style={{
+                position: "absolute",
+                bottom: 16,
+                left: "50%",
+                transform: "translateX(-50%)",
+                border: "none",
+                background: "transparent",
+                color: "#3A3D42",
+                cursor: "pointer",
+                fontSize: 14,
+                padding: 0,
+                borderRadius: 6,
+                lineHeight: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 26,
+                height: 26,
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "#6B7280";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "#3A3D42";
+              }}
+            >
+              ›
+            </button>
+          )}
         </div>
 
-        {/* Scrollable body */}
+        {/* ── Scrollable body ── */}
         <div
           style={{
             flex: 1,
             overflowY: "auto",
             overflowX: "hidden",
-            padding: "6px 0 20px",
           }}
         >
-          {/* ── Boards ── */}
-          <div style={{ marginBottom: 6 }}>
-            {sidebarOpen && (
-              <div
-                style={{
-                  padding: "10px 16px 4px",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: "#6B7280",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.7px",
-                }}
-              >
-                Boards
-              </div>
-            )}
+          {/* Icon gradient defs — referenced by all node row icons */}
+          <svg
+            width="0"
+            height="0"
+            style={{ position: "absolute", pointerEvents: "none" }}
+          >
+            <defs>
+              {(
+                [
+                  "iconGradBlock",
+                  "iconGradRounded",
+                  "iconGradCircle",
+                  "iconGradOval",
+                  "iconGradDiamond",
+                  "iconGradText",
+                  "iconGradImage",
+                  "iconGradTextfile",
+                ] as string[]
+              ).map((id) => (
+                <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#2E3338" />
+                  <stop offset="100%" stopColor="#1A1E22" />
+                </linearGradient>
+              ))}
+            </defs>
+          </svg>
+
+          {/* ── BOARD section ── */}
+          {sidebarOpen && (
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: sidebarOpen ? 9 : 0,
-                padding: sidebarOpen ? "7px 12px" : "7px 0",
-                margin: "1px 8px",
-                borderRadius: 8,
-                background: "rgba(255,255,255,0.05)",
-                cursor: "default",
-                justifyContent: sidebarOpen ? "flex-start" : "center",
+                paddingTop: 18,
+                paddingBottom: 6,
+                paddingLeft: 20,
+                fontSize: 9.5,
+                fontWeight: 600,
+                letterSpacing: "1.4px",
+                color: "#3D4147",
+                textTransform: "uppercase",
               }}
             >
-              <span style={{ fontSize: 12, color: "#6B7280", flexShrink: 0 }}>
-                ◫
-              </span>
-              {sidebarOpen && (
+              Board
+            </div>
+          )}
+
+          {/* Board row */}
+          <div
+            onDoubleClick={() => {
+              if (sidebarOpen) setEditingBoardName(true);
+            }}
+            style={{
+              position: "relative",
+              height: 40,
+              display: "flex",
+              alignItems: "center",
+              cursor: sidebarOpen ? "text" : "default",
+              background:
+                "linear-gradient(to right, rgba(255,177,98,0.07), transparent)",
+              justifyContent: sidebarOpen ? "flex-start" : "center",
+            }}
+          >
+            {/* Left accent bar */}
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: 2.5,
+                height: 40,
+                background: "#FFB162",
+                borderRadius: "0 1px 1px 0",
+              }}
+            />
+
+            {/* Board icon */}
+            <div
+              style={{
+                paddingLeft: sidebarOpen ? 20 : 0,
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                style={{ display: "block" }}
+              >
+                <rect
+                  x="0.7"
+                  y="0.7"
+                  width="12.6"
+                  height="12.6"
+                  rx="2"
+                  stroke="#4B5563"
+                  strokeWidth="1.3"
+                />
+                <rect
+                  x="0.7"
+                  y="0.7"
+                  width="12.6"
+                  height="3.5"
+                  rx="2"
+                  fill="rgba(255,255,255,0.10)"
+                />
+              </svg>
+            </div>
+
+            {sidebarOpen &&
+              (editingBoardName ? (
+                <input
+                  autoFocus
+                  defaultValue={boardName}
+                  maxLength={60}
+                  onFocus={(e) => e.target.select()}
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim() || "Untitled Board";
+                    setBoardName(val);
+                    setEditingBoardName(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const val =
+                        (e.target as HTMLInputElement).value.trim() ||
+                        "Untitled Board";
+                      setBoardName(val);
+                      setEditingBoardName(false);
+                    }
+                    if (e.key === "Escape") setEditingBoardName(false);
+                    e.stopPropagation();
+                  }}
+                  style={{
+                    flex: 1,
+                    marginLeft: 10,
+                    marginRight: 12,
+                    fontSize: 12.5,
+                    fontFamily: "inherit",
+                    background: "rgba(255,255,255,0.07)",
+                    border: "none",
+                    outline: "1px solid rgba(255,177,98,0.4)",
+                    borderRadius: 5,
+                    padding: "1px 5px",
+                    color: "#E8E6E1",
+                    minWidth: 0,
+                  }}
+                />
+              ) : (
                 <>
                   <span
                     style={{
-                      fontSize: 12.5,
-                      color: "#E8E6E1",
-                      fontWeight: 500,
                       flex: 1,
+                      marginLeft: 10,
+                      fontSize: 12.5,
+                      fontWeight: 500,
+                      color: "#D4D1CB",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      minWidth: 0,
                     }}
                   >
-                    Board 1
+                    {boardName}
                   </span>
-                  <div
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      background: ACCENT,
-                      flexShrink: 0,
-                    }}
-                  />
+                  {/* Active dot with outer glow */}
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    style={{ marginRight: 20, flexShrink: 0 }}
+                  >
+                    <circle cx="8" cy="8" r="6" fill="rgba(255,177,98,0.12)" />
+                    <circle cx="8" cy="8" r="3.5" fill="#FFB162" />
+                  </svg>
                 </>
-              )}
-            </div>
+              ))}
           </div>
 
-          {/* ── Nodes ── */}
-          <div style={{ marginBottom: 6 }}>
-            {sidebarOpen && (
+          {/* Separator */}
+          <div
+            style={{
+              height: "0.5px",
+              background: "rgba(255,255,255,0.04)",
+              margin: "0",
+            }}
+          />
+
+          {/* ── NODES section ── */}
+          {sidebarOpen && (
+            <div
+              style={{
+                paddingTop: 18,
+                paddingBottom: 6,
+                paddingLeft: 20,
+                fontSize: 9.5,
+                fontWeight: 600,
+                letterSpacing: "1.4px",
+                color: "#3D4147",
+                textTransform: "uppercase",
+              }}
+            >
+              Nodes
+            </div>
+          )}
+
+          {nodes.length === 0 ? (
+            sidebarOpen ? (
               <div
-                style={{
-                  padding: "10px 16px 4px",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  color: "#6B7280",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.7px",
-                }}
+                style={{ padding: "6px 20px", fontSize: 12, color: "#3D4147" }}
               >
-                Nodes
+                No nodes yet
               </div>
-            )}
-            {nodes.length === 0 ? (
-              sidebarOpen ? (
-                <div
+            ) : null
+          ) : (
+            nodes.map((n) => (
+              <SidebarNodeItem
+                key={n.id}
+                id={n.id}
+                type={n.type}
+                label={
+                  (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() ||
+                  "Untitled"
+                }
+                defaultLabelValue={n.label ?? n.title}
+                isActive={selected === n.id}
+                isEditingSidebar={editingSidebarNodeId === n.id}
+                sidebarOpen={sidebarOpen}
+                focusNode={focusNode}
+                updateNodeLabel={updateNodeLabel}
+                setEditingSidebarNodeId={setEditingSidebarNodeId}
+              />
+            ))
+          )}
+
+          {/* Separator */}
+          <div
+            style={{
+              height: "0.5px",
+              background: "rgba(255,255,255,0.04)",
+              margin: "0",
+            }}
+          />
+
+          {/* ── Save / Load ── */}
+          {/* Save row */}
+          <button
+            title="Save board"
+            onClick={() => saveBoard()}
+            style={{
+              height: 44,
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: sidebarOpen ? 10 : 0,
+              justifyContent: sidebarOpen ? "flex-start" : "center",
+              paddingLeft: sidebarOpen ? 16 : 0,
+              paddingRight: sidebarOpen ? 16 : 0,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background =
+                "rgba(255,255,255,0.03)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = "transparent";
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              style={{ flexShrink: 0, color: "#6B7280" }}
+            >
+              <path
+                d="M2 12h10M7 2v7M4 6l3 3 3-3"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {sidebarOpen && (
+              <>
+                <span
                   style={{
-                    padding: "6px 16px",
-                    fontSize: 12,
-                    color: "#4B5563",
+                    flex: 1,
+                    textAlign: "left",
+                    fontSize: 12.5,
+                    color: "#9CA3AF",
                   }}
                 >
-                  No nodes yet
-                </div>
-              ) : null
-            ) : (
-              nodes.map((n) => {
-                const icon =
-                  n.type === "text"
-                    ? "T"
-                    : n.type === "circle"
-                      ? "○"
-                      : n.type === "oval"
-                        ? "◯"
-                        : n.type === "diamond"
-                          ? "◇"
-                          : n.type === "image"
-                            ? "▣"
-                            : n.type === "rounded"
-                              ? "▢"
-                              : n.type === "textfile"
-                                ? "📄"
-                                : "▭";
-                const label =
-                  (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() ||
-                  "Untitled";
-                const isActive = selected === n.id;
-                const isEditingSidebar = editingSidebarNodeId === n.id;
-                return (
-                  <div
-                    key={n.id}
-                    onClick={() => focusNode(n.id)}
-                    onDoubleClick={(e) => {
-                      if (!sidebarOpen) return;
-                      e.stopPropagation();
-                      setEditingSidebarNodeId(n.id);
-                    }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: sidebarOpen ? 9 : 0,
-                      padding: sidebarOpen ? "7px 12px" : "7px 0",
-                      margin: "1px 8px",
-                      borderRadius: 8,
-                      background: isActive ? `${ACCENT}1a` : "transparent",
-                      cursor: "pointer",
-                      transition: "background 0.12s",
-                      justifyContent: sidebarOpen ? "flex-start" : "center",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive)
-                        (e.currentTarget as HTMLElement).style.background =
-                          "rgba(255,255,255,0.05)";
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive)
-                        (e.currentTarget as HTMLElement).style.background =
-                          "transparent";
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: isActive ? ACCENT : "#4B5563",
-                        width: 14,
-                        textAlign: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {icon}
-                    </span>
-                    {sidebarOpen &&
-                      (isEditingSidebar ? (
-                        <input
-                          autoFocus
-                          defaultValue={n.label ?? n.title}
-                          maxLength={50}
-                          onFocus={(e) => e.target.select()}
-                          onClick={(e) => e.stopPropagation()}
-                          onBlur={(e) => {
-                            const v = e.target.value.trim();
-                            updateNodeLabel(n.id, v);
-                            setEditingSidebarNodeId(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const v = (
-                                e.target as HTMLInputElement
-                              ).value.trim();
-                              updateNodeLabel(n.id, v);
-                              setEditingSidebarNodeId(null);
-                            }
-                            if (e.key === "Escape")
-                              setEditingSidebarNodeId(null);
-                            e.stopPropagation();
-                          }}
-                          style={{
-                            flex: 1,
-                            fontSize: 12.5,
-                            fontFamily: "inherit",
-                            background: "rgba(255,255,255,0.07)",
-                            border: "none",
-                            outline: "1px solid rgba(255,177,98,0.4)",
-                            borderRadius: 5,
-                            padding: "1px 5px",
-                            color: "#E8E6E1",
-                            minWidth: 0,
-                          }}
-                        />
-                      ) : (
-                        <span
-                          style={{
-                            fontSize: 12.5,
-                            color: isActive ? "#E8E6E1" : "#9CA3AF",
-                            fontWeight: isActive ? 500 : 400,
-                            flex: 1,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {label}
-                        </span>
-                      ))}
-                  </div>
-                );
-              })
+                  Save board
+                </span>
+                <kbd
+                  style={{
+                    fontSize: 10.5,
+                    color: "#4B5563",
+                    background: "rgba(255,255,255,0.04)",
+                    border: "0.5px solid rgba(255,255,255,0.07)",
+                    borderRadius: 5,
+                    padding: "2px 7px",
+                    fontFamily: "inherit",
+                    flexShrink: 0,
+                  }}
+                >
+                  ⌘S
+                </kbd>
+              </>
             )}
-          </div>
+          </button>
 
-          {/* ── Shortcuts ── */}
+          {/* Load row */}
+          <button
+            title="Load board"
+            onClick={() => denkraumFileInputRef.current?.click()}
+            style={{
+              height: 40,
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: sidebarOpen ? 10 : 0,
+              justifyContent: sidebarOpen ? "flex-start" : "center",
+              paddingLeft: sidebarOpen ? 16 : 0,
+              paddingRight: sidebarOpen ? 16 : 0,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background =
+                "rgba(255,255,255,0.03)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = "transparent";
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              style={{ flexShrink: 0, color: "#3D4147" }}
+            >
+              <path
+                d="M2 12h10M7 9V2M4 5l3-3 3 3"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {sidebarOpen && (
+              <span
+                style={{
+                  flex: 1,
+                  textAlign: "left",
+                  fontSize: 12.5,
+                  color: "#4B5563",
+                }}
+              >
+                Load board
+              </span>
+            )}
+          </button>
+
+          {/* ── SHORTCUTS section ── */}
           {sidebarOpen && (
-            <div>
+            <>
               <div
                 style={{
-                  padding: "10px 16px 4px",
-                  fontSize: 10,
+                  paddingTop: 18,
+                  paddingBottom: 6,
+                  paddingLeft: 20,
+                  fontSize: 9.5,
                   fontWeight: 600,
-                  color: "#6B7280",
+                  letterSpacing: "1.4px",
+                  color: "#3D4147",
                   textTransform: "uppercase",
-                  letterSpacing: "0.7px",
                 }}
               >
                 Shortcuts
@@ -1716,24 +2317,23 @@ export default function Canvas() {
                 <div
                   key={kbd}
                   style={{
+                    height: 28,
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "5px 16px",
-                    gap: 8,
+                    padding: "0 16px",
+                    gap: 10,
                   }}
                 >
                   <kbd
                     style={{
                       fontSize: 10.5,
-                      color: "#9CA3AF",
-                      background: "rgba(255,255,255,0.07)",
-                      border: "0.5px solid rgba(255,255,255,0.08)",
+                      color: "#6B7280",
+                      background: "rgba(255,255,255,0.04)",
+                      border: "0.5px solid rgba(255,255,255,0.07)",
                       borderRadius: 5,
-                      padding: "2px 6px",
+                      padding: "2px 7px",
                       fontFamily: "inherit",
                       flexShrink: 0,
-                      letterSpacing: "-0.1px",
                     }}
                   >
                     {kbd}
@@ -1741,17 +2341,53 @@ export default function Canvas() {
                   <span
                     style={{
                       fontSize: 11.5,
-                      color: "#6B7280",
-                      textAlign: "right",
-                      lineHeight: 1.3,
+                      color: "#3D4147",
                     }}
                   >
                     {desc}
                   </span>
                 </div>
               ))}
-            </div>
+            </>
           )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div
+          style={{
+            height: 52,
+            flexShrink: 0,
+            background: "rgba(0,0,0,0.2)",
+            borderTop: "0.5px solid rgba(255,255,255,0.05)",
+            padding: "0 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: sidebarOpen ? "space-between" : "center",
+          }}
+        >
+          {sidebarOpen && (
+            <span style={{ fontSize: 10, color: "#2E3136" }}>
+              Canvas · {nodes.length} nodes
+            </span>
+          )}
+          <div
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.05)",
+              border: "0.5px solid rgba(255,255,255,0.08)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 11,
+              fontWeight: 600,
+              color: "#4B5563",
+              flexShrink: 0,
+            }}
+          >
+            A
+          </div>
         </div>
       </div>
 
@@ -1769,7 +2405,7 @@ export default function Canvas() {
           borderRadius: 16,
           padding: "6px 10px",
           display: "flex",
-          gap: 4,
+          gap: 8,
           alignItems: "center",
           boxShadow: "0 2px 24px rgba(0,0,0,0.3)",
           zIndex: 201,
@@ -1778,121 +2414,18 @@ export default function Canvas() {
         {/* ── Shape insert buttons ── */}
         {(
           [
-            {
-              type: "block" as NodeType,
-              label: "Block",
-              icon: (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="6" width="18" height="12" rx="1" />
-                </svg>
-              ),
-            },
-            {
-              type: "rounded" as NodeType,
-              label: "Area (rounded)",
-              icon: (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="5" width="18" height="14" rx="4" />
-                </svg>
-              ),
-            },
-            {
-              type: "circle" as NodeType,
-              label: "Circle",
-              icon: (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="9" />
-                </svg>
-              ),
-            },
-            {
-              type: "oval" as NodeType,
-              label: "Oval",
-              icon: (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <ellipse cx="12" cy="12" rx="9" ry="6" />
-                </svg>
-              ),
-            },
-            {
-              type: "diamond" as NodeType,
-              label: "Diamond",
-              icon: (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polygon points="12,3 21,12 12,21 3,12" />
-                </svg>
-              ),
-            },
-            {
-              type: "text" as NodeType,
-              label: "Free Text",
-              icon: (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="4" y1="7" x2="20" y2="7" />
-                  <line x1="12" y1="7" x2="12" y2="21" />
-                  <line x1="8" y1="21" x2="16" y2="21" />
-                </svg>
-              ),
-            },
-          ] as { type: NodeType; icon: React.ReactNode; label: string }[]
-        ).map(({ type, icon, label }) => (
-          <button
+            { type: "block" as NodeType, label: "Block" },
+            { type: "rounded" as NodeType, label: "Area" },
+            { type: "circle" as NodeType, label: "Circle" },
+            { type: "oval" as NodeType, label: "Oval" },
+            { type: "diamond" as NodeType, label: "Diamond" },
+            { type: "text" as NodeType, label: "Text" },
+          ] as { type: NodeType; label: string }[]
+        ).map(({ type, label }) => (
+          <ShapeButton
             key={type}
-            title={label}
+            label={label}
+            isActive={activeShapeType === type}
             onClick={() => {
               if (!canvasRef.current) return;
               const cx =
@@ -1901,41 +2434,18 @@ export default function Canvas() {
               const cy =
                 (canvasRef.current.clientHeight / 2 - panRef.current.y) /
                 zoomRef.current;
+              setActiveShapeType(type);
               addNode(cx, cy, type);
             }}
-            style={{
-              width: 28,
-              height: 28,
-              border: "none",
-              background: "transparent",
-              color: "#9CA3AF",
-              cursor: "pointer",
-              fontSize: 14,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 7,
-              padding: 0,
-              fontFamily: "inherit",
-              transition: "color 0.12s, background 0.12s",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
-              (e.currentTarget as HTMLElement).style.background =
-                "rgba(255,255,255,0.07)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
-              (e.currentTarget as HTMLElement).style.background = "transparent";
-            }}
           >
-            {icon}
-          </button>
+            {(stroke, active) => renderShapeIcon(type, stroke, active)}
+          </ShapeButton>
         ))}
 
         {/* Image insert button */}
-        <button
-          title="Insert Image"
+        <ShapeButton
+          label="Insert Image"
+          isActive={false}
           onClick={() => {
             if (!canvasRef.current) return;
             const cx =
@@ -1946,49 +2456,14 @@ export default function Canvas() {
               zoomRef.current;
             handleImageInsert(cx, cy);
           }}
-          style={{
-            width: 28,
-            height: 28,
-            border: "none",
-            background: "transparent",
-            color: "#9CA3AF",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 7,
-            padding: 0,
-            transition: "color 0.12s, background 0.12s",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
-            (e.currentTarget as HTMLElement).style.background =
-              "rgba(255,255,255,0.07)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
-            (e.currentTarget as HTMLElement).style.background = "transparent";
-          }}
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <polyline points="21 15 16 10 5 21" />
-          </svg>
-        </button>
+          {(stroke, active) => renderShapeIcon("image", stroke, active)}
+        </ShapeButton>
 
         {/* Text file insert button */}
-        <button
-          title="Insert Text File"
+        <ShapeButton
+          label="Insert Text File"
+          isActive={false}
           onClick={() => {
             if (!canvasRef.current) return;
             const cx =
@@ -1999,47 +2474,9 @@ export default function Canvas() {
               zoomRef.current;
             handleTextFileInsert(cx, cy);
           }}
-          style={{
-            width: 28,
-            height: 28,
-            border: "none",
-            background: "transparent",
-            color: "#9CA3AF",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 7,
-            padding: 0,
-            transition: "color 0.12s, background 0.12s",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
-            (e.currentTarget as HTMLElement).style.background =
-              "rgba(255,255,255,0.07)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
-            (e.currentTarget as HTMLElement).style.background = "transparent";
-          }}
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
-            <polyline points="10 9 9 9 8 9" />
-          </svg>
-        </button>
+          {(stroke, active) => renderShapeIcon("textfile", stroke, active)}
+        </ShapeButton>
 
         {/* Divider */}
         <div
@@ -2455,7 +2892,10 @@ export default function Canvas() {
               pointerEvents: "none",
             }}
           >
-            <g transform="translate(5000, 5000)" style={{ pointerEvents: "auto" }}>
+            <g
+              transform="translate(5000, 5000)"
+              style={{ pointerEvents: "auto" }}
+            >
               {connections.map((c) => {
                 const fn = nodeMap.get(c.from);
                 const tn = nodeMap.get(c.to);
@@ -3385,6 +3825,72 @@ export default function Canvas() {
           ? "Click any node to connect · Esc to cancel"
           : "Right-click → Shapes & Images · Click dot → select target to connect · Pinch / Ctrl+Scroll = Zoom"}
       </div>
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div
+          className="toast"
+          style={{
+            position: "fixed",
+            bottom: 28,
+            left: sidebarW + 16,
+            background:
+              toast.variant === "success"
+                ? "rgba(30,40,30,0.97)"
+                : "rgba(40,22,22,0.97)",
+            border:
+              toast.variant === "success"
+                ? "0.5px solid rgba(100,200,100,0.2)"
+                : "0.5px solid rgba(255,100,100,0.2)",
+            borderRadius: 10,
+            padding: "8px 14px",
+            fontSize: 12.5,
+            color: toast.variant === "success" ? "#86EFAC" : "#FCA5A5",
+            boxShadow: "0 2px 16px rgba(0,0,0,0.4)",
+            zIndex: 500,
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            pointerEvents: "none",
+          }}
+        >
+          {toast.variant === "success" ? (
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <circle
+                cx="6.5"
+                cy="6.5"
+                r="6"
+                stroke="#86EFAC"
+                strokeWidth="1.2"
+              />
+              <path
+                d="M3.5 6.5l2 2 4-4"
+                stroke="#86EFAC"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <circle
+                cx="6.5"
+                cy="6.5"
+                r="6"
+                stroke="#FCA5A5"
+                strokeWidth="1.2"
+              />
+              <path
+                d="M6.5 4v3.5M6.5 9.2v.3"
+                stroke="#FCA5A5"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }
