@@ -44,6 +44,44 @@ function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+// ── .dnkrm file validation ────────────────────────────────────────────────────
+
+const VALID_NODE_TYPES = new Set<string>([
+  "block", "text", "circle", "oval", "diamond", "rounded", "image", "textfile",
+]);
+
+function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
+  if (!raw || typeof raw !== "object") return null;
+  const n = raw as Record<string, unknown>;
+  if (typeof n.id !== "number" || !Number.isFinite(n.id)) return null;
+  if (typeof n.x !== "number" || !Number.isFinite(n.x)) return null;
+  if (typeof n.y !== "number" || !Number.isFinite(n.y)) return null;
+  if (typeof n.w !== "number" || !Number.isFinite(n.w) || n.w < 1) return null;
+  if (typeof n.h !== "number" || !Number.isFinite(n.h) || n.h < 1) return null;
+  if (typeof n.type !== "string" || !VALID_NODE_TYPES.has(n.type)) return null;
+  return {
+    id: Math.trunc(n.id as number),
+    x: n.x as number,
+    y: n.y as number,
+    w: Math.max(10, n.w as number),
+    h: Math.max(10, n.h as number),
+    type: n.type as NodeType,
+    title: typeof n.title === "string" ? n.title : "",
+    body: typeof n.body === "string" ? n.body : "",
+    color: typeof n.color === "string" ? n.color : "#1D5C50",
+    ...(typeof n.fontSize === "number" && Number.isFinite(n.fontSize) && { fontSize: n.fontSize as number }),
+    ...(typeof n.label === "string" && { label: n.label }),
+    ...(typeof n.imageUrl === "string" && { imageUrl: n.imageUrl }),
+    ...(typeof n.textFileContent === "string" && { textFileContent: n.textFileContent }),
+    ...(typeof n.textFileName === "string" && { textFileName: n.textFileName }),
+    ...(typeof n.bold === "boolean" && { bold: n.bold }),
+    ...(typeof n.italic === "boolean" && { italic: n.italic }),
+    ...(typeof n.underline === "boolean" && { underline: n.underline }),
+    ...(typeof n.textColor === "string" && { textColor: n.textColor }),
+    ...(typeof n.excludeFromPresentation === "boolean" && { excludeFromPresentation: n.excludeFromPresentation }),
+  };
+}
+
 // ── Toolbar helpers ───────────────────────────────────────────────────────────
 
 function renderShapeIcon(
@@ -329,12 +367,16 @@ const ConnectionLine = memo(function ConnectionLine({
     cpOffset = Math.max(40, dist * 0.4);
     if (dx >= 0) {
       // target is to the right
-      x1 = fromNode.x + fromNode.w; y1 = fcy;
-      x2 = toNode.x;                y2 = tcy;
+      x1 = fromNode.x + fromNode.w;
+      y1 = fcy;
+      x2 = toNode.x;
+      y2 = tcy;
     } else {
       // target is to the left
-      x1 = fromNode.x; y1 = fcy;
-      x2 = toNode.x + toNode.w; y2 = tcy;
+      x1 = fromNode.x;
+      y1 = fcy;
+      x2 = toNode.x + toNode.w;
+      y2 = tcy;
     }
   } else {
     // Vertical dominant: use top/bottom edges
@@ -342,12 +384,16 @@ const ConnectionLine = memo(function ConnectionLine({
     cpOffset = Math.max(40, dist * 0.4);
     if (dy >= 0) {
       // target is below
-      x1 = fcx; y1 = fromNode.y + fromNode.h;
-      x2 = tcx; y2 = toNode.y;
+      x1 = fcx;
+      y1 = fromNode.y + fromNode.h;
+      x2 = tcx;
+      y2 = toNode.y;
     } else {
       // target is above
-      x1 = fcx; y1 = fromNode.y;
-      x2 = tcx; y2 = toNode.y + toNode.h;
+      x1 = fcx;
+      y1 = fromNode.y;
+      x2 = tcx;
+      y2 = toNode.y + toNode.h;
     }
   }
 
@@ -356,13 +402,17 @@ const ConnectionLine = memo(function ConnectionLine({
   if (Math.abs(dx) >= Math.abs(dy)) {
     // Horizontal: offset control points along x
     const sign = dx >= 0 ? 1 : -1;
-    c1x = x1 + sign * cpOffset; c1y = y1;
-    c2x = x2 - sign * cpOffset; c2y = y2;
+    c1x = x1 + sign * cpOffset;
+    c1y = y1;
+    c2x = x2 - sign * cpOffset;
+    c2y = y2;
   } else {
     // Vertical: offset control points along y
     const sign = dy >= 0 ? 1 : -1;
-    c1x = x1; c1y = y1 + sign * cpOffset;
-    c2x = x2; c2y = y2 - sign * cpOffset;
+    c1x = x1;
+    c1y = y1 + sign * cpOffset;
+    c2x = x2;
+    c2y = y2 - sign * cpOffset;
   }
 
   const d = `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
@@ -494,6 +544,7 @@ export default function Canvas() {
   const lastMousePosRef = useRef({ x: 0, y: 0 });
   const idCounterRef = useRef(3);
   const copiedNodeRef = useRef<CanvasNode | null>(null);
+  const connectionsRef = useRef(connections);
 
   // ── rAF-based interaction refs ────────────────────────────────────────────────
   // Mirror latest state into refs so mouse handlers never capture stale closures
@@ -513,6 +564,7 @@ export default function Canvas() {
   connectDragRef.current = connectDrag;
   selectedIdsRef.current = selectedIds;
   copiedNodeRef.current = copiedNode;
+  connectionsRef.current = connections;
   presentationOrderRef.current = presentationOrder;
   presentationIndexRef.current = presentationIndex;
   isPresentingRef.current = isPresenting;
@@ -529,7 +581,9 @@ export default function Canvas() {
 
   // Force-directed layout animation
   const layoutRafRef = useRef<number | null>(null);
-  const layoutFromRef = useRef<Map<number, { x: number; y: number }> | null>(null);
+  const layoutFromRef = useRef<Map<number, { x: number; y: number }> | null>(
+    null,
+  );
 
   // Pending values accumulated during a mousemove burst; applied once per frame
   const rafRef = useRef<number | null>(null);
@@ -571,8 +625,12 @@ export default function Canvas() {
       const a = document.createElement("a");
       a.href = url;
       a.download = `${slug}-${date}.dnkrm`;
+      a.style.display = "none";
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      // Revoke after a short delay so the browser has time to start the download
+      setTimeout(() => URL.revokeObjectURL(url), 100);
       setToast({ msg: "Board saved", variant: "success" });
     } catch {
       setToast({ msg: "Save failed", variant: "error" });
@@ -592,8 +650,34 @@ export default function Canvas() {
           const data = JSON.parse(ev.target?.result as string);
           if (!Array.isArray(data.nodes) || !Array.isArray(data.connections))
             throw new Error("bad format");
-          setNodes(data.nodes);
-          setConnections(data.connections);
+
+          // Validate and sanitize every node — reject fields that are missing,
+          // wrong type, non-finite, or reference an unknown node type.
+          const loadedNodes: CanvasNode[] = [];
+          for (const raw of data.nodes as unknown[]) {
+            const sanitized = sanitizeLoadedNode(raw);
+            if (sanitized) loadedNodes.push(sanitized);
+          }
+          if (loadedNodes.length === 0 && (data.nodes as unknown[]).length > 0)
+            throw new Error("bad format");
+
+          // Validate and deduplicate connections — must reference known node IDs.
+          const validNodeIds = new Set(loadedNodes.map((n) => n.id));
+          const seenConns = new Set<string>();
+          const loadedConns: Connection[] = [];
+          for (const c of data.connections as unknown[]) {
+            if (!c || typeof c !== "object") continue;
+            const { from, to } = c as Record<string, unknown>;
+            if (typeof from !== "number" || typeof to !== "number") continue;
+            if (!validNodeIds.has(from) || !validNodeIds.has(to)) continue;
+            const key = `${from}→${to}`;
+            if (seenConns.has(key)) continue;
+            seenConns.add(key);
+            loadedConns.push({ from, to });
+          }
+
+          setNodes(loadedNodes);
+          setConnections(loadedConns);
           setSelected(null);
           setSelectedIds(new Set());
           setColorPicker(null);
@@ -602,7 +686,7 @@ export default function Canvas() {
           setConnectDrag(null);
           setContextMenu(null);
           setSnapGuides({});
-          const maxId = (data.nodes as CanvasNode[]).reduce(
+          const maxId = loadedNodes.reduce(
             (m: number, n: CanvasNode) => Math.max(m, n.id),
             -1,
           );
@@ -612,28 +696,23 @@ export default function Canvas() {
             setBoardName(name);
             localStorage.setItem(LS_BOARD_NAME, name);
           }
-          const fileNodeIds = new Set<number>(
-            (data.nodes as CanvasNode[]).map((n: CanvasNode) => n.id),
-          );
           if (Array.isArray(data.presentationOrder)) {
             const parsedSet = new Set<number>(
               data.presentationOrder as number[],
             );
-            const missing = (data.nodes as CanvasNode[])
-              .filter((n: CanvasNode) => !parsedSet.has(n.id))
-              .sort((a: CanvasNode, b: CanvasNode) => a.id - b.id)
-              .map((n: CanvasNode) => n.id);
+            const missing = loadedNodes
+              .filter((n) => !parsedSet.has(n.id))
+              .sort((a, b) => a.id - b.id)
+              .map((n) => n.id);
             setPresentationOrder([
               ...(data.presentationOrder as number[]).filter((id: number) =>
-                fileNodeIds.has(id),
+                validNodeIds.has(id),
               ),
               ...missing,
             ]);
           } else {
             setPresentationOrder(
-              [...(data.nodes as CanvasNode[])]
-                .sort((a: CanvasNode, b: CanvasNode) => a.id - b.id)
-                .map((n: CanvasNode) => n.id),
+              [...loadedNodes].sort((a, b) => a.id - b.id).map((n) => n.id),
             );
           }
           setToast({ msg: "Board loaded", variant: "success" });
@@ -1578,14 +1657,19 @@ export default function Canvas() {
   );
 
   const runForceLayout = useCallback(() => {
-    if (nodes.length <= 1) return;
+    // Read current state from refs — avoids capturing nodes/connections as
+    // closure deps, which would cause this callback to be recreated on every
+    // drag frame and every animation frame.
+    const currentNodes = Array.from(nodeMapRef.current.values());
+    const currentConnections = connectionsRef.current;
+    if (currentNodes.length <= 1) return;
 
-    const targets = computeForceLayout(nodes, connections);
+    const targets = computeForceLayout(currentNodes, currentConnections);
     const targetMap = new Map(targets.map((t) => [t.id, t]));
 
     // Capture starting positions (current interpolated state if mid-animation)
     const from = new Map(
-      nodes.map((n) => {
+      currentNodes.map((n) => {
         const mid = layoutFromRef.current?.get(n.id);
         return [n.id, mid ?? { x: n.x, y: n.y }];
       }),
@@ -1614,13 +1698,13 @@ export default function Canvas() {
             return { ...n, x: f.x + (tgt.newX - f.x) * e, y: f.y + (tgt.newY - f.y) * e };
           }),
         );
-        // Update layoutFromRef to track current interpolated positions for mid-animation interrupts
+        // Track interpolated positions using from+targetMap (both stable in this
+        // closure), so a mid-animation interrupt reads the correct current position.
         layoutFromRef.current = new Map(
-          nodes.map((n) => {
-            const f = from.get(n.id);
-            const tgt = targetMap.get(n.id);
-            if (!f || !tgt) return [n.id, { x: n.x, y: n.y }];
-            return [n.id, { x: f.x + (tgt.newX - f.x) * e, y: f.y + (tgt.newY - f.y) * e }];
+          Array.from(from.entries()).map(([id, f]) => {
+            const tgt = targetMap.get(id);
+            if (!tgt) return [id, f];
+            return [id, { x: f.x + (tgt.newX - f.x) * e, y: f.y + (tgt.newY - f.y) * e }];
           }),
         );
         layoutRafRef.current = requestAnimationFrame(tick);
@@ -1637,7 +1721,7 @@ export default function Canvas() {
     };
 
     layoutRafRef.current = requestAnimationFrame(tick);
-  }, [nodes, connections, computeForceLayout]);
+  }, [computeForceLayout]);
 
   const deleteSelected = useCallback(() => {
     if (selectedIdsRef.current.size > 0) {
@@ -3433,7 +3517,10 @@ export default function Canvas() {
             height: 28,
             border: "none",
             background: "transparent",
-            color: nodes.length <= 1 ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.85)",
+            color:
+              nodes.length <= 1
+                ? "rgba(255,255,255,0.25)"
+                : "rgba(255,255,255,0.85)",
             cursor: nodes.length <= 1 ? "default" : "pointer",
             display: "flex",
             alignItems: "center",
@@ -3445,17 +3532,28 @@ export default function Canvas() {
           onMouseEnter={(e) => {
             if (nodes.length > 1) {
               (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
-              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.07)";
+              (e.currentTarget as HTMLElement).style.background =
+                "rgba(255,255,255,0.07)";
             }
           }}
           onMouseLeave={(e) => {
             if (nodes.length > 1) {
-              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
+              (e.currentTarget as HTMLElement).style.color =
+                "rgba(255,255,255,0.85)";
               (e.currentTarget as HTMLElement).style.background = "transparent";
             }
           }}
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <circle cx="5" cy="5" r="2" />
             <circle cx="19" cy="5" r="2" />
             <circle cx="12" cy="19" r="2" />
