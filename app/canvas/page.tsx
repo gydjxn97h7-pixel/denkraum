@@ -310,12 +310,62 @@ const ConnectionLine = memo(function ConnectionLine({
   onHoverLeave: (key: string) => void;
   onDelete: (from: number, to: number) => void;
 }) {
-  const x1 = fromNode.x + fromNode.w;
-  const y1 = fromNode.y + fromNode.h / 2;
-  const x2 = toNode.x;
-  const y2 = toNode.y + toNode.h / 2;
-  const cxm = (x1 + x2) / 2;
-  const d = `M ${x1} ${y1} C ${cxm} ${y1}, ${cxm} ${y2}, ${x2} ${y2}`;
+  // Centers of each node
+  const fcx = fromNode.x + fromNode.w / 2;
+  const fcy = fromNode.y + fromNode.h / 2;
+  const tcx = toNode.x + toNode.w / 2;
+  const tcy = toNode.y + toNode.h / 2;
+
+  const dx = tcx - fcx;
+  const dy = tcy - fcy;
+
+  // Pick exit/entry edges based on which axis dominates center-to-center
+  let x1: number, y1: number, x2: number, y2: number;
+  let cpOffset: number;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // Horizontal dominant: use right/left edges
+    const dist = Math.abs(dx);
+    cpOffset = Math.max(40, dist * 0.4);
+    if (dx >= 0) {
+      // target is to the right
+      x1 = fromNode.x + fromNode.w; y1 = fcy;
+      x2 = toNode.x;                y2 = tcy;
+    } else {
+      // target is to the left
+      x1 = fromNode.x; y1 = fcy;
+      x2 = toNode.x + toNode.w; y2 = tcy;
+    }
+  } else {
+    // Vertical dominant: use top/bottom edges
+    const dist = Math.abs(dy);
+    cpOffset = Math.max(40, dist * 0.4);
+    if (dy >= 0) {
+      // target is below
+      x1 = fcx; y1 = fromNode.y + fromNode.h;
+      x2 = tcx; y2 = toNode.y;
+    } else {
+      // target is above
+      x1 = fcx; y1 = fromNode.y;
+      x2 = tcx; y2 = toNode.y + toNode.h;
+    }
+  }
+
+  // Control points: tangent perpendicular to the chosen edge
+  let c1x: number, c1y: number, c2x: number, c2y: number;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // Horizontal: offset control points along x
+    const sign = dx >= 0 ? 1 : -1;
+    c1x = x1 + sign * cpOffset; c1y = y1;
+    c2x = x2 - sign * cpOffset; c2y = y2;
+  } else {
+    // Vertical: offset control points along y
+    const sign = dy >= 0 ? 1 : -1;
+    c1x = x1; c1y = y1 + sign * cpOffset;
+    c2x = x2; c2y = y2 - sign * cpOffset;
+  }
+
+  const d = `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
   return (
     <g
       style={{
@@ -476,6 +526,10 @@ export default function Canvas() {
     pan: { x: number; y: number };
     zoom: number;
   } | null>(null);
+
+  // Force-directed layout animation
+  const layoutRafRef = useRef<number | null>(null);
+  const layoutFromRef = useRef<Map<number, { x: number; y: number }> | null>(null);
 
   // Pending values accumulated during a mousemove burst; applied once per frame
   const rafRef = useRef<number | null>(null);
@@ -1466,100 +1520,124 @@ export default function Canvas() {
     setNodes((prev) => sendToBack(prev, id));
   }, []);
 
-  // ── Force-directed layout computation (step 2 — logging only, no setNodes yet) ─
-  const computeForceLayout = useCallback(() => {
-    if (nodes.length === 0) return;
+  // ── Force-directed layout ──────────────────────────────────────────────────
+  const computeForceLayout = useCallback(
+    (
+      sourceNodes: CanvasNode[],
+      sourceConnections: Connection[],
+    ): Array<{ id: number; newX: number; newY: number }> => {
+      const oldCx =
+        sourceNodes.reduce((s, n) => s + n.x + n.w / 2, 0) / sourceNodes.length;
+      const oldCy =
+        sourceNodes.reduce((s, n) => s + n.y + n.h / 2, 0) / sourceNodes.length;
 
-    // ── 1. Record old centroid so we can re-anchor after simulation ──────────
-    const oldCx = nodes.reduce((s, n) => s + n.x + n.w / 2, 0) / nodes.length;
-    const oldCy = nodes.reduce((s, n) => s + n.y + n.h / 2, 0) / nodes.length;
+      type SimNode = { id: number; x: number; y: number; w: number; h: number };
+      const simNodes: SimNode[] = sourceNodes.map((n) => ({
+        id: n.id,
+        x: n.x + n.w / 2,
+        y: n.y + n.h / 2,
+        w: n.w,
+        h: n.h,
+      }));
+      const idToSim = new Map(simNodes.map((n) => [n.id, n]));
 
-    // ── 2. Build d3-force node objects, seeding with current canvas position ─
-    // d3 mutates these objects in-place — use plain objects, not the CanvasNode refs.
-    type SimNode = { id: number; x: number; y: number; w: number; h: number };
-    const simNodes: SimNode[] = nodes.map((n) => ({
-      id: n.id,
-      x: n.x + n.w / 2, // d3 works from center point
-      y: n.y + n.h / 2,
-      w: n.w,
-      h: n.h,
-    }));
-    const idToSim = new Map(simNodes.map((n) => [n.id, n]));
+      const simLinks = sourceConnections
+        .filter((c) => idToSim.has(c.from) && idToSim.has(c.to))
+        .map((c) => ({ source: c.from, target: c.to }));
 
-    // ── 3. Build link array (skip any dangling references) ───────────────────
-    const simLinks = connections
-      .filter((c) => idToSim.has(c.from) && idToSim.has(c.to))
-      .map((c) => ({ source: c.from, target: c.to }));
+      const sim = forceSimulation<SimNode>(simNodes)
+        .force(
+          "link",
+          forceLink<SimNode, { source: number; target: number }>(simLinks)
+            .id((d) => d.id)
+            .distance(180)
+            .strength(0.8),
+        )
+        .force("charge", forceManyBody<SimNode>().strength(-400))
+        .force("center", forceCenter<SimNode>(0, 0))
+        .force(
+          "collide",
+          forceCollide<SimNode>((d) => Math.hypot(d.w, d.h) / 2 + 20),
+        )
+        .stop();
 
-    // ── 4. Run simulation synchronously ──────────────────────────────────────
-    // Use half-diagonal of each node as its collision radius so large nodes
-    // (images, text files) get proportionally more space than small blocks.
-    const sim = forceSimulation<SimNode>(simNodes)
-      .force(
-        "link",
-        forceLink<SimNode, { source: number; target: number }>(simLinks)
-          .id((d) => d.id)
-          .distance(180)
-          .strength(0.8),
-      )
-      .force("charge", forceManyBody<SimNode>().strength(-400))
-      .force("center", forceCenter<SimNode>(0, 0))
-      .force(
-        "collide",
-        forceCollide<SimNode>((d) => Math.hypot(d.w, d.h) / 2 + 20),
-      )
-      .stop();
+      for (let i = 0; i < 300; i++) sim.tick();
 
-    for (let i = 0; i < 300; i++) sim.tick();
+      const newCxRaw = simNodes.reduce((s, n) => s + n.x, 0) / simNodes.length;
+      const newCyRaw = simNodes.reduce((s, n) => s + n.y, 0) / simNodes.length;
+      const dx = oldCx - newCxRaw;
+      const dy = oldCy - newCyRaw;
 
-    // ── 5. Translate back: shift so new centroid matches old centroid ─────────
-    const newCxRaw = simNodes.reduce((s, n) => s + n.x, 0) / simNodes.length;
-    const newCyRaw = simNodes.reduce((s, n) => s + n.y, 0) / simNodes.length;
-    const dx = oldCx - newCxRaw;
-    const dy = oldCy - newCyRaw;
+      return simNodes.map((sn) => ({
+        id: sn.id,
+        newX: sn.x + dx - sn.w / 2,
+        newY: sn.y + dy - sn.h / 2,
+      }));
+    },
+    [],
+  );
 
-    // Compute final canvas positions (top-left corner, not center)
-    const results = simNodes.map((sn) => ({
-      id: sn.id,
-      newX: sn.x + dx - sn.w / 2,
-      newY: sn.y + dy - sn.h / 2,
-    }));
+  const runForceLayout = useCallback(() => {
+    if (nodes.length <= 1) return;
 
-    // ── 6. Verify centroid is preserved ──────────────────────────────────────
-    const newCx =
-      results.reduce((s, r) => {
-        const n = idToSim.get(r.id)!;
-        return s + r.newX + n.w / 2;
-      }, 0) / results.length;
-    const newCy =
-      results.reduce((s, r) => {
-        const n = idToSim.get(r.id)!;
-        return s + r.newY + n.h / 2;
-      }, 0) / results.length;
+    const targets = computeForceLayout(nodes, connections);
+    const targetMap = new Map(targets.map((t) => [t.id, t]));
 
-    // ── 7. Log ───────────────────────────────────────────────────────────────
-    console.group("computeForceLayout — logging only, no setNodes");
-    console.log(
-      `Centroid  before (${oldCx.toFixed(1)}, ${oldCy.toFixed(1)})` +
-        `  →  after (${newCx.toFixed(1)}, ${newCy.toFixed(1)})`,
+    // Capture starting positions (current interpolated state if mid-animation)
+    const from = new Map(
+      nodes.map((n) => {
+        const mid = layoutFromRef.current?.get(n.id);
+        return [n.id, mid ?? { x: n.x, y: n.y }];
+      }),
     );
-    for (const r of results) {
-      const orig = nodes.find((n) => n.id === r.id)!;
-      console.log(
-        `  node ${r.id.toString().padStart(3)}` +
-          `  old (${orig.x.toFixed(0)}, ${orig.y.toFixed(0)})` +
-          `  →  new (${r.newX.toFixed(0)}, ${r.newY.toFixed(0)})`,
-      );
-    }
-    console.groupEnd();
-  }, [nodes, connections]);
 
-  // Temporary dev hook — call window.__testForceLayout() in the browser console.
-  // Remove in step 3 when wired to a real button.
-  useEffect(() => {
-    (window as unknown as Record<string, unknown>).__testForceLayout =
-      computeForceLayout;
-  }, [computeForceLayout]);
+    // Cancel any in-flight animation
+    if (layoutRafRef.current !== null) {
+      cancelAnimationFrame(layoutRafRef.current);
+      layoutRafRef.current = null;
+    }
+    layoutFromRef.current = from;
+
+    const duration = 600;
+    const start = performance.now();
+
+    const tick = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      const e = easeInOutCubic(t);
+
+      if (t < 1) {
+        setNodes((prev) =>
+          prev.map((n) => {
+            const f = from.get(n.id);
+            const tgt = targetMap.get(n.id);
+            if (!f || !tgt) return n;
+            return { ...n, x: f.x + (tgt.newX - f.x) * e, y: f.y + (tgt.newY - f.y) * e };
+          }),
+        );
+        // Update layoutFromRef to track current interpolated positions for mid-animation interrupts
+        layoutFromRef.current = new Map(
+          nodes.map((n) => {
+            const f = from.get(n.id);
+            const tgt = targetMap.get(n.id);
+            if (!f || !tgt) return [n.id, { x: n.x, y: n.y }];
+            return [n.id, { x: f.x + (tgt.newX - f.x) * e, y: f.y + (tgt.newY - f.y) * e }];
+          }),
+        );
+        layoutRafRef.current = requestAnimationFrame(tick);
+      } else {
+        setNodes((prev) =>
+          prev.map((n) => {
+            const tgt = targetMap.get(n.id);
+            return tgt ? { ...n, x: tgt.newX, y: tgt.newY } : n;
+          }),
+        );
+        layoutRafRef.current = null;
+        layoutFromRef.current = null;
+      }
+    };
+
+    layoutRafRef.current = requestAnimationFrame(tick);
+  }, [nodes, connections, computeForceLayout]);
 
   const deleteSelected = useCallback(() => {
     if (selectedIdsRef.current.size > 0) {
@@ -3332,6 +3410,58 @@ export default function Canvas() {
               Export PDF
             </>
           )}
+        </button>
+
+        {/* Divider */}
+        <div
+          style={{
+            width: "0.5px",
+            height: 16,
+            background: "rgba(255,255,255,0.1)",
+            margin: "0 4px",
+            flexShrink: 0,
+          }}
+        />
+
+        {/* Auto-arrange layout button */}
+        <button
+          title="Auto-arrange layout"
+          onClick={runForceLayout}
+          disabled={nodes.length <= 1}
+          style={{
+            width: 28,
+            height: 28,
+            border: "none",
+            background: "transparent",
+            color: nodes.length <= 1 ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.85)",
+            cursor: nodes.length <= 1 ? "default" : "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 7,
+            padding: 0,
+            transition: "color 0.12s, background 0.12s",
+          }}
+          onMouseEnter={(e) => {
+            if (nodes.length > 1) {
+              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
+              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.07)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (nodes.length > 1) {
+              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
+              (e.currentTarget as HTMLElement).style.background = "transparent";
+            }
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="5" cy="5" r="2" />
+            <circle cx="19" cy="5" r="2" />
+            <circle cx="12" cy="19" r="2" />
+            <line x1="5" y1="7" x2="12" y2="17" />
+            <line x1="19" y1="7" x2="12" y2="17" />
+          </svg>
         </button>
 
         {/* Divider */}
