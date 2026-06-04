@@ -1071,6 +1071,14 @@ export default function Canvas() {
   const nodeMapRef = useRef(nodeMap);
   nodeMapRef.current = nodeMap;
 
+  // Nodes whose excludeFromPresentation is truthy are skipped from navigation
+  const presentActiveSeq = useMemo(
+    () => presentationOrder.filter((id) => !nodeMap.get(id)?.excludeFromPresentation),
+    [presentationOrder, nodeMap],
+  );
+  const presentActiveSeqRef = useRef(presentActiveSeq);
+  presentActiveSeqRef.current = presentActiveSeq;
+
   const filterActive = filterText !== "" || filterType !== "all";
   const matchedNodeIds = useMemo(() => {
     if (filterText === "" && filterType === "all") return new Set<number>();
@@ -1571,6 +1579,21 @@ export default function Canvas() {
     [],
   );
 
+  const toggleExcludeFromPresentation = useCallback(
+    (id: number, toExclude: boolean) => {
+      const ids =
+        selectedIdsRef.current.size > 0 && selectedIdsRef.current.has(id)
+          ? selectedIdsRef.current
+          : new Set([id]);
+      setNodes((prev) =>
+        prev.map((n) =>
+          ids.has(n.id) ? { ...n, excludeFromPresentation: toExclude } : n,
+        ),
+      );
+    },
+    [],
+  );
+
   const focusNode = useCallback((id: number) => {
     const n = nodeMapRef.current.get(id);
     if (!n) return;
@@ -1706,21 +1729,21 @@ export default function Canvas() {
         }
       }
       if (isPresentingRef.current) {
-        const order = presentationOrderRef.current;
+        const seq = presentActiveSeqRef.current;
         const idx = presentationIndexRef.current;
         if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === " ") {
           e.preventDefault();
-          const next = Math.min(idx + 1, order.length - 1);
+          const next = Math.min(idx + 1, seq.length - 1);
           if (next !== idx) {
             setPresentationIndex(next);
-            centerNodeForPresentation(order[next]);
+            centerNodeForPresentation(seq[next]);
           }
         } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
           e.preventDefault();
           const prev = Math.max(idx - 1, 0);
           if (prev !== idx) {
             setPresentationIndex(prev);
-            centerNodeForPresentation(order[prev]);
+            centerNodeForPresentation(seq[prev]);
           }
         }
         return;
@@ -2583,9 +2606,9 @@ export default function Canvas() {
             {/* Present button */}
             <div style={{ padding: "12px 14px", flexShrink: 0, borderTop: "0.5px solid rgba(255,255,255,0.06)" }}>
               <button
-                disabled={presentationOrder.length === 0}
+                disabled={presentActiveSeq.length === 0}
                 onClick={() => {
-                  if (presentationOrder.length === 0) return;
+                  if (presentActiveSeq.length === 0) return;
                   prePresentState.current = { pan: panRef.current, zoom: zoomRef.current };
                   setPresentationIndex(0);
                   setIsPresenting(true);
@@ -2593,24 +2616,24 @@ export default function Canvas() {
                   setContextMenu(null);
                   setColorPicker(null);
                   setTextColorPicker(null);
-                  centerNodeForPresentation(presentationOrder[0]);
+                  centerNodeForPresentation(presentActiveSeq[0]);
                 }}
                 style={{
                   width: "100%",
                   height: 38,
                   borderRadius: 10,
                   border: "none",
-                  background: presentationOrder.length === 0 ? "rgba(241,178,74,0.35)" : "#F1B24A",
+                  background: presentActiveSeq.length === 0 ? "rgba(241,178,74,0.35)" : "#F1B24A",
                   color: "#0C2018",
                   fontSize: 13,
                   fontWeight: 600,
                   fontFamily: "inherit",
-                  cursor: presentationOrder.length === 0 ? "default" : "pointer",
+                  cursor: presentActiveSeq.length === 0 ? "default" : "pointer",
                   letterSpacing: "-0.1px",
                   transition: "opacity 0.15s",
                 }}
                 onMouseEnter={(e) => {
-                  if (presentationOrder.length > 0)
+                  if (presentActiveSeq.length > 0)
                     (e.currentTarget as HTMLElement).style.opacity = "0.88";
                 }}
                 onMouseLeave={(e) => {
@@ -3770,6 +3793,30 @@ export default function Canvas() {
                   margin: "2px 0",
                 }}
               />
+              {/* ── Exclude / Include from presentation ── */}
+              <div
+                onClick={() => {
+                  toggleExcludeFromPresentation(contextMenu.id, !n.excludeFromPresentation);
+                  setContextMenu(null);
+                }}
+                onMouseEnter={(e) => hoverMenu(e, true)}
+                onMouseLeave={(e) => hoverMenu(e, false)}
+                style={menuItem()}
+              >
+                <span style={{ width: 22, textAlign: "center", fontSize: 13 }}>
+                  {n.excludeFromPresentation ? "▷" : "⊘"}
+                </span>
+                {n.excludeFromPresentation
+                  ? "Include in presentation"
+                  : "Exclude from presentation"}
+              </div>
+              <div
+                style={{
+                  height: "0.5px",
+                  background: "rgba(255,255,255,0.10)",
+                  margin: "2px 0",
+                }}
+              />
               <div
                 onClick={() => {
                   deleteSelected();
@@ -4283,7 +4330,7 @@ export default function Canvas() {
           }}
         >
           <span style={{ color: "#F1B24A", fontWeight: 600 }}>
-            {presentationIndex + 1} / {presentationOrder.length}
+            {presentationIndex + 1} / {presentActiveSeq.length}
           </span>
           <span>← → navigate · Esc exit</span>
         </div>

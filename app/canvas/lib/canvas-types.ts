@@ -29,6 +29,7 @@ export type CanvasNode = {
   textFileContent?: string;
   textFileName?: string;
   label?: string;
+  excludeFromPresentation?: boolean;
 };
 
 export type Connection = { from: number; to: number };
