@@ -3441,6 +3441,7 @@ export default function Canvas() {
               onResizeMouseDown={onResizeMouseDown}
               dimmed={filterActive && !matchedNodeIds.has(n.id)}
               isMultiSelected={selectedIds.has(n.id)}
+              zoom={zoom}
             />
           ))}
         </div>

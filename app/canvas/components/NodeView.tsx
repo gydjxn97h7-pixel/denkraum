@@ -24,6 +24,7 @@ interface NodeViewProps {
   onResizeMouseDown: (e: React.MouseEvent, id: number) => void;
   dimmed?: boolean;
   isMultiSelected?: boolean;
+  zoom: number;
 }
 
 export const NodeView = React.memo(function NodeView({
@@ -44,6 +45,7 @@ export const NodeView = React.memo(function NodeView({
   onResizeMouseDown,
   dimmed,
   isMultiSelected,
+  zoom,
 }: NodeViewProps) {
   const isSel = selected === n.id;
   const isText = n.type === "text";
@@ -611,13 +613,24 @@ export const NodeView = React.memo(function NodeView({
         </div>
       )}
 
-      {/* Connect dots — four cardinal positions, conditional render only */}
-      {showDots &&
-        ([
-          { key: "top",    top: -19,           left: n.w / 2 - 11 },
-          { key: "bottom", top: n.h - 3,       left: n.w / 2 - 11 },
-          { key: "left",   top: n.h / 2 - 11,  left: -19 },
-          { key: "right",  top: n.h / 2 - 11,  left: n.w - 3 },
+      {/* Connect dots — constant screen size regardless of zoom.
+          All canvas-unit values are divided by zoom so that after
+          the canvas scale(zoom) transform the net on-screen size
+          stays fixed. Hit container is 40 screen px; visual dot is 22 screen px. */}
+      {showDots && (() => {
+        const z = zoom;
+        // Screen-pixel constants
+        const HIT  = 40;   // hit-area diameter (screen px)
+        const VIS  = 22;   // visible dot diameter (screen px)
+        const EDGE = 8;    // dot-center distance from node edge (screen px)
+        const hh = HIT / 2 / z;  // hit half-size in canvas units
+        const vh = VIS / 2 / z;  // vis half-size in canvas units
+        const eg = EDGE / z;     // edge gap in canvas units
+        return ([
+          { key: "top",    top: -(eg + hh),       left: n.w / 2 - hh },
+          { key: "bottom", top: n.h + eg - hh,    left: n.w / 2 - hh },
+          { key: "left",   top: n.h / 2 - hh,    left: -(eg + hh) },
+          { key: "right",  top: n.h / 2 - hh,    left: n.w + eg - hh },
         ] as { key: string; top: number; left: number }[]).map(({ key, top, left }) => (
           <div
             key={key}
@@ -634,8 +647,8 @@ export const NodeView = React.memo(function NodeView({
               position: "absolute",
               top,
               left,
-              width: 22,
-              height: 22,
+              width: HIT / z,
+              height: HIT / z,
               cursor: "crosshair",
               pointerEvents: "all",
               zIndex: 10,
@@ -645,11 +658,11 @@ export const NodeView = React.memo(function NodeView({
             }}
           >
             <svg
-              width="22"
-              height="22"
+              width={VIS / z}
+              height={VIS / z}
               viewBox="0 0 22 22"
               className="connect-dot-svg"
-              style={{ display: "block" }}
+              style={{ display: "block", flexShrink: 0 }}
             >
               <circle
                 cx="11"
@@ -669,7 +682,8 @@ export const NodeView = React.memo(function NodeView({
               />
             </svg>
           </div>
-        ))}
+        ));
+      })()}
 
       {/* Resize handle — outside node boundary, appears on hover */}
       {showResize && (
