@@ -67,3 +67,15 @@ input[type="range"].fmt-slider::-webkit-slider-runnable-track {
 .connect-dot-svg {
   animation: dotFadeIn 120ms ease forwards;
 }
+
+@keyframes presentOverlayAnim {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+  14%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  72%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+
+.present-overlay {
+  animation: presentOverlayAnim 2s ease forwards;
+  pointer-events: none;
+}
