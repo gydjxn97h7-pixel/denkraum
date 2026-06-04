@@ -1,5 +1,12 @@
 "use client";
 import { useRef, useState, useCallback, useEffect, useMemo, memo } from "react";
+import {
+  forceSimulation,
+  forceManyBody,
+  forceLink,
+  forceCenter,
+  forceCollide,
+} from "d3-force";
 import "./canvas.css";
 import {
   ACCENT,
@@ -356,7 +363,9 @@ export default function Canvas() {
   const [hoveredConnKey, setHoveredConnKey] = useState<string | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [activePanel, setActivePanel] = useState<"board" | "nodes" | "presentation" | "saveload" | "shortcuts" | null>(null);
+  const [activePanel, setActivePanel] = useState<
+    "board" | "nodes" | "presentation" | "saveload" | "shortcuts" | null
+  >(null);
   const [exporting, setExporting] = useState(false);
   const [textFileViewer, setTextFileViewer] = useState<{
     nodeId: number;
@@ -382,8 +391,8 @@ export default function Canvas() {
   const [activeShapeType, setActiveShapeType] = useState<NodeType | null>(null);
   const [boardName, setBoardName] = useState("Untitled Board");
   const [editingBoardName, setEditingBoardName] = useState(false);
-  const [presentationOrder, setPresentationOrder] = useState<number[]>(
-    () => DEFAULT_NODES.map((n) => n.id),
+  const [presentationOrder, setPresentationOrder] = useState<number[]>(() =>
+    DEFAULT_NODES.map((n) => n.id),
   );
   const [isPresenting, setIsPresenting] = useState(false);
   const [presentationIndex, setPresentationIndex] = useState(0);
@@ -445,7 +454,10 @@ export default function Canvas() {
   const presentationOrderRef = useRef(presentationOrder);
   const presentationIndexRef = useRef(presentationIndex);
   const isPresentingRef = useRef(isPresenting);
-  const prePresentState = useRef<{ pan: { x: number; y: number }; zoom: number } | null>(null);
+  const prePresentState = useRef<{
+    pan: { x: number; y: number };
+    zoom: number;
+  } | null>(null);
   panRef.current = pan;
   zoomRef.current = zoom;
   connectDragRef.current = connectDrag;
@@ -460,7 +472,10 @@ export default function Canvas() {
 
   // Presentation camera animation
   const animRafRef = useRef<number | null>(null);
-  const animCurrentRef = useRef<{ pan: { x: number; y: number }; zoom: number } | null>(null);
+  const animCurrentRef = useRef<{
+    pan: { x: number; y: number };
+    zoom: number;
+  } | null>(null);
 
   // Pending values accumulated during a mousemove burst; applied once per frame
   const rafRef = useRef<number | null>(null);
@@ -547,7 +562,9 @@ export default function Canvas() {
             (data.nodes as CanvasNode[]).map((n: CanvasNode) => n.id),
           );
           if (Array.isArray(data.presentationOrder)) {
-            const parsedSet = new Set<number>(data.presentationOrder as number[]);
+            const parsedSet = new Set<number>(
+              data.presentationOrder as number[],
+            );
             const missing = (data.nodes as CanvasNode[])
               .filter((n: CanvasNode) => !parsedSet.has(n.id))
               .sort((a: CanvasNode, b: CanvasNode) => a.id - b.id)
@@ -945,7 +962,10 @@ export default function Canvas() {
         localStorage.setItem(LS_NODES, JSON.stringify(nodesToSave));
         localStorage.setItem(LS_CONNECTIONS, JSON.stringify(connections));
         localStorage.setItem(LS_BOARD_NAME, boardName);
-        localStorage.setItem(LS_PRESENTATION_ORDER, JSON.stringify(presentationOrder));
+        localStorage.setItem(
+          LS_PRESENTATION_ORDER,
+          JSON.stringify(presentationOrder),
+        );
       } catch (err) {
         if (
           err instanceof DOMException &&
@@ -1025,20 +1045,17 @@ export default function Canvas() {
     setContextMenu({ kind: "node", x: e.clientX, y: e.clientY, id });
   }, []);
 
-  const onCanvasContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (t !== canvasRef.current && !t.dataset.bg) return;
-      e.preventDefault();
-      if (isPresentingRef.current) return;
-      if (!canvasRef.current) return;
-      const r = canvasRef.current.getBoundingClientRect();
-      const cx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
-      const cy = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
-      setContextMenu({ kind: "canvas", x: e.clientX, y: e.clientY, cx, cy });
-    },
-    [],
-  );
+  const onCanvasContextMenu = useCallback((e: React.MouseEvent) => {
+    const t = e.target as HTMLElement;
+    if (t !== canvasRef.current && !t.dataset.bg) return;
+    e.preventDefault();
+    if (isPresentingRef.current) return;
+    if (!canvasRef.current) return;
+    const r = canvasRef.current.getBoundingClientRect();
+    const cx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
+    const cy = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
+    setContextMenu({ kind: "canvas", x: e.clientX, y: e.clientY, cx, cy });
+  }, []);
 
   // ── Mouse down handlers ───────────────────────────────────────────────────────
   const onCanvasMouseDown = useCallback(
@@ -1073,7 +1090,10 @@ export default function Canvas() {
 
   // Nodes whose excludeFromPresentation is truthy are skipped from navigation
   const presentActiveSeq = useMemo(
-    () => presentationOrder.filter((id) => !nodeMap.get(id)?.excludeFromPresentation),
+    () =>
+      presentationOrder.filter(
+        (id) => !nodeMap.get(id)?.excludeFromPresentation,
+      ),
     [presentationOrder, nodeMap],
   );
   const presentActiveSeqRef = useRef(presentActiveSeq);
@@ -1445,6 +1465,101 @@ export default function Canvas() {
   const arrangeSendToBack = useCallback((id: number) => {
     setNodes((prev) => sendToBack(prev, id));
   }, []);
+
+  // ── Force-directed layout computation (step 2 — logging only, no setNodes yet) ─
+  const computeForceLayout = useCallback(() => {
+    if (nodes.length === 0) return;
+
+    // ── 1. Record old centroid so we can re-anchor after simulation ──────────
+    const oldCx = nodes.reduce((s, n) => s + n.x + n.w / 2, 0) / nodes.length;
+    const oldCy = nodes.reduce((s, n) => s + n.y + n.h / 2, 0) / nodes.length;
+
+    // ── 2. Build d3-force node objects, seeding with current canvas position ─
+    // d3 mutates these objects in-place — use plain objects, not the CanvasNode refs.
+    type SimNode = { id: number; x: number; y: number; w: number; h: number };
+    const simNodes: SimNode[] = nodes.map((n) => ({
+      id: n.id,
+      x: n.x + n.w / 2, // d3 works from center point
+      y: n.y + n.h / 2,
+      w: n.w,
+      h: n.h,
+    }));
+    const idToSim = new Map(simNodes.map((n) => [n.id, n]));
+
+    // ── 3. Build link array (skip any dangling references) ───────────────────
+    const simLinks = connections
+      .filter((c) => idToSim.has(c.from) && idToSim.has(c.to))
+      .map((c) => ({ source: c.from, target: c.to }));
+
+    // ── 4. Run simulation synchronously ──────────────────────────────────────
+    // Use half-diagonal of each node as its collision radius so large nodes
+    // (images, text files) get proportionally more space than small blocks.
+    const sim = forceSimulation<SimNode>(simNodes)
+      .force(
+        "link",
+        forceLink<SimNode, { source: number; target: number }>(simLinks)
+          .id((d) => d.id)
+          .distance(180)
+          .strength(0.8),
+      )
+      .force("charge", forceManyBody<SimNode>().strength(-400))
+      .force("center", forceCenter<SimNode>(0, 0))
+      .force(
+        "collide",
+        forceCollide<SimNode>((d) => Math.hypot(d.w, d.h) / 2 + 20),
+      )
+      .stop();
+
+    for (let i = 0; i < 300; i++) sim.tick();
+
+    // ── 5. Translate back: shift so new centroid matches old centroid ─────────
+    const newCxRaw = simNodes.reduce((s, n) => s + n.x, 0) / simNodes.length;
+    const newCyRaw = simNodes.reduce((s, n) => s + n.y, 0) / simNodes.length;
+    const dx = oldCx - newCxRaw;
+    const dy = oldCy - newCyRaw;
+
+    // Compute final canvas positions (top-left corner, not center)
+    const results = simNodes.map((sn) => ({
+      id: sn.id,
+      newX: sn.x + dx - sn.w / 2,
+      newY: sn.y + dy - sn.h / 2,
+    }));
+
+    // ── 6. Verify centroid is preserved ──────────────────────────────────────
+    const newCx =
+      results.reduce((s, r) => {
+        const n = idToSim.get(r.id)!;
+        return s + r.newX + n.w / 2;
+      }, 0) / results.length;
+    const newCy =
+      results.reduce((s, r) => {
+        const n = idToSim.get(r.id)!;
+        return s + r.newY + n.h / 2;
+      }, 0) / results.length;
+
+    // ── 7. Log ───────────────────────────────────────────────────────────────
+    console.group("computeForceLayout — logging only, no setNodes");
+    console.log(
+      `Centroid  before (${oldCx.toFixed(1)}, ${oldCy.toFixed(1)})` +
+        `  →  after (${newCx.toFixed(1)}, ${newCy.toFixed(1)})`,
+    );
+    for (const r of results) {
+      const orig = nodes.find((n) => n.id === r.id)!;
+      console.log(
+        `  node ${r.id.toString().padStart(3)}` +
+          `  old (${orig.x.toFixed(0)}, ${orig.y.toFixed(0)})` +
+          `  →  new (${r.newX.toFixed(0)}, ${r.newY.toFixed(0)})`,
+      );
+    }
+    console.groupEnd();
+  }, [nodes, connections]);
+
+  // Temporary dev hook — call window.__testForceLayout() in the browser console.
+  // Remove in step 3 when wired to a real button.
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__testForceLayout =
+      computeForceLayout;
+  }, [computeForceLayout]);
 
   const deleteSelected = useCallback(() => {
     if (selectedIdsRef.current.size > 0) {
@@ -1823,7 +1938,13 @@ export default function Canvas() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [deleteSelected, copySelected, pasteNode, focusNode, centerNodeForPresentation]);
+  }, [
+    deleteSelected,
+    copySelected,
+    pasteNode,
+    focusNode,
+    centerNodeForPresentation,
+  ]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   const menuItem = (danger = false): React.CSSProperties => ({
@@ -1857,8 +1978,10 @@ export default function Canvas() {
       const PAD = 40;
       const minX = nodes.reduce((m, n) => Math.min(m, n.x), Infinity) - PAD;
       const minY = nodes.reduce((m, n) => Math.min(m, n.y), Infinity) - PAD;
-      const maxX = nodes.reduce((m, n) => Math.max(m, n.x + n.w), -Infinity) + PAD;
-      const maxY = nodes.reduce((m, n) => Math.max(m, n.y + n.h), -Infinity) + PAD;
+      const maxX =
+        nodes.reduce((m, n) => Math.max(m, n.x + n.w), -Infinity) + PAD;
+      const maxY =
+        nodes.reduce((m, n) => Math.max(m, n.y + n.h), -Infinity) + PAD;
       const contentW = Math.ceil(maxX - minX);
       const contentH = Math.ceil(maxY - minY);
 
@@ -1914,7 +2037,6 @@ export default function Canvas() {
       setExporting(false);
     }
   }, [nodes]);
-
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const panelOpen = activePanel !== null;
@@ -1983,11 +2105,13 @@ export default function Canvas() {
           left: 12,
           height: "calc(100vh - 24px)",
           width: 52,
-          background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
+          background:
+            "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
           borderRadius: 16,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+          boxShadow:
+            "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
           zIndex: 151,
           display: isPresenting ? "none" : "flex",
           flexDirection: "column",
@@ -2042,9 +2166,18 @@ export default function Canvas() {
               section: "board" as const,
               title: "Board",
               icon: (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2"/>
-                  <line x1="3" y1="9" x2="21" y2="9"/>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <line x1="3" y1="9" x2="21" y2="9" />
                 </svg>
               ),
             },
@@ -2052,10 +2185,19 @@ export default function Canvas() {
               section: "nodes" as const,
               title: "Nodes",
               icon: (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="6" cy="6" r="2.5"/>
-                  <circle cx="18" cy="18" r="2.5"/>
-                  <line x1="8" y1="8" x2="16" y2="16"/>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="6" cy="6" r="2.5" />
+                  <circle cx="18" cy="18" r="2.5" />
+                  <line x1="8" y1="8" x2="16" y2="16" />
                 </svg>
               ),
             },
@@ -2063,8 +2205,17 @@ export default function Canvas() {
               section: "presentation" as const,
               title: "Presentation",
               icon: (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="5,3 19,12 5,21"/>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polygon points="5,3 19,12 5,21" />
                 </svg>
               ),
             },
@@ -2072,10 +2223,19 @@ export default function Canvas() {
               section: "saveload" as const,
               title: "Save / Load",
               icon: (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
               ),
             },
@@ -2083,23 +2243,43 @@ export default function Canvas() {
               section: "shortcuts" as const,
               title: "Shortcuts",
               icon: (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2" y="6" width="20" height="12" rx="2"/>
-                  <line x1="6" y1="10" x2="6.01" y2="10"/>
-                  <line x1="10" y1="10" x2="10.01" y2="10"/>
-                  <line x1="14" y1="10" x2="14.01" y2="10"/>
-                  <line x1="8" y1="14" x2="16" y2="14"/>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="2" y="6" width="20" height="12" rx="2" />
+                  <line x1="6" y1="10" x2="6.01" y2="10" />
+                  <line x1="10" y1="10" x2="10.01" y2="10" />
+                  <line x1="14" y1="10" x2="14.01" y2="10" />
+                  <line x1="8" y1="14" x2="16" y2="14" />
                 </svg>
               ),
             },
-          ] as { section: "board" | "nodes" | "presentation" | "saveload" | "shortcuts"; title: string; icon: React.ReactNode }[]
+          ] as {
+            section:
+              | "board"
+              | "nodes"
+              | "presentation"
+              | "saveload"
+              | "shortcuts";
+            title: string;
+            icon: React.ReactNode;
+          }[]
         ).map(({ section, title, icon }) => {
           const isActive = activePanel === section;
           return (
             <button
               key={section}
               title={title}
-              onClick={() => setActivePanel((prev) => prev === section ? null : section)}
+              onClick={() =>
+                setActivePanel((prev) => (prev === section ? null : section))
+              }
               style={{
                 position: "relative",
                 width: 36,
@@ -2117,14 +2297,18 @@ export default function Canvas() {
               }}
               onMouseEnter={(e) => {
                 if (!isActive) {
-                  (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.95)";
-                  (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+                  (e.currentTarget as HTMLElement).style.color =
+                    "rgba(255,255,255,0.95)";
+                  (e.currentTarget as HTMLElement).style.background =
+                    "rgba(255,255,255,0.06)";
                 }
               }}
               onMouseLeave={(e) => {
                 if (!isActive) {
-                  (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.75)";
-                  (e.currentTarget as HTMLElement).style.background = "transparent";
+                  (e.currentTarget as HTMLElement).style.color =
+                    "rgba(255,255,255,0.75)";
+                  (e.currentTarget as HTMLElement).style.background =
+                    "transparent";
                 }
               }}
             >
@@ -2178,11 +2362,13 @@ export default function Canvas() {
           left: 76,
           height: "calc(100vh - 24px)",
           width: 220,
-          background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
+          background:
+            "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
           backdropFilter: "blur(24px)",
           WebkitBackdropFilter: "blur(24px)",
           borderRadius: 16,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+          boxShadow:
+            "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
           zIndex: 149,
           display: panelOpen && !isPresenting ? "flex" : "none",
           flexDirection: "column",
@@ -2231,10 +2417,12 @@ export default function Canvas() {
               borderRadius: 5,
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.8)";
+              (e.currentTarget as HTMLElement).style.color =
+                "rgba(255,255,255,0.8)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.7)";
+              (e.currentTarget as HTMLElement).style.color =
+                "rgba(255,255,255,0.7)";
             }}
           >
             ✕
@@ -2270,7 +2458,14 @@ export default function Canvas() {
 
         {/* ── BOARD section ── */}
         {activePanel === "board" && (
-          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: 12 }}>
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              overflowX: "hidden",
+              paddingTop: 12,
+            }}
+          >
             {/* Board row */}
             <div
               onDoubleClick={() => setEditingBoardName(true)}
@@ -2417,10 +2612,21 @@ export default function Canvas() {
 
         {/* ── NODES section ── */}
         {activePanel === "nodes" && (
-          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: 12 }}>
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              overflowX: "hidden",
+              paddingTop: 12,
+            }}
+          >
             {nodes.length === 0 ? (
               <div
-                style={{ padding: "6px 20px", fontSize: 12, color: "rgba(255,255,255,0.4)" }}
+                style={{
+                  padding: "6px 20px",
+                  fontSize: 12,
+                  color: "rgba(255,255,255,0.4)",
+                }}
               >
                 No nodes yet
               </div>
@@ -2448,183 +2654,279 @@ export default function Canvas() {
 
         {/* ── PRESENTATION section ── */}
         {activePanel === "presentation" && (
-          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              overflowX: "hidden",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
             <div style={{ flex: 1, overflowY: "auto", paddingTop: 8 }}>
               {presentationOrder.length === 0 ? (
-                <div style={{ padding: "6px 20px", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
+                <div
+                  style={{
+                    padding: "6px 20px",
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.4)",
+                  }}
+                >
                   No nodes yet
                 </div>
-              ) : (() => {
-                let activePos = 0;
-                return presentationOrder.map((id, idx) => {
-                  const n = nodeMap.get(id);
-                  if (!n) return null;
-                  const excluded = !!n.excludeFromPresentation;
-                  if (!excluded) activePos += 1;
-                  const seqNum = excluded ? "–" : String(activePos);
-                  const label =
-                    (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() || "Untitled";
-                  const isFirst = idx === 0;
-                  const isLast = idx === presentationOrder.length - 1;
-                  return (
-                    <div
-                      key={id}
-                      style={{
-                        height: 36,
-                        display: "flex",
-                        alignItems: "center",
-                        padding: "0 8px 0 16px",
-                        gap: 8,
-                        opacity: excluded ? 0.45 : 1,
-                      }}
-                    >
-                      {/* Sequence number */}
-                      <span
+              ) : (
+                (() => {
+                  let activePos = 0;
+                  return presentationOrder.map((id, idx) => {
+                    const n = nodeMap.get(id);
+                    if (!n) return null;
+                    const excluded = !!n.excludeFromPresentation;
+                    if (!excluded) activePos += 1;
+                    const seqNum = excluded ? "–" : String(activePos);
+                    const label =
+                      (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() ||
+                      "Untitled";
+                    const isFirst = idx === 0;
+                    const isLast = idx === presentationOrder.length - 1;
+                    return (
+                      <div
+                        key={id}
                         style={{
-                          fontSize: 10.5,
-                          color: excluded ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.3)",
-                          flexShrink: 0,
-                          width: 16,
-                          textAlign: "right",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      >
-                        {seqNum}
-                      </span>
-
-                      {/* Label */}
-                      <span
-                        style={{
-                          flex: 1,
-                          fontSize: 12.5,
-                          color: excluded ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.8)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          minWidth: 0,
-                          textDecoration: excluded ? "line-through" : "none",
-                        }}
-                      >
-                        {label}
-                      </span>
-
-                      {/* Exclude / include toggle */}
-                      <button
-                        onClick={() => toggleExcludeFromPresentation(id, !excluded)}
-                        title={excluded ? "Include in presentation" : "Exclude from presentation"}
-                        style={{
-                          width: 22,
-                          height: 22,
-                          border: "none",
-                          borderRadius: 5,
-                          background: "transparent",
-                          color: excluded ? "rgba(255,255,255,0.4)" : "rgba(157,200,141,0.7)",
-                          cursor: "pointer",
+                          height: 36,
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "center",
-                          padding: 0,
-                          flexShrink: 0,
-                        }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
-                          (e.currentTarget as HTMLElement).style.color = excluded ? "rgba(255,255,255,0.75)" : "#9DC88D";
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLElement).style.background = "transparent";
-                          (e.currentTarget as HTMLElement).style.color = excluded ? "rgba(255,255,255,0.4)" : "rgba(157,200,141,0.7)";
+                          padding: "0 8px 0 16px",
+                          gap: 8,
+                          opacity: excluded ? 0.45 : 1,
                         }}
                       >
-                        {excluded ? (
-                          /* eye-off: slash through eye */
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-                            <line x1="1" y1="1" x2="23" y2="23"/>
-                          </svg>
-                        ) : (
-                          /* eye: visible */
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                          </svg>
-                        )}
-                      </button>
+                        {/* Sequence number */}
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            color: excluded
+                              ? "rgba(255,255,255,0.4)"
+                              : "rgba(255,255,255,0.3)",
+                            flexShrink: 0,
+                            width: 16,
+                            textAlign: "right",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {seqNum}
+                        </span>
 
-                      {/* Up/Down buttons */}
-                      <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                        {/* Label */}
+                        <span
+                          style={{
+                            flex: 1,
+                            fontSize: 12.5,
+                            color: excluded
+                              ? "rgba(255,255,255,0.5)"
+                              : "rgba(255,255,255,0.8)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            minWidth: 0,
+                            textDecoration: excluded ? "line-through" : "none",
+                          }}
+                        >
+                          {label}
+                        </span>
+
+                        {/* Exclude / include toggle */}
                         <button
-                          onClick={() => movePresentationNodeUp(id)}
-                          disabled={isFirst}
-                          title="Move up"
+                          onClick={() =>
+                            toggleExcludeFromPresentation(id, !excluded)
+                          }
+                          title={
+                            excluded
+                              ? "Include in presentation"
+                              : "Exclude from presentation"
+                          }
                           style={{
                             width: 22,
                             height: 22,
                             border: "none",
                             borderRadius: 5,
                             background: "transparent",
-                            color: isFirst ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.55)",
-                            cursor: isFirst ? "default" : "pointer",
+                            color: excluded
+                              ? "rgba(255,255,255,0.4)"
+                              : "rgba(157,200,141,0.7)",
+                            cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             padding: 0,
+                            flexShrink: 0,
                           }}
                           onMouseEnter={(e) => {
-                            if (!isFirst)
-                              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+                            (e.currentTarget as HTMLElement).style.background =
+                              "rgba(255,255,255,0.06)";
+                            (e.currentTarget as HTMLElement).style.color =
+                              excluded ? "rgba(255,255,255,0.75)" : "#9DC88D";
                           }}
                           onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLElement).style.background = "transparent";
+                            (e.currentTarget as HTMLElement).style.background =
+                              "transparent";
+                            (e.currentTarget as HTMLElement).style.color =
+                              excluded
+                                ? "rgba(255,255,255,0.4)"
+                                : "rgba(157,200,141,0.7)";
                           }}
                         >
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 7L5 3L8 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
+                          {excluded ? (
+                            /* eye-off: slash through eye */
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                              <line x1="1" y1="1" x2="23" y2="23" />
+                            </svg>
+                          ) : (
+                            /* eye: visible */
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          )}
                         </button>
-                        <button
-                          onClick={() => movePresentationNodeDown(id)}
-                          disabled={isLast}
-                          title="Move down"
-                          style={{
-                            width: 22,
-                            height: 22,
-                            border: "none",
-                            borderRadius: 5,
-                            background: "transparent",
-                            color: isLast ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.55)",
-                            cursor: isLast ? "default" : "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: 0,
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isLast)
-                              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
-                          }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLElement).style.background = "transparent";
-                          }}
-                        >
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 3L5 7L8 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </button>
+
+                        {/* Up/Down buttons */}
+                        <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                          <button
+                            onClick={() => movePresentationNodeUp(id)}
+                            disabled={isFirst}
+                            title="Move up"
+                            style={{
+                              width: 22,
+                              height: 22,
+                              border: "none",
+                              borderRadius: 5,
+                              background: "transparent",
+                              color: isFirst
+                                ? "rgba(255,255,255,0.15)"
+                                : "rgba(255,255,255,0.55)",
+                              cursor: isFirst ? "default" : "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: 0,
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isFirst)
+                                (
+                                  e.currentTarget as HTMLElement
+                                ).style.background = "rgba(255,255,255,0.06)";
+                            }}
+                            onMouseLeave={(e) => {
+                              (
+                                e.currentTarget as HTMLElement
+                              ).style.background = "transparent";
+                            }}
+                          >
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 10 10"
+                              fill="none"
+                            >
+                              <path
+                                d="M2 7L5 3L8 7"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => movePresentationNodeDown(id)}
+                            disabled={isLast}
+                            title="Move down"
+                            style={{
+                              width: 22,
+                              height: 22,
+                              border: "none",
+                              borderRadius: 5,
+                              background: "transparent",
+                              color: isLast
+                                ? "rgba(255,255,255,0.15)"
+                                : "rgba(255,255,255,0.55)",
+                              cursor: isLast ? "default" : "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: 0,
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isLast)
+                                (
+                                  e.currentTarget as HTMLElement
+                                ).style.background = "rgba(255,255,255,0.06)";
+                            }}
+                            onMouseLeave={(e) => {
+                              (
+                                e.currentTarget as HTMLElement
+                              ).style.background = "transparent";
+                            }}
+                          >
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 10 10"
+                              fill="none"
+                            >
+                              <path
+                                d="M2 3L5 7L8 3"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                });
-              })()}
+                    );
+                  });
+                })()
+              )}
             </div>
 
             {/* Present button */}
-            <div style={{ padding: "12px 14px", flexShrink: 0, borderTop: "0.5px solid rgba(255,255,255,0.06)" }}>
+            <div
+              style={{
+                padding: "12px 14px",
+                flexShrink: 0,
+                borderTop: "0.5px solid rgba(255,255,255,0.06)",
+              }}
+            >
               <button
                 disabled={presentActiveSeq.length === 0}
                 onClick={() => {
                   if (presentActiveSeq.length === 0) return;
-                  prePresentState.current = { pan: panRef.current, zoom: zoomRef.current };
+                  prePresentState.current = {
+                    pan: panRef.current,
+                    zoom: zoomRef.current,
+                  };
                   setPresentationIndex(0);
                   setIsPresenting(true);
                   setActivePanel(null);
@@ -2638,7 +2940,10 @@ export default function Canvas() {
                   height: 38,
                   borderRadius: 10,
                   border: "none",
-                  background: presentActiveSeq.length === 0 ? "rgba(241,178,74,0.35)" : "#F1B24A",
+                  background:
+                    presentActiveSeq.length === 0
+                      ? "rgba(241,178,74,0.35)"
+                      : "#F1B24A",
                   color: "#0C2018",
                   fontSize: 13,
                   fontWeight: 600,
@@ -2663,7 +2968,14 @@ export default function Canvas() {
 
         {/* ── SAVELOAD section ── */}
         {activePanel === "saveload" && (
-          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 0" }}>
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              overflowX: "hidden",
+              padding: "8px 0",
+            }}
+          >
             {/* Save row */}
             <button
               title="Save board"
@@ -2687,7 +2999,8 @@ export default function Canvas() {
                   "rgba(255,255,255,0.03)";
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.background = "transparent";
+                (e.currentTarget as HTMLElement).style.background =
+                  "transparent";
               }}
             >
               <svg
@@ -2754,7 +3067,8 @@ export default function Canvas() {
                   "rgba(255,255,255,0.03)";
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.background = "transparent";
+                (e.currentTarget as HTMLElement).style.background =
+                  "transparent";
               }}
             >
               <svg
@@ -2788,7 +3102,14 @@ export default function Canvas() {
 
         {/* ── SHORTCUTS section ── */}
         {activePanel === "shortcuts" && (
-          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: 12 }}>
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              overflowX: "hidden",
+              paddingTop: 12,
+            }}
+          >
             {(
               [
                 { kbd: "⌫  Delete", desc: "Delete selected" },
@@ -2852,7 +3173,8 @@ export default function Canvas() {
           transform: "translateX(-50%)",
           maxWidth: panelOpen ? "calc(100vw - 320px)" : "calc(100vw - 88px)",
           overflow: "hidden",
-          background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.92)",
+          background:
+            "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.92)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
           border: "0.5px solid rgba(255,255,255,0.08)",
@@ -2861,7 +3183,8 @@ export default function Canvas() {
           display: isPresenting ? "none" : "flex",
           gap: 8,
           alignItems: "center",
-          boxShadow: "0 2px 24px rgba(0,0,0,0.3), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+          boxShadow:
+            "0 2px 24px rgba(0,0,0,0.3), inset 0 1px 0 0 rgba(255,255,255,0.12)",
           zIndex: 201,
         }}
       >
@@ -2954,7 +3277,9 @@ export default function Canvas() {
             fontFamily: "inherit",
             cursor: exporting ? "default" : "pointer",
             background: "transparent",
-            color: exporting ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.85)",
+            color: exporting
+              ? "rgba(255,255,255,0.4)"
+              : "rgba(255,255,255,0.85)",
             transition: "color 0.15s",
             display: "flex",
             alignItems: "center",
@@ -2967,7 +3292,8 @@ export default function Canvas() {
           }}
           onMouseLeave={(e) => {
             if (!exporting)
-              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
+              (e.currentTarget as HTMLElement).style.color =
+                "rgba(255,255,255,0.85)";
           }}
         >
           {exporting ? (
@@ -3046,7 +3372,8 @@ export default function Canvas() {
           }}
           onMouseLeave={(e) => {
             if (!filterOpen) {
-              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
+              (e.currentTarget as HTMLElement).style.color =
+                "rgba(255,255,255,0.85)";
               (e.currentTarget as HTMLElement).style.background = "transparent";
             }
           }}
@@ -3075,7 +3402,8 @@ export default function Canvas() {
             top: 68,
             left: "50%",
             transform: "translateX(-50%)",
-            background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.95)",
+            background:
+              "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.95)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
             border: "0.5px solid rgba(255,255,255,0.1)",
@@ -3084,7 +3412,8 @@ export default function Canvas() {
             display: "flex",
             flexDirection: "column",
             gap: 7,
-            boxShadow: "0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+            boxShadow:
+              "0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
             zIndex: 202,
             minWidth: 420,
           }}
@@ -3163,10 +3492,12 @@ export default function Canvas() {
                 justifyContent: "center",
               }}
               onMouseEnter={(e) =>
-                ((e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)")
+                ((e.currentTarget as HTMLElement).style.color =
+                  "rgba(255,255,255,0.85)")
               }
               onMouseLeave={(e) =>
-                ((e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.7)")
+                ((e.currentTarget as HTMLElement).style.color =
+                  "rgba(255,255,255,0.7)")
               }
             >
               ✕
@@ -3208,14 +3539,16 @@ export default function Canvas() {
                   }}
                   onMouseEnter={(e) => {
                     if (!active) {
-                      (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
+                      (e.currentTarget as HTMLElement).style.color =
+                        "rgba(255,255,255,0.85)";
                       (e.currentTarget as HTMLElement).style.borderColor =
                         "rgba(255,255,255,0.15)";
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!active) {
-                      (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.7)";
+                      (e.currentTarget as HTMLElement).style.color =
+                        "rgba(255,255,255,0.7)";
                       (e.currentTarget as HTMLElement).style.borderColor =
                         "rgba(255,255,255,0.07)";
                     }
@@ -3414,11 +3747,13 @@ export default function Canvas() {
                 position: "fixed",
                 left: contextMenu.x,
                 top: contextMenu.y,
-                background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
+                background:
+                  "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
                 backdropFilter: "blur(24px)",
                 border: "0.5px solid rgba(255,255,255,0.08)",
                 borderRadius: 14,
-                boxShadow: "0 8px 40px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+                boxShadow:
+                  "0 8px 40px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
                 zIndex: 300,
                 minWidth: 240,
                 padding: "6px 0",
@@ -3469,7 +3804,11 @@ export default function Canvas() {
                   }}
                 >
                   <span
-                    style={{ fontSize: 10, color: "rgba(255,255,255,0.7)", flexShrink: 0 }}
+                    style={{
+                      fontSize: 10,
+                      color: "rgba(255,255,255,0.7)",
+                      flexShrink: 0,
+                    }}
                   >
                     A
                   </span>
@@ -3770,7 +4109,10 @@ export default function Canvas() {
               {/* ── Exclude / Include from presentation ── */}
               <div
                 onClick={() => {
-                  toggleExcludeFromPresentation(contextMenu.id, !n.excludeFromPresentation);
+                  toggleExcludeFromPresentation(
+                    contextMenu.id,
+                    !n.excludeFromPresentation,
+                  );
                   setContextMenu(null);
                 }}
                 onMouseEnter={(e) => hoverMenu(e, true)}
@@ -3817,11 +4159,13 @@ export default function Canvas() {
             position: "fixed",
             left: contextMenu.x,
             top: contextMenu.y,
-            background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
+            background:
+              "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
             backdropFilter: "blur(24px)",
             border: "0.5px solid rgba(255,255,255,0.08)",
             borderRadius: 14,
-            boxShadow: "0 8px 40px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+            boxShadow:
+              "0 8px 40px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
             zIndex: 300,
             minWidth: 220,
             padding: "6px 0",
@@ -4239,8 +4583,7 @@ export default function Canvas() {
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -50%)",
-            background:
-              "linear-gradient(160deg, #265048 0%, #143F38 100%)",
+            background: "linear-gradient(160deg, #265048 0%, #143F38 100%)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
             border: "0.5px solid rgba(157,200,141,0.18)",
@@ -4262,7 +4605,8 @@ export default function Canvas() {
               fontWeight: 600,
               color: "#FFFFFF",
               letterSpacing: "-0.2px",
-              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
             }}
           >
             Presentation mode
@@ -4271,7 +4615,8 @@ export default function Canvas() {
             style={{
               fontSize: 12,
               color: "rgba(255,255,255,0.5)",
-              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
             }}
           >
             ← → navigate &nbsp;·&nbsp;{" "}
