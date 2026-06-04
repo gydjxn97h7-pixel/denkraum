@@ -1566,15 +1566,18 @@ export default function Canvas() {
     });
   }, []);
 
-  const PRESENTATION_ZOOM = 1.0;
   const centerNodeForPresentation = useCallback((id: number) => {
     const n = nodeMapRef.current.get(id);
     if (!n || !canvasRef.current) return;
     const r = canvasRef.current.getBoundingClientRect();
-    setZoom(PRESENTATION_ZOOM);
+    const z = Math.min(
+      1.5,
+      Math.max(0.1, Math.min((r.width * 0.8) / n.w, (r.height * 0.8) / n.h)),
+    );
+    setZoom(z);
     setPan({
-      x: r.width / 2 - (n.x + n.w / 2) * PRESENTATION_ZOOM,
-      y: r.height / 2 - (n.y + n.h / 2) * PRESENTATION_ZOOM,
+      x: r.width / 2 - (n.x + n.w / 2) * z,
+      y: r.height / 2 - (n.y + n.h / 2) * z,
     });
   }, []);
 
