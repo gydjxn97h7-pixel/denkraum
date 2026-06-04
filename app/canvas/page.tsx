@@ -1468,40 +1468,6 @@ export default function Canvas() {
     }
   }, []);
 
-  const cleanUpCanvas = useCallback(() => {
-    setNodes((prev) => {
-      if (prev.length === 0) return prev;
-      const sorted = [...prev].sort((a, b) => a.x - b.x);
-      const rows: CanvasNode[][] = [];
-      for (const node of sorted) {
-        const cy = node.y + node.h / 2;
-        const row = rows.find(
-          (r) => Math.abs(cy - (r[0].y + r[0].h / 2)) < 150,
-        );
-        if (row) row.push(node);
-        else rows.push([node]);
-      }
-      rows.sort((a, b) => {
-        const ay = a.reduce((s, n) => s + n.y + n.h / 2, 0) / a.length;
-        const by = b.reduce((s, n) => s + n.y + n.h / 2, 0) / b.length;
-        return ay - by;
-      });
-      let curY = rows[0][0].y;
-      const result: CanvasNode[] = [];
-      for (const row of rows) {
-        row.sort((a, b) => a.x - b.x);
-        const rowH = row.reduce((max, n) => Math.max(max, n.h), 0);
-        let curX = row[0].x;
-        for (const node of row) {
-          result.push({ ...node, x: curX, y: curY });
-          curX += node.w + 40;
-        }
-        curY += rowH + 60;
-      }
-      return result;
-    });
-  }, []);
-
   const copySelected = useCallback(() => {
     const id = selectedRef.current;
     if (id === null) return;
@@ -3040,55 +3006,6 @@ export default function Canvas() {
               Export PDF
             </>
           )}
-        </button>
-
-        {/* Divider */}
-        <div
-          style={{
-            width: "0.5px",
-            height: 16,
-            background: "rgba(255,255,255,0.1)",
-            margin: "0 4px",
-            flexShrink: 0,
-          }}
-        />
-
-        <button
-          onClick={cleanUpCanvas}
-          title="Clean up layout"
-          style={{
-            padding: "6px 8px",
-            borderRadius: 8,
-            border: "none",
-            cursor: "pointer",
-            background: "transparent",
-            color: "rgba(255,255,255,0.85)",
-            transition: "color 0.15s",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
-            (e.currentTarget as HTMLElement).style.background =
-              "rgba(255,255,255,0.06)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
-            (e.currentTarget as HTMLElement).style.background = "transparent";
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <circle cx="2.5" cy="2.5" r="1.2" fill="currentColor" />
-            <circle cx="7" cy="2.5" r="1.2" fill="currentColor" />
-            <circle cx="11.5" cy="2.5" r="1.2" fill="currentColor" />
-            <circle cx="2.5" cy="7" r="1.2" fill="currentColor" />
-            <circle cx="7" cy="7" r="1.2" fill="currentColor" />
-            <circle cx="11.5" cy="7" r="1.2" fill="currentColor" />
-            <circle cx="2.5" cy="11.5" r="1.2" fill="currentColor" />
-            <circle cx="7" cy="11.5" r="1.2" fill="currentColor" />
-            <circle cx="11.5" cy="11.5" r="1.2" fill="currentColor" />
-          </svg>
         </button>
 
         {/* Divider */}
