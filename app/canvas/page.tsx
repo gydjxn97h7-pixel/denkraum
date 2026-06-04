@@ -352,7 +352,7 @@ export default function Canvas() {
   const [hoveredConnKey, setHoveredConnKey] = useState<string | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [activePanel, setActivePanel] = useState<"board" | "nodes" | "saveload" | "shortcuts" | null>(null);
+  const [activePanel, setActivePanel] = useState<"board" | "nodes" | "presentation" | "saveload" | "shortcuts" | null>(null);
   const [exporting, setExporting] = useState(false);
   const [textFileViewer, setTextFileViewer] = useState<{
     nodeId: number;
@@ -1961,6 +1961,15 @@ export default function Canvas() {
               ),
             },
             {
+              section: "presentation" as const,
+              title: "Presentation",
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="5,3 19,12 5,21"/>
+                </svg>
+              ),
+            },
+            {
               section: "saveload" as const,
               title: "Save / Load",
               icon: (
@@ -1984,7 +1993,7 @@ export default function Canvas() {
                 </svg>
               ),
             },
-          ] as { section: "board" | "nodes" | "saveload" | "shortcuts"; title: string; icon: React.ReactNode }[]
+          ] as { section: "board" | "nodes" | "presentation" | "saveload" | "shortcuts"; title: string; icon: React.ReactNode }[]
         ).map(({ section, title, icon }) => {
           const isActive = activePanel === section;
           return (
@@ -2106,6 +2115,7 @@ export default function Canvas() {
           >
             {activePanel === "board" && "BOARD"}
             {activePanel === "nodes" && "NODES"}
+            {activePanel === "presentation" && "PRESENT"}
             {activePanel === "saveload" && "BOARD FILES"}
             {activePanel === "shortcuts" && "SHORTCUTS"}
           </span>
@@ -2334,6 +2344,160 @@ export default function Canvas() {
                 />
               ))
             )}
+          </div>
+        )}
+
+        {/* ── PRESENTATION section ── */}
+        {activePanel === "presentation" && (
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
+            <div style={{ flex: 1, overflowY: "auto", paddingTop: 8 }}>
+              {presentationOrder.length === 0 ? (
+                <div style={{ padding: "6px 20px", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
+                  No nodes yet
+                </div>
+              ) : (
+                presentationOrder.map((id, idx) => {
+                  const n = nodeMap.get(id);
+                  if (!n) return null;
+                  const label =
+                    (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() || "Untitled";
+                  const isFirst = idx === 0;
+                  const isLast = idx === presentationOrder.length - 1;
+                  return (
+                    <div
+                      key={id}
+                      style={{
+                        height: 36,
+                        display: "flex",
+                        alignItems: "center",
+                        padding: "0 8px 0 16px",
+                        gap: 8,
+                      }}
+                    >
+                      {/* Sequence number */}
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          color: "rgba(255,255,255,0.3)",
+                          flexShrink: 0,
+                          width: 16,
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {idx + 1}
+                      </span>
+
+                      {/* Label */}
+                      <span
+                        style={{
+                          flex: 1,
+                          fontSize: 12.5,
+                          color: "rgba(255,255,255,0.8)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          minWidth: 0,
+                        }}
+                      >
+                        {label}
+                      </span>
+
+                      {/* Up/Down buttons */}
+                      <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                        <button
+                          onClick={() => movePresentationNodeUp(id)}
+                          disabled={isFirst}
+                          title="Move up"
+                          style={{
+                            width: 22,
+                            height: 22,
+                            border: "none",
+                            borderRadius: 5,
+                            background: "transparent",
+                            color: isFirst ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.55)",
+                            cursor: isFirst ? "default" : "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 0,
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isFirst)
+                              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLElement).style.background = "transparent";
+                          }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M2 7L5 3L8 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => movePresentationNodeDown(id)}
+                          disabled={isLast}
+                          title="Move down"
+                          style={{
+                            width: 22,
+                            height: 22,
+                            border: "none",
+                            borderRadius: 5,
+                            background: "transparent",
+                            color: isLast ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.55)",
+                            cursor: isLast ? "default" : "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 0,
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isLast)
+                              (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLElement).style.background = "transparent";
+                          }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M2 3L5 7L8 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Present button */}
+            <div style={{ padding: "12px 14px", flexShrink: 0, borderTop: "0.5px solid rgba(255,255,255,0.06)" }}>
+              <button
+                onClick={() => console.log("present", presentationOrder)}
+                style={{
+                  width: "100%",
+                  height: 38,
+                  borderRadius: 10,
+                  border: "none",
+                  background: "#F1B24A",
+                  color: "#0C2018",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                  letterSpacing: "-0.1px",
+                  transition: "opacity 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.opacity = "0.88";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.opacity = "1";
+                }}
+              >
+                Present
+              </button>
+            </div>
           </div>
         )}
 
