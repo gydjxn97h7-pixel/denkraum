@@ -2488,10 +2488,14 @@ export default function Canvas() {
                 <div style={{ padding: "6px 20px", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
                   No nodes yet
                 </div>
-              ) : (
-                presentationOrder.map((id, idx) => {
+              ) : (() => {
+                let activePos = 0;
+                return presentationOrder.map((id, idx) => {
                   const n = nodeMap.get(id);
                   if (!n) return null;
+                  const excluded = !!n.excludeFromPresentation;
+                  if (!excluded) activePos += 1;
+                  const seqNum = excluded ? "–" : String(activePos);
                   const label =
                     (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() || "Untitled";
                   const isFirst = idx === 0;
@@ -2505,20 +2509,21 @@ export default function Canvas() {
                         alignItems: "center",
                         padding: "0 8px 0 16px",
                         gap: 8,
+                        opacity: excluded ? 0.45 : 1,
                       }}
                     >
                       {/* Sequence number */}
                       <span
                         style={{
                           fontSize: 10.5,
-                          color: "rgba(255,255,255,0.3)",
+                          color: excluded ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.3)",
                           flexShrink: 0,
                           width: 16,
                           textAlign: "right",
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
-                        {idx + 1}
+                        {seqNum}
                       </span>
 
                       {/* Label */}
@@ -2526,15 +2531,59 @@ export default function Canvas() {
                         style={{
                           flex: 1,
                           fontSize: 12.5,
-                          color: "rgba(255,255,255,0.8)",
+                          color: excluded ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.8)",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
                           minWidth: 0,
+                          textDecoration: excluded ? "line-through" : "none",
                         }}
                       >
                         {label}
                       </span>
+
+                      {/* Exclude / include toggle */}
+                      <button
+                        onClick={() => toggleExcludeFromPresentation(id, !excluded)}
+                        title={excluded ? "Include in presentation" : "Exclude from presentation"}
+                        style={{
+                          width: 22,
+                          height: 22,
+                          border: "none",
+                          borderRadius: 5,
+                          background: "transparent",
+                          color: excluded ? "rgba(255,255,255,0.4)" : "rgba(157,200,141,0.7)",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 0,
+                          flexShrink: 0,
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+                          (e.currentTarget as HTMLElement).style.color = excluded ? "rgba(255,255,255,0.75)" : "#9DC88D";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.background = "transparent";
+                          (e.currentTarget as HTMLElement).style.color = excluded ? "rgba(255,255,255,0.4)" : "rgba(157,200,141,0.7)";
+                        }}
+                      >
+                        {excluded ? (
+                          /* eye-off: slash through eye */
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                          </svg>
+                        ) : (
+                          /* eye: visible */
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
+                        )}
+                      </button>
 
                       {/* Up/Down buttons */}
                       <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
@@ -2599,8 +2648,8 @@ export default function Canvas() {
                       </div>
                     </div>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
 
             {/* Present button */}
