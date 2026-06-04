@@ -81,9 +81,10 @@ export function toRgbaString(r: number, g: number, b: number, a: number): string
 
 // Strips HTML tags from untrusted loaded strings (e.g. manipulated localStorage)
 // so persisted payloads are stored and rendered as plain text.
+// Uses DOMParser (inert context) instead of innerHTML so no images or other
+// subresources are fetched while parsing.
 export function stripHtml(s: unknown): string {
   if (typeof s !== "string") return "";
-  const d = document.createElement("div");
-  d.innerHTML = s;
-  return d.textContent ?? "";
+  const doc = new DOMParser().parseFromString(s, "text/html");
+  return doc.body.textContent ?? "";
 }

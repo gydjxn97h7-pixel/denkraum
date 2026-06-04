@@ -731,6 +731,16 @@ export default function Canvas() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  // Cancel any in-flight rAF loops when the component unmounts so we don't
+  // call setState after unmount (wasted work; React 18 silences the warning
+  // but the computation still runs).
+  useEffect(() => {
+    return () => {
+      if (animRafRef.current !== null) cancelAnimationFrame(animRafRef.current);
+      if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current);
+    };
+  }, []);
+
   const addNode = useCallback((cx: number, cy: number, type: NodeType) => {
     const isText = type === "text";
     const isCircle = type === "circle";
@@ -1077,8 +1087,9 @@ export default function Canvas() {
         }
       } catch {
         // JSON parse error — keep DEFAULT_NODES
+      } finally {
+        setHydrated(true);
       }
-      setHydrated(true);
     })();
   }, []);
 

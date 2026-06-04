@@ -38,7 +38,10 @@ input[type="range"].fmt-slider::-moz-range-thumb {
   to { transform: rotate(360deg); }
 }
 
-[data-placeholder]:empty:not(:focus)::before {
+/* Show placeholder when the element is truly empty, or when the browser has
+   left only a lone <br> (which contenteditable inserts after clearing text). */
+[data-placeholder]:empty:not(:focus)::before,
+[data-placeholder]:not(:focus):has(> br:only-child)::before {
   content: attr(data-placeholder);
   color: rgba(255, 255, 255, 0.4);
   pointer-events: none;
