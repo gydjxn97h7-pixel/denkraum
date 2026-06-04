@@ -33,6 +33,10 @@ import { TextFileViewerWindow } from "./components/TextFileViewerWindow";
 import { NodeView } from "./components/NodeView";
 import { SidebarNodeItem } from "./components/SidebarNodeItem";
 
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
 // ── Toolbar helpers ───────────────────────────────────────────────────────────
 
 function renderShapeIcon(
@@ -452,6 +456,10 @@ export default function Canvas() {
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
+
+  // Presentation camera animation
+  const animRafRef = useRef<number | null>(null);
+  const animCurrentRef = useRef<{ pan: { x: number; y: number }; zoom: number } | null>(null);
 
   // Pending values accumulated during a mousemove burst; applied once per frame
   const rafRef = useRef<number | null>(null);
@@ -1570,15 +1578,48 @@ export default function Canvas() {
     const n = nodeMapRef.current.get(id);
     if (!n || !canvasRef.current) return;
     const r = canvasRef.current.getBoundingClientRect();
-    const z = Math.min(
+    const toZoom = Math.min(
       1.5,
       Math.max(0.1, Math.min((r.width * 0.8) / n.w, (r.height * 0.8) / n.h)),
     );
-    setZoom(z);
-    setPan({
-      x: r.width / 2 - (n.x + n.w / 2) * z,
-      y: r.height / 2 - (n.y + n.h / 2) * z,
-    });
+    const toPan = {
+      x: r.width / 2 - (n.x + n.w / 2) * toZoom,
+      y: r.height / 2 - (n.y + n.h / 2) * toZoom,
+    };
+
+    // Cancel in-flight animation; start from the last interpolated position
+    // so a mid-animation interrupt never jumps to a stale state.
+    if (animRafRef.current !== null) {
+      cancelAnimationFrame(animRafRef.current);
+      animRafRef.current = null;
+    }
+    const fromPan = animCurrentRef.current?.pan ?? panRef.current;
+    const fromZoom = animCurrentRef.current?.zoom ?? zoomRef.current;
+    animCurrentRef.current = { pan: fromPan, zoom: fromZoom };
+
+    const DURATION = 600;
+    const startTime = performance.now();
+
+    function tick(now: number) {
+      const raw = Math.min((now - startTime) / DURATION, 1);
+      const t = easeInOutCubic(raw);
+      const curZoom = fromZoom + (toZoom - fromZoom) * t;
+      const curPan = {
+        x: fromPan.x + (toPan.x - fromPan.x) * t,
+        y: fromPan.y + (toPan.y - fromPan.y) * t,
+      };
+      animCurrentRef.current = { pan: curPan, zoom: curZoom };
+      setZoom(curZoom);
+      setPan(curPan);
+      if (raw < 1) {
+        animRafRef.current = requestAnimationFrame(tick);
+      } else {
+        animRafRef.current = null;
+        animCurrentRef.current = null;
+      }
+    }
+
+    animRafRef.current = requestAnimationFrame(tick);
   }, []);
 
   useEffect(() => {
@@ -1629,6 +1670,11 @@ export default function Canvas() {
         deleteSelected();
       if (e.key === "Escape") {
         if (isPresentingRef.current) {
+          if (animRafRef.current !== null) {
+            cancelAnimationFrame(animRafRef.current);
+            animRafRef.current = null;
+            animCurrentRef.current = null;
+          }
           setIsPresenting(false);
           if (prePresentState.current) {
             setPan(prePresentState.current.pan);
