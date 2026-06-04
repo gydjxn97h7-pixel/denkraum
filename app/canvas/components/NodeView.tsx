@@ -685,25 +685,27 @@ export const NodeView = React.memo(function NodeView({
         ));
       })()}
 
-      {/* Resize handle — outside node boundary, appears on hover */}
+      {/* Resize handle — constant screen size, same technique as connect-dots.
+          All canvas-unit values divided by zoom; after scale(zoom) the net
+          on-screen sizes are identical to zoom=1. */}
       {showResize && (
         <div
           data-role="resize-handle"
           onMouseDown={(e) => onResizeMouseDown(e, n.id)}
           style={{
             position: "absolute",
-            right: -11,
-            bottom: -11,
-            width: 22,
-            height: 22,
-            padding: 6,
+            right: -11 / zoom,
+            bottom: -11 / zoom,
+            width: 22 / zoom,
+            height: 22 / zoom,
+            padding: 6 / zoom,
             boxSizing: "content-box",
             background: "rgba(28,32,36,0.97)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 4,
+            border: `${1 / zoom}px solid rgba(255,255,255,0.12)`,
+            borderRadius: 4 / zoom,
             cursor: "nwse-resize",
             zIndex: 20,
-            boxShadow: "0 1px 6px rgba(0,0,0,0.6)",
+            boxShadow: `0 ${1 / zoom}px ${6 / zoom}px rgba(0,0,0,0.6)`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -713,23 +715,23 @@ export const NodeView = React.memo(function NodeView({
           }}
           onMouseEnter={(e) => {
             (e.currentTarget as HTMLElement).style.boxShadow =
-              "0 2px 10px rgba(0,0,0,0.7)";
+              `0 ${2 / zoom}px ${10 / zoom}px rgba(0,0,0,0.7)`;
             (e.currentTarget as HTMLElement).style.background =
               "rgba(40,46,54,0.99)";
           }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLElement).style.boxShadow =
-              "0 1px 6px rgba(0,0,0,0.6)";
+              `0 ${1 / zoom}px ${6 / zoom}px rgba(0,0,0,0.6)`;
             (e.currentTarget as HTMLElement).style.background =
               "rgba(28,32,36,0.97)";
           }}
         >
           <svg
-            width="11"
-            height="11"
+            width={11 / zoom}
+            height={11 / zoom}
             viewBox="0 0 8 8"
             fill="none"
-            style={{ pointerEvents: "none", display: "block" }}
+            style={{ pointerEvents: "none", display: "block", flexShrink: 0 }}
           >
             <line
               x1="1.5"
