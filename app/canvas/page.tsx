@@ -381,6 +381,8 @@ export default function Canvas() {
   const [presentationOrder, setPresentationOrder] = useState<number[]>(
     () => DEFAULT_NODES.map((n) => n.id),
   );
+  const [isPresenting, setIsPresenting] = useState(false);
+  const [presentationIndex, setPresentationIndex] = useState(0);
   const [toast, setToast] = useState<{
     msg: string;
     variant: "success" | "error";
@@ -435,11 +437,18 @@ export default function Canvas() {
   const zoomRef = useRef(zoom);
   const connectDragRef = useRef(connectDrag);
   const selectedRef = useRef(selected);
+  const presentationOrderRef = useRef(presentationOrder);
+  const presentationIndexRef = useRef(presentationIndex);
+  const isPresentingRef = useRef(isPresenting);
+  const prePresentState = useRef<{ pan: { x: number; y: number }; zoom: number } | null>(null);
   panRef.current = pan;
   zoomRef.current = zoom;
   connectDragRef.current = connectDrag;
   selectedIdsRef.current = selectedIds;
   copiedNodeRef.current = copiedNode;
+  presentationOrderRef.current = presentationOrder;
+  presentationIndexRef.current = presentationIndex;
+  isPresentingRef.current = isPresenting;
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
@@ -994,6 +1003,7 @@ export default function Canvas() {
   const onNodeContextMenu = useCallback((e: React.MouseEvent, id: number) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isPresentingRef.current) return;
     setSelected(id);
     setContextMenu({ kind: "node", x: e.clientX, y: e.clientY, id });
   }, []);
@@ -1003,6 +1013,7 @@ export default function Canvas() {
       const t = e.target as HTMLElement;
       if (t !== canvasRef.current && !t.dataset.bg) return;
       e.preventDefault();
+      if (isPresentingRef.current) return;
       if (!canvasRef.current) return;
       const r = canvasRef.current.getBoundingClientRect();
       const cx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
@@ -1555,6 +1566,18 @@ export default function Canvas() {
     });
   }, []);
 
+  const PRESENTATION_ZOOM = 1.0;
+  const centerNodeForPresentation = useCallback((id: number) => {
+    const n = nodeMapRef.current.get(id);
+    if (!n || !canvasRef.current) return;
+    const r = canvasRef.current.getBoundingClientRect();
+    setZoom(PRESENTATION_ZOOM);
+    setPan({
+      x: r.width / 2 - (n.x + n.w / 2) * PRESENTATION_ZOOM,
+      y: r.height / 2 - (n.y + n.h / 2) * PRESENTATION_ZOOM,
+    });
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
@@ -1602,6 +1625,15 @@ export default function Canvas() {
       )
         deleteSelected();
       if (e.key === "Escape") {
+        if (isPresentingRef.current) {
+          setIsPresenting(false);
+          if (prePresentState.current) {
+            setPan(prePresentState.current.pan);
+            setZoom(prePresentState.current.zoom);
+            prePresentState.current = null;
+          }
+          return;
+        }
         if (editingNodeIdRef.current !== null) {
           (document.activeElement as HTMLElement)?.blur();
         }
@@ -1614,6 +1646,26 @@ export default function Canvas() {
           setFilterText("");
           setFilterType("all");
         }
+      }
+      if (isPresentingRef.current) {
+        const order = presentationOrderRef.current;
+        const idx = presentationIndexRef.current;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === " ") {
+          e.preventDefault();
+          const next = Math.min(idx + 1, order.length - 1);
+          if (next !== idx) {
+            setPresentationIndex(next);
+            centerNodeForPresentation(order[next]);
+          }
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          const prev = Math.max(idx - 1, 0);
+          if (prev !== idx) {
+            setPresentationIndex(prev);
+            centerNodeForPresentation(order[prev]);
+          }
+        }
+        return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
@@ -1724,7 +1776,7 @@ export default function Canvas() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [deleteSelected, copySelected, pasteNode, focusNode]);
+  }, [deleteSelected, copySelected, pasteNode, focusNode, centerNodeForPresentation]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   const menuItem = (danger = false): React.CSSProperties => ({
@@ -1890,7 +1942,7 @@ export default function Canvas() {
           borderRadius: 16,
           boxShadow: "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
           zIndex: 151,
-          display: "flex",
+          display: isPresenting ? "none" : "flex",
           flexDirection: "column",
           alignItems: "center",
           padding: "14px 0",
@@ -2085,7 +2137,7 @@ export default function Canvas() {
           borderRadius: 16,
           boxShadow: "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
           zIndex: 149,
-          display: panelOpen ? "flex" : "none",
+          display: panelOpen && !isPresenting ? "flex" : "none",
           flexDirection: "column",
           overflow: "hidden",
           fontFamily:
@@ -2473,23 +2525,35 @@ export default function Canvas() {
             {/* Present button */}
             <div style={{ padding: "12px 14px", flexShrink: 0, borderTop: "0.5px solid rgba(255,255,255,0.06)" }}>
               <button
-                onClick={() => console.log("present", presentationOrder)}
+                disabled={presentationOrder.length === 0}
+                onClick={() => {
+                  if (presentationOrder.length === 0) return;
+                  prePresentState.current = { pan: panRef.current, zoom: zoomRef.current };
+                  setPresentationIndex(0);
+                  setIsPresenting(true);
+                  setActivePanel(null);
+                  setContextMenu(null);
+                  setColorPicker(null);
+                  setTextColorPicker(null);
+                  centerNodeForPresentation(presentationOrder[0]);
+                }}
                 style={{
                   width: "100%",
                   height: 38,
                   borderRadius: 10,
                   border: "none",
-                  background: "#F1B24A",
+                  background: presentationOrder.length === 0 ? "rgba(241,178,74,0.35)" : "#F1B24A",
                   color: "#0C2018",
                   fontSize: 13,
                   fontWeight: 600,
                   fontFamily: "inherit",
-                  cursor: "pointer",
+                  cursor: presentationOrder.length === 0 ? "default" : "pointer",
                   letterSpacing: "-0.1px",
                   transition: "opacity 0.15s",
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.opacity = "0.88";
+                  if (presentationOrder.length > 0)
+                    (e.currentTarget as HTMLElement).style.opacity = "0.88";
                 }}
                 onMouseLeave={(e) => {
                   (e.currentTarget as HTMLElement).style.opacity = "1";
@@ -2691,7 +2755,7 @@ export default function Canvas() {
           border: "0.5px solid rgba(255,255,255,0.08)",
           borderRadius: 16,
           padding: "6px 10px",
-          display: "flex",
+          display: isPresenting ? "none" : "flex",
           gap: 8,
           alignItems: "center",
           boxShadow: "0 2px 24px rgba(0,0,0,0.3), inset 0 1px 0 0 rgba(255,255,255,0.12)",
@@ -3976,7 +4040,7 @@ export default function Canvas() {
           border: "0.5px solid rgba(255,255,255,0.08)",
           borderRadius: 12,
           padding: "6px 10px",
-          display: "flex",
+          display: isPresenting ? "none" : "flex",
           gap: 8,
           alignItems: "center",
           boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
@@ -4064,12 +4128,43 @@ export default function Canvas() {
           letterSpacing: "-0.1px",
           whiteSpace: "nowrap",
           zIndex: 100,
+          display: isPresenting ? "none" : undefined,
         }}
       >
         {connectDrag
           ? "Click any node to connect · Esc to cancel"
           : "Right-click → Shapes & Images · Click dot → select target to connect · Pinch / Ctrl+Scroll = Zoom"}
       </div>
+
+      {/* ── Presentation HUD ── */}
+      {isPresenting && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 28,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "rgba(12,32,24,0.82)",
+            backdropFilter: "blur(12px)",
+            border: "0.5px solid rgba(255,255,255,0.1)",
+            borderRadius: 10,
+            padding: "7px 18px",
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            fontSize: 11.5,
+            color: "rgba(255,255,255,0.55)",
+            zIndex: 300,
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          <span style={{ color: "#F1B24A", fontWeight: 600 }}>
+            {presentationIndex + 1} / {presentationOrder.length}
+          </span>
+          <span>← → navigate · Esc exit</span>
+        </div>
+      )}
 
       {/* ── Toast ── */}
       {toast && (
