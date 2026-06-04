@@ -2873,12 +2873,19 @@ export default function Canvas() {
       </div>
 
       {/* ── Export Toolbar ── */}
+      {/* Center within the space to the right of the sidebar so it never
+          overlaps the strip or panel on narrow viewports.
+          Left boundary: strip(left:12 + w:52) + gap:12 = 76 (strip only)
+                         panel(left:76 + w:220) + gap:12 = 308 (panel open)
+          Center = 50% + leftBoundary/2  (geometric midpoint of remaining space) */}
       <div
         style={{
           position: "fixed",
           top: 20,
-          left: "50%",
+          left: panelOpen ? "calc(50% + 154px)" : "calc(50% + 38px)",
           transform: "translateX(-50%)",
+          maxWidth: panelOpen ? "calc(100vw - 320px)" : "calc(100vw - 88px)",
+          overflow: "hidden",
           background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.92)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
