@@ -1,5 +1,5 @@
 :root {
-  --accent: #FFB162;
+  --accent: #F1B24A;
 }
 
 input[type="range"].fmt-slider {
@@ -40,7 +40,7 @@ input[type="range"].fmt-slider::-moz-range-thumb {
 
 [data-placeholder]:empty:not(:focus)::before {
   content: attr(data-placeholder);
-  color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.4);
   pointer-events: none;
 }
 

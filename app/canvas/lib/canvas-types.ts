@@ -1,4 +1,4 @@
-export const ACCENT = "#FFB162";
+export const ACCENT = "#F1B24A";
 
 export type NodeType =
   | "block"
@@ -51,7 +51,12 @@ export type ColorPicker = {
 export type AssetRecord = { textFileContent?: string; imageUrl?: string };
 
 export const PRESET_COLORS = [
-  "#ffffff",
+  "#0C2018",
+  "#1D5C50",
+  "#4D774E",
+  "#9DC88D",
+  "#F1B24A",
+  "#FFFFFF",
   "#f5f4f0",
   "#F0EDE8",
   "#FFF3CD",
@@ -73,6 +78,7 @@ export const SIDEBAR_W = 220;
 export const LS_NODES = "denkraum_nodes";
 export const LS_CONNECTIONS = "denkraum_connections";
 export const LS_BOARD_NAME = "denkraum_board_name";
+export const LS_PRESENTATION_ORDER = "denkraum_presentation_order";
 
 export const DEFAULT_NODES: CanvasNode[] = [
   {
@@ -84,7 +90,7 @@ export const DEFAULT_NODES: CanvasNode[] = [
     title: "Project Idea",
     body: "Capture your thoughts here",
     type: "block",
-    color: "#1E2226",
+    color: "#1D5C50",
     fontSize: 13,
   },
   {
@@ -96,7 +102,7 @@ export const DEFAULT_NODES: CanvasNode[] = [
     title: "Concept",
     body: "Connect your ideas",
     type: "block",
-    color: "#1E2226",
+    color: "#1D5C50",
     fontSize: 13,
   },
   {
@@ -108,7 +114,7 @@ export const DEFAULT_NODES: CanvasNode[] = [
     title: "Next Steps",
     body: "",
     type: "block",
-    color: "#1E2226",
+    color: "#1D5C50",
     fontSize: 13,
   },
 ];
@@ -117,4 +123,3 @@ export const DEFAULT_CONNECTIONS: Connection[] = [
   { from: 0, to: 1 },
   { from: 1, to: 2 },
 ];
-

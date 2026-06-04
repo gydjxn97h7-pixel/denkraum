@@ -62,7 +62,7 @@ export function TextFileViewerWindow({
         top: isMaximized ? "5%" : 0,
         width: W,
         height: H,
-        background: "rgba(18,20,22,0.97)",
+        background: "rgba(30,74,65,0.97)",
         backdropFilter: "blur(28px)",
         WebkitBackdropFilter: "blur(28px)",
         border: "0.5px solid rgba(255,255,255,0.08)",
@@ -120,7 +120,7 @@ export function TextFileViewerWindow({
             style={{
               fontSize: 12,
               fontWeight: 500,
-              color: "#9CA3AF",
+              color: "rgba(255,255,255,0.65)",
               letterSpacing: "-0.1px",
               overflow: "hidden",
               textOverflow: "ellipsis",

@@ -199,11 +199,11 @@ export function ColorPickerWindow({
         left: 0,
         top: 0,
         width: W,
-        background: "rgba(22,24,28,0.97)",
+        background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
         backdropFilter: "blur(28px)",
         border: "0.5px solid rgba(255,255,255,0.08)",
         borderRadius: 18,
-        boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08)",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08), inset 0 1px 0 0 rgba(255,255,255,0.12)",
         zIndex: 500,
         overflow: "hidden",
         userSelect: "none",
@@ -232,7 +232,7 @@ export function ColorPickerWindow({
           style={{
             fontSize: 12,
             fontWeight: 500,
-            color: "#9CA3AF",
+            color: "rgba(255,255,255,0.65)",
             letterSpacing: "-0.1px",
           }}
         >
@@ -426,7 +426,7 @@ export function ColorPickerWindow({
               background: "transparent",
               fontSize: 11,
               fontFamily: "monospace",
-              color: "#E8E6E1",
+              color: "#FFFFFF",
               outline: "none",
               minWidth: 0,
               letterSpacing: "0.3px",
@@ -447,7 +447,7 @@ export function ColorPickerWindow({
             <span
               style={{
                 fontSize: 10,
-                color: "#6B7280",
+                color: "rgba(255,255,255,0.45)",
                 letterSpacing: "0.5px",
                 textTransform: "uppercase",
               }}
@@ -455,7 +455,7 @@ export function ColorPickerWindow({
               Opacity
             </span>
             <span
-              style={{ fontSize: 10, color: "#9CA3AF", fontFamily: "monospace" }}
+              style={{ fontSize: 10, color: "rgba(255,255,255,0.65)", fontFamily: "monospace" }}
             >
               {Math.round(alpha * 100)}%
             </span>
@@ -591,7 +591,7 @@ export function ColorPickerWindow({
                   borderRadius: 7,
                   padding: "5px 4px",
                   fontSize: 11,
-                  color: "#E8E6E1",
+                  color: "#FFFFFF",
                   outline: "none",
                   fontFamily: "monospace",
                 }}
@@ -599,7 +599,7 @@ export function ColorPickerWindow({
               <span
                 style={{
                   fontSize: 9,
-                  color: "#6B7280",
+                  color: "rgba(255,255,255,0.45)",
                   letterSpacing: "0.4px",
                   fontWeight: 500,
                 }}
@@ -614,7 +614,7 @@ export function ColorPickerWindow({
           <div
             style={{
               fontSize: 10,
-              color: "#6B7280",
+              color: "rgba(255,255,255,0.45)",
               letterSpacing: "0.5px",
               textTransform: "uppercase",
               marginBottom: 7,

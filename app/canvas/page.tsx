@@ -1,19 +1,12 @@
 "use client";
-import {
-  useRef,
-  useState,
-  useCallback,
-  useEffect,
-  useMemo,
-  memo,
-} from "react";
+import { useRef, useState, useCallback, useEffect, useMemo, memo } from "react";
 import "./canvas.css";
 import {
   ACCENT,
-  SIDEBAR_W,
   LS_NODES,
   LS_CONNECTIONS,
   LS_BOARD_NAME,
+  LS_PRESENTATION_ORDER,
   DEFAULT_NODES,
   DEFAULT_CONNECTIONS,
 } from "./lib/canvas-types";
@@ -60,7 +53,7 @@ function renderShapeIcon(
             rx="1.5"
             fill={`url(#${fid})`}
             stroke={stroke}
-            strokeWidth="1.8"
+            strokeWidth="2"
           />
           <rect
             x="2"
@@ -82,7 +75,7 @@ function renderShapeIcon(
             rx="6"
             fill={`url(#${fid})`}
             stroke={stroke}
-            strokeWidth="1.8"
+            strokeWidth="2"
           />
           <rect
             x="2"
@@ -102,7 +95,7 @@ function renderShapeIcon(
             r="9"
             fill={`url(#${fid})`}
             stroke={stroke}
-            strokeWidth="1.8"
+            strokeWidth="2"
           />
           <ellipse
             cx="7"
@@ -122,7 +115,7 @@ function renderShapeIcon(
             ry="6"
             fill={`url(#${fid})`}
             stroke={stroke}
-            strokeWidth="1.8"
+            strokeWidth="2"
           />
           <ellipse cx="7" cy="7" rx="4" ry="2" fill="rgba(255,255,255,0.07)" />
         </>
@@ -133,7 +126,7 @@ function renderShapeIcon(
             points="10,1 19,10 10,19 1,10"
             fill={`url(#${fid})`}
             stroke={stroke}
-            strokeWidth="1.8"
+            strokeWidth="2"
             strokeLinejoin="miter"
           />
           <polygon
@@ -161,7 +154,7 @@ function renderShapeIcon(
             rx="1.5"
             fill={`url(#${fid})`}
             stroke={stroke}
-            strokeWidth="1.8"
+            strokeWidth="2"
           />
           <rect
             x="3"
@@ -191,14 +184,14 @@ function renderShapeIcon(
             rx="1.5"
             fill={`url(#${fid})`}
             stroke={stroke}
-            strokeWidth="1.8"
+            strokeWidth="2"
           />
           <circle cx="5.5" cy="5.5" r="2.5" fill="rgba(255,255,255,0.55)" />
           <polyline
             points="1,14 6,9 10,13 14,8 19,14"
             fill="none"
-            stroke="rgba(255,255,255,0.5)"
-            strokeWidth="1.8"
+            stroke="rgba(255,255,255,0.8)"
+            strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -210,14 +203,14 @@ function renderShapeIcon(
             d="M3 1 L13 1 L19 7 L19 19 L3 19 Z"
             fill={`url(#${fid})`}
             stroke={stroke}
-            strokeWidth="1.8"
+            strokeWidth="2"
             strokeLinejoin="round"
           />
           <path
             d="M13 1 L13 7 L19 7"
             fill="none"
             stroke={stroke}
-            strokeWidth="1.8"
+            strokeWidth="2"
             strokeLinejoin="round"
           />
           <rect
@@ -257,8 +250,8 @@ function ShapeButton({
   const stroke = isActive
     ? "#A07030"
     : hovered
-      ? "rgba(255,255,255,0.62)"
-      : "rgba(255,255,255,0.42)";
+      ? "rgba(255,255,255,1)"
+      : "rgba(255,255,255,0.8)";
   return (
     <button
       title={label}
@@ -269,7 +262,7 @@ function ShapeButton({
         width: 36,
         height: 36,
         border: "none",
-        background: isActive ? "rgba(255,177,98,0.06)" : "transparent",
+        background: isActive ? "rgba(241,178,74,0.06)" : "transparent",
         cursor: "pointer",
         display: "flex",
         alignItems: "center",
@@ -313,14 +306,22 @@ const ConnectionLine = memo(function ConnectionLine({
   const cxm = (x1 + x2) / 2;
   const d = `M ${x1} ${y1} C ${cxm} ${y1}, ${cxm} ${y2}, ${x2} ${y2}`;
   return (
-    <g style={{ opacity: connDimmed ? 0.15 : 1, transition: "opacity 0.2s ease" }}>
+    <g
+      style={{
+        opacity: connDimmed ? 0.15 : 1,
+        transition: "opacity 0.2s ease",
+      }}
+    >
       <path
         d={d}
-        stroke={isHovered ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.25)"}
+        stroke={isHovered ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.7)"}
         strokeWidth={isHovered ? 2.5 / zoom : 1.5 / zoom}
         fill="none"
         strokeLinecap="round"
-        style={{ pointerEvents: "none", transition: "stroke 0.12s, stroke-width 0.12s" }}
+        style={{
+          pointerEvents: "none",
+          transition: "stroke 0.12s, stroke-width 0.12s",
+        }}
       />
       <path
         d={d}
@@ -351,7 +352,7 @@ export default function Canvas() {
   const [hoveredConnKey, setHoveredConnKey] = useState<string | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activePanel, setActivePanel] = useState<"board" | "nodes" | "saveload" | "shortcuts" | null>(null);
   const [exporting, setExporting] = useState(false);
   const [textFileViewer, setTextFileViewer] = useState<{
     nodeId: number;
@@ -377,6 +378,9 @@ export default function Canvas() {
   const [activeShapeType, setActiveShapeType] = useState<NodeType | null>(null);
   const [boardName, setBoardName] = useState("Untitled Board");
   const [editingBoardName, setEditingBoardName] = useState(false);
+  const [presentationOrder, setPresentationOrder] = useState<number[]>(
+    () => DEFAULT_NODES.map((n) => n.id),
+  );
   const [toast, setToast] = useState<{
     msg: string;
     variant: "success" | "error";
@@ -391,8 +395,6 @@ export default function Canvas() {
     startH: number;
     constrain: boolean; // keep w === h (circle)
   } | null>(null);
-  const isPanning = useRef(false);
-  const lastPan = useRef({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFileInputRef = useRef<HTMLInputElement>(null);
@@ -433,12 +435,8 @@ export default function Canvas() {
   const zoomRef = useRef(zoom);
   const connectDragRef = useRef(connectDrag);
   const selectedRef = useRef(selected);
-  useEffect(() => {
-    panRef.current = pan;
-  }, [pan]);
-  useEffect(() => {
-    zoomRef.current = zoom;
-  }, [zoom]);
+  panRef.current = pan;
+  zoomRef.current = zoom;
   connectDragRef.current = connectDrag;
   selectedIdsRef.current = selectedIds;
   copiedNodeRef.current = copiedNode;
@@ -476,6 +474,7 @@ export default function Canvas() {
           boardName,
           nodes,
           connections,
+          presentationOrder,
         },
         null,
         2,
@@ -491,7 +490,7 @@ export default function Canvas() {
     } catch {
       setToast({ msg: "Save failed", variant: "error" });
     }
-  }, [nodes, connections, boardName]);
+  }, [nodes, connections, boardName, presentationOrder]);
 
   saveBoardRef.current = saveBoard;
 
@@ -525,6 +524,28 @@ export default function Canvas() {
             const name = data.boardName.trim();
             setBoardName(name);
             localStorage.setItem(LS_BOARD_NAME, name);
+          }
+          const fileNodeIds = new Set<number>(
+            (data.nodes as CanvasNode[]).map((n: CanvasNode) => n.id),
+          );
+          if (Array.isArray(data.presentationOrder)) {
+            const parsedSet = new Set<number>(data.presentationOrder as number[]);
+            const missing = (data.nodes as CanvasNode[])
+              .filter((n: CanvasNode) => !parsedSet.has(n.id))
+              .sort((a: CanvasNode, b: CanvasNode) => a.id - b.id)
+              .map((n: CanvasNode) => n.id);
+            setPresentationOrder([
+              ...(data.presentationOrder as number[]).filter((id: number) =>
+                fileNodeIds.has(id),
+              ),
+              ...missing,
+            ]);
+          } else {
+            setPresentationOrder(
+              [...(data.nodes as CanvasNode[])]
+                .sort((a: CanvasNode, b: CanvasNode) => a.id - b.id)
+                .map((n: CanvasNode) => n.id),
+            );
           }
           setToast({ msg: "Board loaded", variant: "success" });
         } catch {
@@ -606,10 +627,11 @@ export default function Canvas() {
         label: autoLabel,
         body: "",
         type,
-        color: isText ? "transparent" : "#1E2226",
+        color: isText ? "transparent" : "#1D5C50",
         fontSize: isText ? 15 : 13,
       },
     ]);
+    setPresentationOrder((prev) => [...prev, newId]);
     setSelected(newId);
     setContextMenu(null);
     setTimeout(() => setActiveShapeType(null), 600);
@@ -671,10 +693,11 @@ export default function Canvas() {
               })(),
               body: "",
               type: "image",
-              color: "#1E2226",
+              color: "#1D5C50",
               imageUrl,
             },
           ]);
+          setPresentationOrder((prev) => [...prev, newId]);
           pendingImagePos.current = null;
         };
         img.src = imageUrl;
@@ -719,12 +742,13 @@ export default function Canvas() {
             label: fileName,
             body: "",
             type: "textfile",
-            color: "#1E2226",
+            color: "#1D5C50",
             fontSize: 13,
             textFileContent,
             textFileName: fileName,
           },
         ]);
+        setPresentationOrder((prev) => [...prev, newId]);
         pendingTextFilePos.current = null;
       };
       reader.readAsText(file);
@@ -856,6 +880,32 @@ export default function Canvas() {
               .map((n) => n.id),
           );
           setNodes(loadedNodes);
+
+          // ④ presentationOrder — load from localStorage, migrate if needed
+          const rawOrder = localStorage.getItem(LS_PRESENTATION_ORDER);
+          const loadedIdSet = new Set(loadedNodes.map((n) => n.id));
+          if (rawOrder) {
+            try {
+              const parsed: number[] = JSON.parse(rawOrder);
+              const parsedSet = new Set(parsed);
+              const missing = loadedNodes
+                .filter((n) => !parsedSet.has(n.id))
+                .sort((a, b) => a.id - b.id)
+                .map((n) => n.id);
+              setPresentationOrder([
+                ...parsed.filter((id) => loadedIdSet.has(id)),
+                ...missing,
+              ]);
+            } catch {
+              setPresentationOrder(
+                [...loadedNodes].sort((a, b) => a.id - b.id).map((n) => n.id),
+              );
+            }
+          } else {
+            setPresentationOrder(
+              [...loadedNodes].sort((a, b) => a.id - b.id).map((n) => n.id),
+            );
+          }
         }
       } catch {
         // JSON parse error — keep DEFAULT_NODES
@@ -877,6 +927,7 @@ export default function Canvas() {
         localStorage.setItem(LS_NODES, JSON.stringify(nodesToSave));
         localStorage.setItem(LS_CONNECTIONS, JSON.stringify(connections));
         localStorage.setItem(LS_BOARD_NAME, boardName);
+        localStorage.setItem(LS_PRESENTATION_ORDER, JSON.stringify(presentationOrder));
       } catch (err) {
         if (
           err instanceof DOMException &&
@@ -910,7 +961,7 @@ export default function Canvas() {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [nodes, connections, boardName, hydrated]);
+  }, [nodes, connections, boardName, presentationOrder, hydrated]);
 
   // ── Wheel ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -954,11 +1005,11 @@ export default function Canvas() {
       e.preventDefault();
       if (!canvasRef.current) return;
       const r = canvasRef.current.getBoundingClientRect();
-      const cx = (e.clientX - r.left - pan.x) / zoom;
-      const cy = (e.clientY - r.top - pan.y) / zoom;
+      const cx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
+      const cy = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
       setContextMenu({ kind: "canvas", x: e.clientX, y: e.clientY, cx, cy });
     },
-    [pan, zoom],
+    [],
   );
 
   // ── Mouse down handlers ───────────────────────────────────────────────────────
@@ -978,13 +1029,13 @@ export default function Canvas() {
       }
       if (!canvasRef.current) return;
       const r = canvasRef.current.getBoundingClientRect();
-      const cx = (e.clientX - r.left - pan.x) / zoom;
-      const cy = (e.clientY - r.top - pan.y) / zoom;
+      const cx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
+      const cy = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
       marquee.current = { startX: cx, startY: cy, x: cx, y: cy, w: 0, h: 0 };
       setSelected(null);
       setSelectedIds(new Set());
     },
-    [contextMenu, pan, zoom],
+    [contextMenu],
   );
 
   // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
@@ -1017,73 +1068,64 @@ export default function Canvas() {
   filterJumpIndexRef.current = filterJumpIndex;
   matchedNodesSortedRef.current = matchedNodes;
 
-  const startNodeDrag = useCallback(
-    (e: React.MouseEvent, id: number) => {
-      setContextMenu(null);
-      setSelected(id);
-      setSelectedIds(new Set());
-      const n = nodeMapRef.current.get(id);
-      if (!n || !canvasRef.current) return;
+  const startNodeDrag = useCallback((e: React.MouseEvent, id: number) => {
+    setContextMenu(null);
+    setSelected(id);
+    setSelectedIds(new Set());
+    const n = nodeMapRef.current.get(id);
+    if (!n || !canvasRef.current) return;
+    const r = canvasRef.current.getBoundingClientRect();
+    const mx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
+    const my = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
+    dragging.current = { id, ox: mx - n.x, oy: my - n.y };
+    e.preventDefault();
+  }, []);
+
+  const onNodeMouseDown = useCallback((e: React.MouseEvent, id: number) => {
+    if (e.button !== 0) return;
+    const t = e.target as HTMLElement;
+    if (t.isContentEditable) return;
+    if (t.dataset.role === "connect-dot") return;
+    if (t.dataset.role === "resize-handle") return;
+    if (t.dataset.role === "move-handle") return;
+    if (connectDragRef.current) return;
+    e.stopPropagation();
+    if (selectedIdsRef.current.size > 0 && selectedIdsRef.current.has(id)) {
+      // Multi-drag: move all selected nodes together
+      if (!canvasRef.current) return;
       const r = canvasRef.current.getBoundingClientRect();
       const mx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
       const my = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
-      dragging.current = { id, ox: mx - n.x, oy: my - n.y };
-      e.preventDefault();
-    },
-    [],
-  );
-
-  const onNodeMouseDown = useCallback(
-    (e: React.MouseEvent, id: number) => {
-      if (e.button !== 0) return;
-      const t = e.target as HTMLElement;
-      if (t.isContentEditable) return;
-      if (t.dataset.role === "connect-dot") return;
-      if (t.dataset.role === "resize-handle") return;
-      if (t.dataset.role === "move-handle") return;
-      if (connectDragRef.current) return;
-      e.stopPropagation();
-      if (selectedIdsRef.current.size > 0 && selectedIdsRef.current.has(id)) {
-        // Multi-drag: move all selected nodes together
-        if (!canvasRef.current) return;
-        const r = canvasRef.current.getBoundingClientRect();
-        const mx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
-        const my = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
-        const startPositions = new Map<number, { x: number; y: number }>();
-        for (const nid of selectedIdsRef.current) {
-          const node = nodeMapRef.current.get(nid);
-          if (node) startPositions.set(nid, { x: node.x, y: node.y });
-        }
-        multiDragging.current = {
-          startMouseX: mx,
-          startMouseY: my,
-          startPositions,
-        };
-        e.preventDefault();
-      } else {
-        startNodeDrag(e, id);
+      const startPositions = new Map<number, { x: number; y: number }>();
+      for (const nid of selectedIdsRef.current) {
+        const node = nodeMapRef.current.get(nid);
+        if (node) startPositions.set(nid, { x: node.x, y: node.y });
       }
-    },
-    [],
-  );
-
-  const onResizeMouseDown = useCallback(
-    (e: React.MouseEvent, id: number) => {
-      e.stopPropagation();
-      e.preventDefault();
-      const n = nodeMapRef.current.get(id);
-      if (!n) return;
-      resizing.current = {
-        id,
-        startX: e.clientX,
-        startY: e.clientY,
-        startW: n.w,
-        startH: n.h,
-        constrain: n.type === "circle",
+      multiDragging.current = {
+        startMouseX: mx,
+        startMouseY: my,
+        startPositions,
       };
-    },
-    [],
-  );
+      e.preventDefault();
+    } else {
+      startNodeDrag(e, id);
+    }
+  }, []);
+
+  const onResizeMouseDown = useCallback((e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const n = nodeMapRef.current.get(id);
+    if (!n) return;
+    resizing.current = {
+      id,
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: n.w,
+      startH: n.h,
+      constrain: n.type === "circle",
+    };
+  }, []);
 
   const onDotClick = useCallback((e: React.MouseEvent, id: number) => {
     e.stopPropagation();
@@ -1102,7 +1144,9 @@ export default function Canvas() {
     setHoveredConnKey((k) => (k === key ? null : k));
   }, []);
   const onConnDelete = useCallback((from: number, to: number) => {
-    setConnections((prev) => prev.filter((x) => !(x.from === from && x.to === to)));
+    setConnections((prev) =>
+      prev.filter((x) => !(x.from === from && x.to === to)),
+    );
   }, []);
 
   // Finalizes a pending connection on click (fires after mouseup, so
@@ -1228,7 +1272,6 @@ export default function Canvas() {
       }
 
       if (
-        !isPanning.current &&
         !dragging.current &&
         !resizing.current &&
         !marquee.current &&
@@ -1239,15 +1282,6 @@ export default function Canvas() {
       const pan = panRef.current;
       const zoom = zoomRef.current;
       let dirty = false;
-
-      if (isPanning.current) {
-        const dx = e.clientX - lastPan.current.x;
-        const dy = e.clientY - lastPan.current.y;
-        lastPan.current = { x: e.clientX, y: e.clientY };
-        pendingPanDelta.current.x += dx;
-        pendingPanDelta.current.y += dy;
-        dirty = true;
-      }
 
       if (dragging.current && canvasRef.current) {
         const r = canvasRef.current.getBoundingClientRect();
@@ -1340,7 +1374,6 @@ export default function Canvas() {
 
     dragging.current = null;
     resizing.current = null;
-    isPanning.current = false;
     multiDragging.current = null;
     pendingMultiDragDelta.current = null;
     setSnapGuides({});
@@ -1384,6 +1417,7 @@ export default function Canvas() {
       setConnections((prev) =>
         prev.filter((c) => !ids.has(c.from) && !ids.has(c.to)),
       );
+      setPresentationOrder((prev) => prev.filter((id) => !ids.has(id)));
       setSelectedIds(new Set());
       setSelected(null);
     } else {
@@ -1393,6 +1427,7 @@ export default function Canvas() {
       setConnections((prev) =>
         prev.filter((c) => c.from !== id && c.to !== id),
       );
+      setPresentationOrder((prev) => prev.filter((p) => p !== id));
       setSelected(null);
     }
   }, []);
@@ -1419,7 +1454,7 @@ export default function Canvas() {
       const result: CanvasNode[] = [];
       for (const row of rows) {
         row.sort((a, b) => a.x - b.x);
-        const rowH = Math.max(...row.map((n) => n.h));
+        const rowH = row.reduce((max, n) => Math.max(max, n.h), 0);
         let curX = row[0].x;
         for (const node of row) {
           result.push({ ...node, x: curX, y: curY });
@@ -1455,8 +1490,29 @@ export default function Canvas() {
         ? cy - node.h / 2
         : lastMousePosRef.current.y - node.h / 2 + 10;
     setNodes((prev) => [...prev, { ...node, id: newId, x: tx, y: ty }]);
+    setPresentationOrder((prev) => [...prev, newId]);
     setSelected(newId);
     setContextMenu(null);
+  }, []);
+
+  const movePresentationNodeUp = useCallback((id: number) => {
+    setPresentationOrder((prev) => {
+      const idx = prev.indexOf(id);
+      if (idx <= 0) return prev;
+      const next = [...prev];
+      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+      return next;
+    });
+  }, []);
+
+  const movePresentationNodeDown = useCallback((id: number) => {
+    setPresentationOrder((prev) => {
+      const idx = prev.indexOf(id);
+      if (idx === -1 || idx === prev.length - 1) return prev;
+      const next = [...prev];
+      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+      return next;
+    });
   }, []);
 
   const updateNodeField = useCallback(
@@ -1551,6 +1607,8 @@ export default function Canvas() {
         }
         setConnectDrag(null);
         setContextMenu(null);
+        setColorPicker(null);
+        setTextColorPicker(null);
         if (filterOpenRef.current) {
           setFilterOpen(false);
           setFilterText("");
@@ -1598,11 +1656,12 @@ export default function Canvas() {
               label: `Block ${maxBlockIdx1 + 1}`,
               body: "",
               type: "block",
-              color: "#1E2226",
+              color: "#1D5C50",
               fontSize: 13,
             },
           ]);
           setConnections((prev) => [...prev, { from: selId, to: newId }]);
+          setPresentationOrder((prev) => [...prev, newId]);
           setSelected(newId);
           editingNodeIdRef.current = newId;
           setTimeout(() => {
@@ -1646,10 +1705,11 @@ export default function Canvas() {
               label: `Block ${maxBlockIdx2 + 1}`,
               body: "",
               type: "block",
-              color: "#1E2226",
+              color: "#1D5C50",
               fontSize: 13,
             },
           ]);
+          setPresentationOrder((prev) => [...prev, newId]);
           setSelected(newId);
           editingNodeIdRef.current = newId;
           setTimeout(() => {
@@ -1671,7 +1731,7 @@ export default function Canvas() {
     padding: "9px 14px",
     cursor: "pointer",
     fontSize: 13.5,
-    color: danger ? "#FF6B6B" : "#E8E6E1",
+    color: danger ? "#FF6B6B" : "#FFFFFF",
     display: "flex",
     alignItems: "center",
     gap: 10,
@@ -1696,10 +1756,10 @@ export default function Canvas() {
     try {
       // Bug 1: compute tight bounding box of all nodes + padding
       const PAD = 40;
-      const minX = Math.min(...nodes.map((n) => n.x)) - PAD;
-      const minY = Math.min(...nodes.map((n) => n.y)) - PAD;
-      const maxX = Math.max(...nodes.map((n) => n.x + n.w)) + PAD;
-      const maxY = Math.max(...nodes.map((n) => n.y + n.h)) + PAD;
+      const minX = nodes.reduce((m, n) => Math.min(m, n.x), Infinity) - PAD;
+      const minY = nodes.reduce((m, n) => Math.min(m, n.y), Infinity) - PAD;
+      const maxX = nodes.reduce((m, n) => Math.max(m, n.x + n.w), -Infinity) + PAD;
+      const maxY = nodes.reduce((m, n) => Math.max(m, n.y + n.h), -Infinity) + PAD;
       const contentW = Math.ceil(maxX - minX);
       const contentH = Math.ceil(maxY - minY);
 
@@ -1724,7 +1784,7 @@ export default function Canvas() {
       const { jsPDF } = await import("jspdf");
 
       const cvs = await html2canvas(el, {
-        backgroundColor: "#141618",
+        backgroundColor: "#0C2018",
         scale: 2,
         useCORS: true,
         logging: false,
@@ -1735,10 +1795,6 @@ export default function Canvas() {
           window.getComputedStyle(el).position === "fixed",
       });
 
-      // Restore canvas size before saving (even if jsPDF throws)
-      el.style.width = "";
-      el.style.height = "";
-
       const imgData = cvs.toDataURL("image/jpeg", 0.92);
       const pdf = new jsPDF({
         orientation: contentW >= contentH ? "landscape" : "portrait",
@@ -1747,8 +1803,9 @@ export default function Canvas() {
       });
       pdf.addImage(imgData, "JPEG", 0, 0, contentW, contentH);
       pdf.save("dnkrm.pdf");
+    } catch {
+      setToast({ msg: "Export failed", variant: "error" });
     } finally {
-      // Always restore canvas size in case the try block threw before cleanup
       if (canvasRef.current) {
         canvasRef.current.style.width = "";
         canvasRef.current.style.height = "";
@@ -1759,16 +1816,15 @@ export default function Canvas() {
     }
   }, [nodes]);
 
-  // ── Sidebar width (collapsed = icon-only 48px, open = full 220px) ────────────
-  const sidebarW = sidebarOpen ? SIDEBAR_W : 48;
 
   // ── Render ────────────────────────────────────────────────────────────────────
+  const panelOpen = activePanel !== null;
   return (
     <div
       style={{
         width: "100vw",
         height: "100vh",
-        background: "#141618",
+        background: "#0C2018",
         overflow: "hidden",
         position: "relative",
         fontFamily:
@@ -1800,299 +1856,376 @@ export default function Canvas() {
 
       {/* Shared gradient defs for shape icons */}
       <svg
-        style={{ position: "absolute", width: 0, height: 0, pointerEvents: "none" }}
+        style={{
+          position: "absolute",
+          width: 0,
+          height: 0,
+          pointerEvents: "none",
+        }}
         aria-hidden="true"
       >
         <defs>
           <linearGradient id="gShapeN" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#2E3338" />
-            <stop offset="100%" stopColor="#1A1E22" />
+            <stop offset="0%" stopColor="#265048" />
+            <stop offset="100%" stopColor="#143F38" />
           </linearGradient>
           <linearGradient id="gShapeA" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#2A2418" />
-            <stop offset="100%" stopColor="#1A1710" />
+            <stop offset="0%" stopColor="#3D3216" />
+            <stop offset="100%" stopColor="#2A2410" />
           </linearGradient>
         </defs>
       </svg>
 
-      {/* ── Sidebar ── */}
+      {/* ── Sidebar Strip (always visible, 52px) ── */}
       <div
         style={{
           position: "fixed",
-          top: 0,
-          left: 0,
-          height: "100%",
-          width: sidebarW,
-          transition: "width 0.26s cubic-bezier(0.4, 0, 0.2, 1)",
-          background: "rgba(18,20,22,0.97)",
+          top: 12,
+          left: 12,
+          height: "calc(100vh - 24px)",
+          width: 52,
+          background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          borderRadius: 16,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+          zIndex: 151,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          padding: "14px 0",
+          fontFamily:
+            "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+        }}
+      >
+        {/* Logo mark — decorative, not clickable */}
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 22 22"
+          fill="none"
+          style={{ flexShrink: 0, display: "block" }}
+        >
+          <rect
+            x="0.5"
+            y="0.5"
+            width="21"
+            height="21"
+            rx="5"
+            stroke="rgba(241,178,74,0.3)"
+            strokeWidth="1"
+          />
+          <rect
+            x="4"
+            y="4"
+            width="14"
+            height="14"
+            rx="3"
+            fill="rgba(241,178,74,0.12)"
+          />
+          <rect
+            x="7"
+            y="7"
+            width="8"
+            height="8"
+            rx="2"
+            fill="rgba(241,178,74,0.45)"
+          />
+        </svg>
+
+        {/* gap */}
+        <div style={{ height: 20 }} />
+
+        {/* Nav buttons */}
+        {(
+          [
+            {
+              section: "board" as const,
+              title: "Board",
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <line x1="3" y1="9" x2="21" y2="9"/>
+                </svg>
+              ),
+            },
+            {
+              section: "nodes" as const,
+              title: "Nodes",
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="6" cy="6" r="2.5"/>
+                  <circle cx="18" cy="18" r="2.5"/>
+                  <line x1="8" y1="8" x2="16" y2="16"/>
+                </svg>
+              ),
+            },
+            {
+              section: "saveload" as const,
+              title: "Save / Load",
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              ),
+            },
+            {
+              section: "shortcuts" as const,
+              title: "Shortcuts",
+              icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="6" width="20" height="12" rx="2"/>
+                  <line x1="6" y1="10" x2="6.01" y2="10"/>
+                  <line x1="10" y1="10" x2="10.01" y2="10"/>
+                  <line x1="14" y1="10" x2="14.01" y2="10"/>
+                  <line x1="8" y1="14" x2="16" y2="14"/>
+                </svg>
+              ),
+            },
+          ] as { section: "board" | "nodes" | "saveload" | "shortcuts"; title: string; icon: React.ReactNode }[]
+        ).map(({ section, title, icon }) => {
+          const isActive = activePanel === section;
+          return (
+            <button
+              key={section}
+              title={title}
+              onClick={() => setActivePanel((prev) => prev === section ? null : section)}
+              style={{
+                position: "relative",
+                width: 36,
+                height: 36,
+                borderRadius: 9,
+                marginBottom: 6,
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: isActive ? "#F1B24A" : "rgba(255,255,255,0.75)",
+                background: isActive ? "rgba(241,178,74,0.12)" : "transparent",
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.95)";
+                  (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.75)";
+                  (e.currentTarget as HTMLElement).style.background = "transparent";
+                }
+              }}
+            >
+              {isActive && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: -8,
+                    top: 6,
+                    width: 2.5,
+                    height: 24,
+                    background: "#F1B24A",
+                    borderRadius: "0 2px 2px 0",
+                  }}
+                />
+              )}
+              {icon}
+            </button>
+          );
+        })}
+
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
+
+        {/* Avatar */}
+        <div
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.06)",
+            border: "0.5px solid rgba(255,255,255,0.1)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "rgba(255,255,255,0.4)",
+            flexShrink: 0,
+          }}
+        >
+          A
+        </div>
+      </div>
+
+      {/* ── Sidebar Panel (220px, shown when panel open) ── */}
+      <div
+        style={{
+          position: "fixed",
+          top: 12,
+          left: 76,
+          height: "calc(100vh - 24px)",
+          width: 220,
+          background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
           backdropFilter: "blur(24px)",
           WebkitBackdropFilter: "blur(24px)",
-          borderRight: "0.5px solid rgba(255,255,255,0.06)",
-          zIndex: 150,
-          display: "flex",
+          borderRadius: 16,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+          zIndex: 149,
+          display: panelOpen ? "flex" : "none",
           flexDirection: "column",
           overflow: "hidden",
           fontFamily:
             "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
         }}
       >
-        {/* ── Header ── */}
+        {/* ── Panel Header (dynamic title) ── */}
         <div
           style={{
-            height: 58,
+            height: 52,
             flexShrink: 0,
             background: "rgba(0,0,0,0.15)",
             borderBottom: "0.5px solid rgba(255,255,255,0.05)",
             display: "flex",
             alignItems: "center",
-            justifyContent: sidebarOpen ? "space-between" : "center",
-            padding: sidebarOpen ? "0 12px 0 16px" : "0",
+            justifyContent: "space-between",
+            padding: "0 14px 0 16px",
           }}
         >
-          {/* Logo mark — always visible */}
-          <div
+          <span
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 9,
-              flexShrink: 0,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "1.4px",
+              color: "#FFFFFF",
             }}
           >
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 22 22"
-              fill="none"
-              style={{ flexShrink: 0 }}
-            >
-              <rect
-                x="0.5"
-                y="0.5"
-                width="21"
-                height="21"
-                rx="5"
-                stroke="rgba(255,177,98,0.3)"
-                strokeWidth="1"
-              />
-              <rect
-                x="4"
-                y="4"
-                width="14"
-                height="14"
-                rx="3"
-                fill="rgba(255,177,98,0.12)"
-              />
-              <rect
-                x="7"
-                y="7"
-                width="8"
-                height="8"
-                rx="2"
-                fill="rgba(255,177,98,0.45)"
-              />
-            </svg>
-            {sidebarOpen && (
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  letterSpacing: "2.5px",
-                  color: "#E8E6E1",
-                }}
-              >
-                DNKRM
-              </span>
-            )}
-          </div>
-
-          {/* Collapse button */}
-          {sidebarOpen && (
-            <button
-              onClick={() => setSidebarOpen((o) => !o)}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: "#3A3D42",
-                cursor: "pointer",
-                fontSize: 14,
-                padding: 0,
-                borderRadius: 6,
-                lineHeight: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 26,
-                height: 26,
-                flexShrink: 0,
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.color = "#6B7280";
-                (e.currentTarget as HTMLElement).style.background =
-                  "rgba(255,255,255,0.05)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.color = "#3A3D42";
-                (e.currentTarget as HTMLElement).style.background =
-                  "transparent";
-              }}
-            >
-              ‹
-            </button>
-          )}
-          {!sidebarOpen && (
-            <button
-              onClick={() => setSidebarOpen((o) => !o)}
-              style={{
-                position: "absolute",
-                bottom: 16,
-                left: "50%",
-                transform: "translateX(-50%)",
-                border: "none",
-                background: "transparent",
-                color: "#3A3D42",
-                cursor: "pointer",
-                fontSize: 14,
-                padding: 0,
-                borderRadius: 6,
-                lineHeight: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 26,
-                height: 26,
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.color = "#6B7280";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.color = "#3A3D42";
-              }}
-            >
-              ›
-            </button>
-          )}
+            {activePanel === "board" && "BOARD"}
+            {activePanel === "nodes" && "NODES"}
+            {activePanel === "saveload" && "BOARD FILES"}
+            {activePanel === "shortcuts" && "SHORTCUTS"}
+          </span>
+          <button
+            onClick={() => setActivePanel(null)}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "rgba(255,255,255,0.7)",
+              fontSize: 13,
+              cursor: "pointer",
+              padding: "4px 6px",
+              lineHeight: 1,
+              borderRadius: 5,
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.8)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.7)";
+            }}
+          >
+            ✕
+          </button>
         </div>
 
-        {/* ── Scrollable body ── */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            overflowX: "hidden",
-          }}
+        {/* Icon gradient defs — always in DOM for SidebarNodeItem icons */}
+        <svg
+          width="0"
+          height="0"
+          style={{ position: "absolute", pointerEvents: "none" }}
         >
-          {/* Icon gradient defs — referenced by all node row icons */}
-          <svg
-            width="0"
-            height="0"
-            style={{ position: "absolute", pointerEvents: "none" }}
-          >
-            <defs>
-              {(
-                [
-                  "iconGradBlock",
-                  "iconGradRounded",
-                  "iconGradCircle",
-                  "iconGradOval",
-                  "iconGradDiamond",
-                  "iconGradText",
-                  "iconGradImage",
-                  "iconGradTextfile",
-                ] as string[]
-              ).map((id) => (
-                <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#2E3338" />
-                  <stop offset="100%" stopColor="#1A1E22" />
-                </linearGradient>
-              ))}
-            </defs>
-          </svg>
+          <defs>
+            {(
+              [
+                "iconGradBlock",
+                "iconGradRounded",
+                "iconGradCircle",
+                "iconGradOval",
+                "iconGradDiamond",
+                "iconGradText",
+                "iconGradImage",
+                "iconGradTextfile",
+              ] as string[]
+            ).map((id) => (
+              <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#265048" />
+                <stop offset="100%" stopColor="#143F38" />
+              </linearGradient>
+            ))}
+          </defs>
+        </svg>
 
-          {/* ── BOARD section ── */}
-          {sidebarOpen && (
+        {/* ── BOARD section ── */}
+        {activePanel === "board" && (
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: 12 }}>
+            {/* Board row */}
             <div
+              onDoubleClick={() => setEditingBoardName(true)}
               style={{
-                paddingTop: 18,
-                paddingBottom: 6,
-                paddingLeft: 20,
-                fontSize: 9.5,
-                fontWeight: 600,
-                letterSpacing: "1.4px",
-                color: "#3D4147",
-                textTransform: "uppercase",
-              }}
-            >
-              Board
-            </div>
-          )}
-
-          {/* Board row */}
-          <div
-            onDoubleClick={() => {
-              if (sidebarOpen) setEditingBoardName(true);
-            }}
-            style={{
-              position: "relative",
-              height: 40,
-              display: "flex",
-              alignItems: "center",
-              cursor: sidebarOpen ? "text" : "default",
-              background:
-                "linear-gradient(to right, rgba(255,177,98,0.07), transparent)",
-              justifyContent: sidebarOpen ? "flex-start" : "center",
-            }}
-          >
-            {/* Left accent bar */}
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 0,
-                width: 2.5,
+                position: "relative",
                 height: 40,
-                background: "#FFB162",
-                borderRadius: "0 1px 1px 0",
-              }}
-            />
-
-            {/* Board icon */}
-            <div
-              style={{
-                paddingLeft: sidebarOpen ? 20 : 0,
-                flexShrink: 0,
                 display: "flex",
                 alignItems: "center",
+                cursor: "text",
+                background:
+                  "linear-gradient(to right, rgba(241,178,74,0.07), transparent)",
+                justifyContent: "flex-start",
               }}
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-                style={{ display: "block" }}
-              >
-                <rect
-                  x="0.7"
-                  y="0.7"
-                  width="12.6"
-                  height="12.6"
-                  rx="2"
-                  stroke="#4B5563"
-                  strokeWidth="1.3"
-                />
-                <rect
-                  x="0.7"
-                  y="0.7"
-                  width="12.6"
-                  height="3.5"
-                  rx="2"
-                  fill="rgba(255,255,255,0.10)"
-                />
-              </svg>
-            </div>
+              {/* Left accent bar */}
+              <div
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: 2.5,
+                  height: 40,
+                  background: "#F1B24A",
+                  borderRadius: "0 1px 1px 0",
+                }}
+              />
 
-            {sidebarOpen &&
-              (editingBoardName ? (
+              {/* Board icon */}
+              <div
+                style={{
+                  paddingLeft: 20,
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  style={{ display: "block" }}
+                >
+                  <rect
+                    x="0.7"
+                    y="0.7"
+                    width="12.6"
+                    height="12.6"
+                    rx="2"
+                    stroke="rgba(255,255,255,0.6)"
+                    strokeWidth="1.6"
+                  />
+                  <rect
+                    x="0.7"
+                    y="0.7"
+                    width="12.6"
+                    height="3.5"
+                    rx="2"
+                    fill="rgba(255,255,255,0.10)"
+                  />
+                </svg>
+              </div>
+
+              {editingBoardName ? (
                 <input
                   autoFocus
                   defaultValue={boardName}
@@ -2123,10 +2256,10 @@ export default function Canvas() {
                     fontFamily: "inherit",
                     background: "rgba(255,255,255,0.07)",
                     border: "none",
-                    outline: "1px solid rgba(255,177,98,0.4)",
+                    outline: "1px solid rgba(241,178,74,0.4)",
                     borderRadius: 5,
                     padding: "1px 5px",
-                    color: "#E8E6E1",
+                    color: "#FFFFFF",
                     minWidth: 0,
                   }}
                 />
@@ -2138,7 +2271,7 @@ export default function Canvas() {
                       marginLeft: 10,
                       fontSize: 12.5,
                       fontWeight: 500,
-                      color: "#D4D1CB",
+                      color: "#FFFFFF",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
@@ -2147,143 +2280,216 @@ export default function Canvas() {
                   >
                     {boardName}
                   </span>
-                  {/* Active dot with outer glow */}
                   <svg
                     width="16"
                     height="16"
                     viewBox="0 0 16 16"
                     style={{ marginRight: 20, flexShrink: 0 }}
                   >
-                    <circle cx="8" cy="8" r="6" fill="rgba(255,177,98,0.12)" />
-                    <circle cx="8" cy="8" r="3.5" fill="#FFB162" />
+                    <circle cx="8" cy="8" r="6" fill="rgba(241,178,74,0.12)" />
+                    <circle cx="8" cy="8" r="3.5" fill="#F1B24A" />
                   </svg>
                 </>
-              ))}
-          </div>
+              )}
+            </div>
 
-          {/* Separator */}
-          <div
-            style={{
-              height: "0.5px",
-              background: "rgba(255,255,255,0.04)",
-              margin: "0",
-            }}
-          />
-
-          {/* ── NODES section ── */}
-          {sidebarOpen && (
+            {/* Info line */}
             <div
               style={{
-                paddingTop: 18,
-                paddingBottom: 6,
-                paddingLeft: 20,
-                fontSize: 9.5,
-                fontWeight: 600,
-                letterSpacing: "1.4px",
-                color: "#3D4147",
-                textTransform: "uppercase",
+                fontSize: 10,
+                color: "rgba(255,255,255,0.75)",
+                padding: "12px 16px",
               }}
             >
-              Nodes
+              Canvas · {nodes.length} nodes
             </div>
-          )}
+          </div>
+        )}
 
-          {nodes.length === 0 ? (
-            sidebarOpen ? (
+        {/* ── NODES section ── */}
+        {activePanel === "nodes" && (
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: 12 }}>
+            {nodes.length === 0 ? (
               <div
-                style={{ padding: "6px 20px", fontSize: 12, color: "#3D4147" }}
+                style={{ padding: "6px 20px", fontSize: 12, color: "rgba(255,255,255,0.4)" }}
               >
                 No nodes yet
               </div>
-            ) : null
-          ) : (
-            nodes.map((n) => (
-              <SidebarNodeItem
-                key={n.id}
-                id={n.id}
-                type={n.type}
-                label={
-                  (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() ||
-                  "Untitled"
-                }
-                defaultLabelValue={n.label ?? n.title}
-                isActive={selected === n.id}
-                isEditingSidebar={editingSidebarNodeId === n.id}
-                sidebarOpen={sidebarOpen}
-                focusNode={focusNode}
-                updateNodeLabel={updateNodeLabel}
-                setEditingSidebarNodeId={setEditingSidebarNodeId}
-              />
-            ))
-          )}
+            ) : (
+              nodes.map((n) => (
+                <SidebarNodeItem
+                  key={n.id}
+                  id={n.id}
+                  type={n.type}
+                  label={
+                    (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() ||
+                    "Untitled"
+                  }
+                  defaultLabelValue={n.label ?? n.title}
+                  isActive={selected === n.id}
+                  isEditingSidebar={editingSidebarNodeId === n.id}
+                  focusNode={focusNode}
+                  updateNodeLabel={updateNodeLabel}
+                  setEditingSidebarNodeId={setEditingSidebarNodeId}
+                />
+              ))
+            )}
+          </div>
+        )}
 
-          {/* Separator */}
-          <div
-            style={{
-              height: "0.5px",
-              background: "rgba(255,255,255,0.04)",
-              margin: "0",
-            }}
-          />
-
-          {/* ── Save / Load ── */}
-          {/* Save row */}
-          <button
-            title="Save board"
-            onClick={() => saveBoard()}
-            style={{
-              height: 44,
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              gap: sidebarOpen ? 10 : 0,
-              justifyContent: sidebarOpen ? "flex-start" : "center",
-              paddingLeft: sidebarOpen ? 16 : 0,
-              paddingRight: sidebarOpen ? 16 : 0,
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background =
-                "rgba(255,255,255,0.03)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "transparent";
-            }}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              style={{ flexShrink: 0, color: "#6B7280" }}
+        {/* ── SAVELOAD section ── */}
+        {activePanel === "saveload" && (
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 0" }}>
+            {/* Save row */}
+            <button
+              title="Save board"
+              onClick={() => saveBoard()}
+              style={{
+                height: 44,
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                justifyContent: "flex-start",
+                paddingLeft: 16,
+                paddingRight: 16,
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background =
+                  "rgba(255,255,255,0.03)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "transparent";
+              }}
             >
-              <path
-                d="M2 12h10M7 2v7M4 6l3 3 3-3"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            {sidebarOpen && (
-              <>
-                <span
-                  style={{
-                    flex: 1,
-                    textAlign: "left",
-                    fontSize: 12.5,
-                    color: "#9CA3AF",
-                  }}
-                >
-                  Save board
-                </span>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                style={{ flexShrink: 0, color: "rgba(255,255,255,0.75)" }}
+              >
+                <path
+                  d="M2 12h10M7 2v7M4 6l3 3 3-3"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span
+                style={{
+                  flex: 1,
+                  textAlign: "left",
+                  fontSize: 12.5,
+                  color: "rgba(255,255,255,0.85)",
+                }}
+              >
+                Save board
+              </span>
+              <kbd
+                style={{
+                  fontSize: 10.5,
+                  color: "rgba(255,255,255,0.55)",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "0.5px solid rgba(255,255,255,0.07)",
+                  borderRadius: 5,
+                  padding: "2px 7px",
+                  fontFamily: "inherit",
+                  flexShrink: 0,
+                }}
+              >
+                ⌘S
+              </kbd>
+            </button>
+
+            {/* Load row */}
+            <button
+              title="Load board"
+              onClick={() => denkraumFileInputRef.current?.click()}
+              style={{
+                height: 44,
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                justifyContent: "flex-start",
+                paddingLeft: 16,
+                paddingRight: 16,
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background =
+                  "rgba(255,255,255,0.03)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "transparent";
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                style={{ flexShrink: 0, color: "rgba(255,255,255,0.6)" }}
+              >
+                <path
+                  d="M2 12h10M7 9V2M4 5l3-3 3 3"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span
+                style={{
+                  flex: 1,
+                  textAlign: "left",
+                  fontSize: 12.5,
+                  color: "rgba(255,255,255,0.55)",
+                }}
+              >
+                Load board
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* ── SHORTCUTS section ── */}
+        {activePanel === "shortcuts" && (
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: 12 }}>
+            {(
+              [
+                { kbd: "⌫  Delete", desc: "Delete selected" },
+                { kbd: "Tab", desc: "Add child node" },
+                { kbd: "Enter", desc: "Add sibling node" },
+                { kbd: "Esc", desc: "Cancel connect" },
+                { kbd: "⌃ Scroll", desc: "Zoom in / out" },
+                { kbd: "Right-click", desc: "Insert shape" },
+                { kbd: "Click dot →", desc: "Connect nodes" },
+              ] as { kbd: string; desc: string }[]
+            ).map(({ kbd, desc }) => (
+              <div
+                key={kbd}
+                style={{
+                  height: 28,
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "0 16px",
+                  gap: 10,
+                }}
+              >
                 <kbd
                   style={{
                     fontSize: 10.5,
-                    color: "#4B5563",
+                    color: "rgba(255,255,255,0.7)",
                     background: "rgba(255,255,255,0.04)",
                     border: "0.5px solid rgba(255,255,255,0.07)",
                     borderRadius: 5,
@@ -2292,170 +2498,20 @@ export default function Canvas() {
                     flexShrink: 0,
                   }}
                 >
-                  ⌘S
+                  {kbd}
                 </kbd>
-              </>
-            )}
-          </button>
-
-          {/* Load row */}
-          <button
-            title="Load board"
-            onClick={() => denkraumFileInputRef.current?.click()}
-            style={{
-              height: 40,
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              gap: sidebarOpen ? 10 : 0,
-              justifyContent: sidebarOpen ? "flex-start" : "center",
-              paddingLeft: sidebarOpen ? 16 : 0,
-              paddingRight: sidebarOpen ? 16 : 0,
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background =
-                "rgba(255,255,255,0.03)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "transparent";
-            }}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              style={{ flexShrink: 0, color: "#3D4147" }}
-            >
-              <path
-                d="M2 12h10M7 9V2M4 5l3-3 3 3"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            {sidebarOpen && (
-              <span
-                style={{
-                  flex: 1,
-                  textAlign: "left",
-                  fontSize: 12.5,
-                  color: "#4B5563",
-                }}
-              >
-                Load board
-              </span>
-            )}
-          </button>
-
-          {/* ── SHORTCUTS section ── */}
-          {sidebarOpen && (
-            <>
-              <div
-                style={{
-                  paddingTop: 18,
-                  paddingBottom: 6,
-                  paddingLeft: 20,
-                  fontSize: 9.5,
-                  fontWeight: 600,
-                  letterSpacing: "1.4px",
-                  color: "#3D4147",
-                  textTransform: "uppercase",
-                }}
-              >
-                Shortcuts
-              </div>
-              {(
-                [
-                  { kbd: "⌫  Delete", desc: "Delete selected" },
-                  { kbd: "Tab", desc: "Add child node" },
-                  { kbd: "Enter", desc: "Add sibling node" },
-                  { kbd: "Esc", desc: "Cancel connect" },
-                  { kbd: "⌃ Scroll", desc: "Zoom in / out" },
-                  { kbd: "Right-click", desc: "Insert shape" },
-                  { kbd: "Click dot →", desc: "Connect nodes" },
-                ] as { kbd: string; desc: string }[]
-              ).map(({ kbd, desc }) => (
-                <div
-                  key={kbd}
+                <span
                   style={{
-                    height: 28,
-                    display: "flex",
-                    alignItems: "center",
-                    padding: "0 16px",
-                    gap: 10,
+                    fontSize: 11.5,
+                    color: "rgba(255,255,255,0.4)",
                   }}
                 >
-                  <kbd
-                    style={{
-                      fontSize: 10.5,
-                      color: "#6B7280",
-                      background: "rgba(255,255,255,0.04)",
-                      border: "0.5px solid rgba(255,255,255,0.07)",
-                      borderRadius: 5,
-                      padding: "2px 7px",
-                      fontFamily: "inherit",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {kbd}
-                  </kbd>
-                  <span
-                    style={{
-                      fontSize: 11.5,
-                      color: "#3D4147",
-                    }}
-                  >
-                    {desc}
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-
-        {/* ── Footer ── */}
-        <div
-          style={{
-            height: 52,
-            flexShrink: 0,
-            background: "rgba(0,0,0,0.2)",
-            borderTop: "0.5px solid rgba(255,255,255,0.05)",
-            padding: "0 16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: sidebarOpen ? "space-between" : "center",
-          }}
-        >
-          {sidebarOpen && (
-            <span style={{ fontSize: 10, color: "#2E3136" }}>
-              Canvas · {nodes.length} nodes
-            </span>
-          )}
-          <div
-            style={{
-              width: 26,
-              height: 26,
-              borderRadius: "50%",
-              background: "rgba(255,255,255,0.05)",
-              border: "0.5px solid rgba(255,255,255,0.08)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 11,
-              fontWeight: 600,
-              color: "#4B5563",
-              flexShrink: 0,
-            }}
-          >
-            A
+                  {desc}
+                </span>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
       </div>
 
       {/* ── Export Toolbar ── */}
@@ -2463,9 +2519,9 @@ export default function Canvas() {
         style={{
           position: "fixed",
           top: 20,
-          left: `calc(${sidebarW}px + (100vw - ${sidebarW}px) / 2)`,
+          left: "50%",
           transform: "translateX(-50%)",
-          background: "rgba(20,22,24,0.92)",
+          background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.92)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
           border: "0.5px solid rgba(255,255,255,0.08)",
@@ -2474,7 +2530,7 @@ export default function Canvas() {
           display: "flex",
           gap: 8,
           alignItems: "center",
-          boxShadow: "0 2px 24px rgba(0,0,0,0.3)",
+          boxShadow: "0 2px 24px rgba(0,0,0,0.3), inset 0 1px 0 0 rgba(255,255,255,0.12)",
           zIndex: 201,
         }}
       >
@@ -2567,7 +2623,7 @@ export default function Canvas() {
             fontFamily: "inherit",
             cursor: exporting ? "default" : "pointer",
             background: "transparent",
-            color: exporting ? "#4B5563" : "#9CA3AF",
+            color: exporting ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.85)",
             transition: "color 0.15s",
             display: "flex",
             alignItems: "center",
@@ -2576,11 +2632,11 @@ export default function Canvas() {
           }}
           onMouseEnter={(e) => {
             if (!exporting)
-              (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
+              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
           }}
           onMouseLeave={(e) => {
             if (!exporting)
-              (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
           }}
         >
           {exporting ? (
@@ -2641,19 +2697,19 @@ export default function Canvas() {
             border: "none",
             cursor: "pointer",
             background: "transparent",
-            color: "#9CA3AF",
+            color: "rgba(255,255,255,0.85)",
             transition: "color 0.15s",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
+            (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
             (e.currentTarget as HTMLElement).style.background =
               "rgba(255,255,255,0.06)";
           }}
           onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+            (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
             (e.currentTarget as HTMLElement).style.background = "transparent";
           }}
         >
@@ -2690,7 +2746,7 @@ export default function Canvas() {
             height: 28,
             border: "none",
             background: filterOpen ? `${ACCENT}22` : "transparent",
-            color: filterOpen ? ACCENT : "#9CA3AF",
+            color: filterOpen ? ACCENT : "rgba(255,255,255,0.85)",
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
@@ -2701,14 +2757,14 @@ export default function Canvas() {
           }}
           onMouseEnter={(e) => {
             if (!filterOpen) {
-              (e.currentTarget as HTMLElement).style.color = "#E8E6E1";
+              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
               (e.currentTarget as HTMLElement).style.background =
                 "rgba(255,255,255,0.07)";
             }
           }}
           onMouseLeave={(e) => {
             if (!filterOpen) {
-              (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
               (e.currentTarget as HTMLElement).style.background = "transparent";
             }
           }}
@@ -2719,7 +2775,7 @@ export default function Canvas() {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="1.8"
+            strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
           >
@@ -2735,9 +2791,9 @@ export default function Canvas() {
           style={{
             position: "fixed",
             top: 68,
-            left: `calc(${sidebarW}px + (100vw - ${sidebarW}px) / 2)`,
+            left: "50%",
             transform: "translateX(-50%)",
-            background: "rgba(20,22,24,0.95)",
+            background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.95)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
             border: "0.5px solid rgba(255,255,255,0.1)",
@@ -2746,7 +2802,7 @@ export default function Canvas() {
             display: "flex",
             flexDirection: "column",
             gap: 7,
-            boxShadow: "0 4px 24px rgba(0,0,0,0.35)",
+            boxShadow: "0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
             zIndex: 202,
             minWidth: 420,
           }}
@@ -2759,7 +2815,7 @@ export default function Canvas() {
               height="13"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="rgba(255,255,255,0.35)"
+              stroke="rgba(255,255,255,0.7)"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -2786,7 +2842,7 @@ export default function Canvas() {
                 background: "transparent",
                 border: "none",
                 outline: "none",
-                color: "#E8E6E1",
+                color: "#FFFFFF",
                 fontSize: 13,
                 fontFamily: "inherit",
                 caretColor: ACCENT,
@@ -2795,7 +2851,7 @@ export default function Canvas() {
             <span
               style={{
                 fontSize: 11,
-                color: "#6B7280",
+                color: "rgba(255,255,255,0.7)",
                 whiteSpace: "nowrap",
                 flexShrink: 0,
               }}
@@ -2813,7 +2869,7 @@ export default function Canvas() {
               style={{
                 border: "none",
                 background: "transparent",
-                color: "#6B7280",
+                color: "rgba(255,255,255,0.7)",
                 cursor: "pointer",
                 fontSize: 14,
                 lineHeight: 1,
@@ -2825,10 +2881,10 @@ export default function Canvas() {
                 justifyContent: "center",
               }}
               onMouseEnter={(e) =>
-                ((e.currentTarget as HTMLElement).style.color = "#9CA3AF")
+                ((e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)")
               }
               onMouseLeave={(e) =>
-                ((e.currentTarget as HTMLElement).style.color = "#6B7280")
+                ((e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.7)")
               }
             >
               ✕
@@ -2862,7 +2918,7 @@ export default function Canvas() {
                       ? `1px solid ${ACCENT}66`
                       : "1px solid rgba(255,255,255,0.07)",
                     background: active ? `${ACCENT}22` : "transparent",
-                    color: active ? ACCENT : "#6B7280",
+                    color: active ? ACCENT : "rgba(255,255,255,0.7)",
                     fontSize: 11.5,
                     fontFamily: "inherit",
                     cursor: "pointer",
@@ -2870,14 +2926,14 @@ export default function Canvas() {
                   }}
                   onMouseEnter={(e) => {
                     if (!active) {
-                      (e.currentTarget as HTMLElement).style.color = "#9CA3AF";
+                      (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
                       (e.currentTarget as HTMLElement).style.borderColor =
                         "rgba(255,255,255,0.15)";
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!active) {
-                      (e.currentTarget as HTMLElement).style.color = "#6B7280";
+                      (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.7)";
                       (e.currentTarget as HTMLElement).style.borderColor =
                         "rgba(255,255,255,0.07)";
                     }
@@ -2902,8 +2958,7 @@ export default function Canvas() {
           top: 0,
           right: 0,
           bottom: 0,
-          left: sidebarW,
-          transition: "left 0.26s cubic-bezier(0.4, 0, 0.2, 1)",
+          left: 0,
           cursor: connectDrag ? "crosshair" : "grab",
           overflow: "hidden",
         }}
@@ -2928,7 +2983,7 @@ export default function Canvas() {
               height={20 * zoom}
               patternUnits="userSpaceOnUse"
             >
-              <circle cx={1} cy={1} r={0.8} fill="rgba(255,255,255,0.06)" />
+              <circle cx={1} cy={1} r={0.8} fill="rgba(255,255,255,0.08)" />
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#dots)" />
@@ -2976,7 +3031,11 @@ export default function Canvas() {
                     toNode={tn}
                     isHovered={hoveredConnKey === key}
                     zoom={zoom}
-                    connDimmed={filterActive && !matchedNodeIds.has(c.from) && !matchedNodeIds.has(c.to)}
+                    connDimmed={
+                      filterActive &&
+                      !matchedNodeIds.has(c.from) &&
+                      !matchedNodeIds.has(c.to)
+                    }
                     onHoverEnter={onConnHoverEnter}
                     onHoverLeave={onConnHoverLeave}
                     onDelete={onConnDelete}
@@ -2996,7 +3055,7 @@ export default function Canvas() {
                 width: marqueeRect.w,
                 height: marqueeRect.h,
                 border: `1px solid ${ACCENT}`,
-                background: "rgba(255,177,98,0.08)",
+                background: "rgba(241,178,74,0.08)",
                 pointerEvents: "none",
                 zIndex: 999,
               }}
@@ -3034,11 +3093,11 @@ export default function Canvas() {
         <div
           style={{
             position: "fixed",
-            left: Math.round(snapGuides.x * zoom + pan.x + sidebarW),
+            left: Math.round(snapGuides.x * zoom + pan.x),
             top: 0,
             width: 1,
             height: "100%",
-            background: "rgba(255,177,98,0.6)",
+            background: "rgba(241,178,74,0.6)",
             pointerEvents: "none",
             zIndex: 50,
           }}
@@ -3048,11 +3107,11 @@ export default function Canvas() {
         <div
           style={{
             position: "fixed",
-            left: sidebarW,
+            left: 0,
             top: Math.round(snapGuides.y * zoom + pan.y),
             width: "100%",
             height: 1,
-            background: "rgba(255,177,98,0.6)",
+            background: "rgba(241,178,74,0.6)",
             pointerEvents: "none",
             zIndex: 50,
           }}
@@ -3062,7 +3121,7 @@ export default function Canvas() {
       {/* ── Node Context Menu ── */}
       {contextMenu?.kind === "node" &&
         (() => {
-          const n = nodes.find((x) => x.id === contextMenu.id);
+          const n = nodeMap.get(contextMenu.id);
           if (!n) return null;
           const canColor = n.type !== "text" && n.type !== "image";
           return (
@@ -3072,11 +3131,11 @@ export default function Canvas() {
                 position: "fixed",
                 left: contextMenu.x,
                 top: contextMenu.y,
-                background: "rgba(22,24,28,0.97)",
+                background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
                 backdropFilter: "blur(24px)",
                 border: "0.5px solid rgba(255,255,255,0.08)",
                 borderRadius: 14,
-                boxShadow: "0 8px 40px rgba(0,0,0,0.35)",
+                boxShadow: "0 8px 40px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
                 zIndex: 300,
                 minWidth: 240,
                 padding: "6px 0",
@@ -3109,7 +3168,7 @@ export default function Canvas() {
                 <div
                   style={{
                     fontSize: 11,
-                    color: "#4B5563",
+                    color: "rgba(255,255,255,0.5)",
                     textTransform: "uppercase",
                     letterSpacing: "0.5px",
                     marginBottom: 9,
@@ -3127,7 +3186,7 @@ export default function Canvas() {
                   }}
                 >
                   <span
-                    style={{ fontSize: 10, color: "#6B7280", flexShrink: 0 }}
+                    style={{ fontSize: 10, color: "rgba(255,255,255,0.7)", flexShrink: 0 }}
                   >
                     A
                   </span>
@@ -3144,7 +3203,7 @@ export default function Canvas() {
                   <span
                     style={{
                       fontSize: 11,
-                      color: "#9CA3AF",
+                      color: "rgba(255,255,255,0.85)",
                       minWidth: 20,
                       textAlign: "right",
                       fontVariantNumeric: "tabular-nums",
@@ -3191,7 +3250,7 @@ export default function Canvas() {
                           background: active
                             ? "rgba(255,255,255,0.12)"
                             : "transparent",
-                          color: active ? "#E8E6E1" : "#6B7280",
+                          color: active ? "#FFFFFF" : "rgba(255,255,255,0.7)",
                           cursor: "pointer",
                           fontSize: 12.5,
                           fontFamily: "inherit",
@@ -3218,7 +3277,7 @@ export default function Canvas() {
                       width: 28,
                       height: 28,
                       borderRadius: 8,
-                      background: n.textColor ?? "#E8E6E1",
+                      background: n.textColor ?? "#FFFFFF",
                       border: "1px solid rgba(255,255,255,0.1)",
                       flexShrink: 0,
                     }}
@@ -3226,18 +3285,18 @@ export default function Canvas() {
                   <span
                     style={{
                       fontSize: 11,
-                      color: "#6B7280",
+                      color: "rgba(255,255,255,0.7)",
                       fontFamily: "monospace",
                       flex: 1,
                     }}
                   >
-                    {n.textColor ?? "#E8E6E1"}
+                    {n.textColor ?? "#FFFFFF"}
                   </span>
                   <div
                     onClick={() =>
                       openTextColorPicker(
                         contextMenu.id,
-                        n.textColor ?? "#E8E6E1",
+                        n.textColor ?? "#FFFFFF",
                         contextMenu.x,
                         contextMenu.y,
                       )
@@ -3249,7 +3308,7 @@ export default function Canvas() {
                       border: "0.5px solid rgba(255,255,255,0.08)",
                       cursor: "pointer",
                       fontSize: 12,
-                      color: "#9CA3AF",
+                      color: "rgba(255,255,255,0.85)",
                       display: "flex",
                       alignItems: "center",
                       gap: 5,
@@ -3280,7 +3339,7 @@ export default function Canvas() {
                   <div
                     style={{
                       fontSize: 11,
-                      color: "#4B5563",
+                      color: "rgba(255,255,255,0.5)",
                       padding: "6px 14px 4px",
                       textTransform: "uppercase",
                       letterSpacing: "0.5px",
@@ -3309,7 +3368,7 @@ export default function Canvas() {
                     <span
                       style={{
                         fontSize: 11,
-                        color: "#6B7280",
+                        color: "rgba(255,255,255,0.7)",
                         fontFamily: "monospace",
                         flex: 1,
                       }}
@@ -3332,7 +3391,7 @@ export default function Canvas() {
                         border: "0.5px solid rgba(255,255,255,0.08)",
                         cursor: "pointer",
                         fontSize: 12,
-                        color: "#9CA3AF",
+                        color: "rgba(255,255,255,0.85)",
                         display: "flex",
                         alignItems: "center",
                         gap: 5,
@@ -3362,7 +3421,7 @@ export default function Canvas() {
               <div
                 style={{
                   fontSize: 11,
-                  color: "rgba(255,255,255,0.3)",
+                  color: "rgba(255,255,255,0.55)",
                   padding: "6px 14px 4px",
                   textTransform: "uppercase",
                   letterSpacing: "0.5px",
@@ -3451,11 +3510,11 @@ export default function Canvas() {
             position: "fixed",
             left: contextMenu.x,
             top: contextMenu.y,
-            background: "rgba(22,24,28,0.97)",
+            background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
             backdropFilter: "blur(24px)",
             border: "0.5px solid rgba(255,255,255,0.08)",
             borderRadius: 14,
-            boxShadow: "0 8px 40px rgba(0,0,0,0.35)",
+            boxShadow: "0 8px 40px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
             zIndex: 300,
             minWidth: 220,
             padding: "6px 0",
@@ -3489,7 +3548,7 @@ export default function Canvas() {
           <div
             style={{
               fontSize: 11,
-              color: "rgba(255,255,255,0.3)",
+              color: "rgba(255,255,255,0.55)",
               padding: "6px 14px 4px",
               textTransform: "uppercase",
               letterSpacing: "0.5px",
@@ -3614,7 +3673,7 @@ export default function Canvas() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "rgba(255,255,255,0.5)",
+                  color: "rgba(255,255,255,0.75)",
                 }}
               >
                 {icon}
@@ -3650,18 +3709,18 @@ export default function Canvas() {
                   width="11"
                   height="11"
                   rx="2"
-                  stroke="rgba(255,255,255,0.5)"
+                  stroke="rgba(255,255,255,0.75)"
                   strokeWidth="1.3"
                 />
                 <circle
                   cx="4.5"
                   cy="4.5"
                   r="1.2"
-                  fill="rgba(255,255,255,0.5)"
+                  fill="rgba(255,255,255,0.75)"
                 />
                 <path
                   d="M1 9l3-3 2.5 2.5L9 6l3 4"
-                  stroke="rgba(255,255,255,0.5)"
+                  stroke="rgba(255,255,255,0.75)"
                   strokeWidth="1.1"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -3690,12 +3749,12 @@ export default function Canvas() {
               <svg width="11" height="13" viewBox="0 0 11 13" fill="none">
                 <path
                   d="M2 1h5l3 3v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"
-                  stroke="rgba(255,255,255,0.5)"
+                  stroke="rgba(255,255,255,0.75)"
                   strokeWidth="1.2"
                 />
                 <path
                   d="M7 1v3h3"
-                  stroke="rgba(255,255,255,0.5)"
+                  stroke="rgba(255,255,255,0.75)"
                   strokeWidth="1.2"
                   strokeLinecap="round"
                 />
@@ -3748,7 +3807,7 @@ export default function Canvas() {
           position: "fixed",
           bottom: 24,
           right: 24,
-          background: "rgba(20,22,24,0.92)",
+          background: "rgba(22,64,56,0.92)",
           backdropFilter: "blur(12px)",
           border: "0.5px solid rgba(255,255,255,0.08)",
           borderRadius: 12,
@@ -3769,7 +3828,7 @@ export default function Canvas() {
             background: "none",
             fontSize: 18,
             cursor: "pointer",
-            color: "#9CA3AF",
+            color: "rgba(255,255,255,0.85)",
             lineHeight: 1,
           }}
         >
@@ -3778,7 +3837,7 @@ export default function Canvas() {
         <span
           style={{
             fontSize: 11,
-            color: "#6B7280",
+            color: "rgba(255,255,255,0.7)",
             minWidth: 38,
             textAlign: "center",
           }}
@@ -3794,7 +3853,7 @@ export default function Canvas() {
             background: "none",
             fontSize: 18,
             cursor: "pointer",
-            color: "#9CA3AF",
+            color: "rgba(255,255,255,0.85)",
             lineHeight: 1,
           }}
         >
@@ -3817,7 +3876,7 @@ export default function Canvas() {
             background: "none",
             fontSize: 11,
             cursor: "pointer",
-            color: "#6B7280",
+            color: "rgba(255,255,255,0.7)",
           }}
         >
           Reset
@@ -3831,13 +3890,13 @@ export default function Canvas() {
           bottom: 24,
           left: "50%",
           transform: "translateX(-50%)",
-          background: "rgba(20,22,24,0.88)",
+          background: "rgba(22,64,56,0.88)",
           backdropFilter: "blur(12px)",
           border: "0.5px solid rgba(255,255,255,0.07)",
           borderRadius: 10,
           padding: "7px 16px",
           fontSize: 11.5,
-          color: "#4B5563",
+          color: "rgba(255,255,255,0.55)",
           letterSpacing: "-0.1px",
           whiteSpace: "nowrap",
           zIndex: 100,
@@ -3855,7 +3914,7 @@ export default function Canvas() {
           style={{
             position: "fixed",
             bottom: 28,
-            left: sidebarW + 16,
+            left: 80,
             background:
               toast.variant === "success"
                 ? "rgba(30,40,30,0.97)"

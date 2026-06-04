@@ -9,7 +9,6 @@ interface SidebarNodeItemProps {
   defaultLabelValue: string;
   isActive: boolean;
   isEditingSidebar: boolean;
-  sidebarOpen: boolean;
   focusNode: (id: number) => void;
   updateNodeLabel: (id: number, label: string) => void;
   setEditingSidebarNodeId: (id: number | null) => void;
@@ -41,8 +40,8 @@ const GRAD: Record<NodeType, string> = {
 function NodeIcon({ type, active }: { type: NodeType; active: boolean }) {
   const gid = GRAD[type];
   const fill = `url(#${gid})`;
-  const stroke = active ? "rgba(255,177,98,0.65)" : "rgba(255,255,255,0.28)";
-  const sw = 1.4;
+  const stroke = active ? "rgba(241,178,74,0.65)" : "rgba(255,255,255,0.6)";
+  const sw = 1.7;
 
   return (
     <svg
@@ -134,7 +133,6 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
   defaultLabelValue,
   isActive,
   isEditingSidebar,
-  sidebarOpen,
   focusNode,
   updateNodeLabel,
   setEditingSidebarNodeId,
@@ -143,7 +141,6 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
     <div
       onClick={() => focusNode(id)}
       onDoubleClick={(e) => {
-        if (!sidebarOpen) return;
         e.stopPropagation();
         setEditingSidebarNodeId(id);
       }}
@@ -154,10 +151,9 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
         alignItems: "center",
         cursor: "pointer",
         background: isActive
-          ? "linear-gradient(to right, rgba(255,177,98,0.07), transparent)"
+          ? "linear-gradient(to right, rgba(241,178,74,0.07), transparent)"
           : "transparent",
-        paddingLeft: sidebarOpen ? 0 : 0,
-        justifyContent: sidebarOpen ? "flex-start" : "center",
+        padding: "0 16px",
       }}
       onMouseEnter={(e) => {
         if (!isActive)
@@ -178,90 +174,81 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
             top: 0,
             width: 2.5,
             height: 36,
-            background: "#FFB162",
+            background: "#F1B24A",
             borderRadius: "0 1px 1px 0",
           }}
         />
       )}
 
       {/* Icon */}
-      <div
-        style={{
-          paddingLeft: sidebarOpen ? 16 : 0,
-          display: "flex",
-          alignItems: "center",
-          flexShrink: 0,
-        }}
-      >
+      <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
         <NodeIcon type={type} active={isActive} />
       </div>
 
       {/* Label + type tag */}
-      {sidebarOpen &&
-        (isEditingSidebar ? (
-          <input
-            autoFocus
-            defaultValue={defaultLabelValue}
-            maxLength={50}
-            onFocus={(e) => e.target.select()}
-            onClick={(e) => e.stopPropagation()}
-            onBlur={(e) => {
-              updateNodeLabel(id, e.target.value.trim());
+      {isEditingSidebar ? (
+        <input
+          autoFocus
+          defaultValue={defaultLabelValue}
+          maxLength={50}
+          onFocus={(e) => e.target.select()}
+          onClick={(e) => e.stopPropagation()}
+          onBlur={(e) => {
+            updateNodeLabel(id, e.target.value.trim());
+            setEditingSidebarNodeId(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              updateNodeLabel(id, (e.target as HTMLInputElement).value.trim());
               setEditingSidebarNodeId(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                updateNodeLabel(id, (e.target as HTMLInputElement).value.trim());
-                setEditingSidebarNodeId(null);
-              }
-              if (e.key === "Escape") setEditingSidebarNodeId(null);
-              e.stopPropagation();
-            }}
+            }
+            if (e.key === "Escape") setEditingSidebarNodeId(null);
+            e.stopPropagation();
+          }}
+          style={{
+            flex: 1,
+            marginLeft: 10,
+            fontSize: 12.5,
+            fontFamily: "inherit",
+            background: "rgba(255,255,255,0.07)",
+            border: "none",
+            outline: "1px solid rgba(241,178,74,0.4)",
+            borderRadius: 5,
+            padding: "1px 5px",
+            color: "#FFFFFF",
+            minWidth: 0,
+          }}
+        />
+      ) : (
+        <>
+          <span
             style={{
               flex: 1,
               marginLeft: 10,
               fontSize: 12.5,
-              fontFamily: "inherit",
-              background: "rgba(255,255,255,0.07)",
-              border: "none",
-              outline: "1px solid rgba(255,177,98,0.4)",
-              borderRadius: 5,
-              padding: "1px 5px",
-              color: "#E8E6E1",
+              fontWeight: isActive ? 500 : 400,
+              color: isActive ? "#FFFFFF" : "rgba(255,255,255,0.75)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
               minWidth: 0,
             }}
-          />
-        ) : (
-          <>
+          >
+            {label}
+          </span>
+          {isActive && (
             <span
               style={{
-                flex: 1,
-                marginLeft: 10,
-                fontSize: 12.5,
-                fontWeight: isActive ? 500 : 400,
-                color: isActive ? "#E8E6E1" : "#6B7280",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                minWidth: 0,
+                fontSize: 10,
+                color: "rgba(255,255,255,0.45)",
+                flexShrink: 0,
               }}
             >
-              {label}
+              {TYPE_LABELS[type]}
             </span>
-            {isActive && (
-              <span
-                style={{
-                  fontSize: 10,
-                  color: "#3D4147",
-                  marginRight: 16,
-                  flexShrink: 0,
-                }}
-              >
-                {TYPE_LABELS[type]}
-              </span>
-            )}
-          </>
-        ))}
+          )}
+        </>
+      )}
     </div>
   );
 });

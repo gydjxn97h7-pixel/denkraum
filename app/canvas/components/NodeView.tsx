@@ -77,7 +77,7 @@ export const NodeView = React.memo(function NodeView({
     isDiamond || isText || isImage
       ? "none"
       : isPotentialTarget
-        ? "0 0 0 2px rgba(255,177,98,0.35)"
+        ? "0 0 0 2px rgba(241,178,74,0.35)"
         : isSel
           ? "0 4px 24px rgba(0,0,0,0.5), 0 1px 6px rgba(0,0,0,0.3)"
           : "0 2px 12px rgba(0,0,0,0.4)";
@@ -160,7 +160,7 @@ export const NodeView = React.memo(function NodeView({
             : "default",
         userSelect: "none",
         outline: isSource
-          ? "1.5px solid rgba(255,177,98,0.5)"
+          ? "1.5px solid rgba(241,178,74,0.5)"
           : isMultiSelected
             ? `2px solid ${ACCENT}`
             : isEditing
@@ -266,7 +266,7 @@ export const NodeView = React.memo(function NodeView({
                 fontWeight: n.bold ? 700 : 500,
                 fontStyle: n.italic ? "italic" : "normal",
                 textDecoration: n.underline ? "underline" : "none",
-                color: n.textColor ?? (isDark ? "#E8E6E1" : "#111"),
+                color: n.textColor ?? (isDark ? "#FFFFFF" : "#111"),
                 outline: "none",
                 textAlign: "center",
                 letterSpacing: "-0.2px",
@@ -356,7 +356,7 @@ export const NodeView = React.memo(function NodeView({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#6B7280",
+                color: "rgba(255,255,255,0.45)",
                 fontSize: 13,
               }}
             >
@@ -462,7 +462,7 @@ export const NodeView = React.memo(function NodeView({
               fontWeight: n.bold ? 700 : 500,
               fontStyle: n.italic ? "italic" : "normal",
               textDecoration: n.underline ? "underline" : "none",
-              color: n.textColor ?? (isDark ? "#E8E6E1" : "#111"),
+              color: n.textColor ?? (isDark ? "#FFFFFF" : "#111"),
               outline: "none",
               letterSpacing: "-0.2px",
               textAlign: isCircle ? "center" : "left",
@@ -550,7 +550,7 @@ export const NodeView = React.memo(function NodeView({
             fontWeight: n.bold ? 700 : 400,
             fontStyle: n.italic ? "italic" : "normal",
             textDecoration: n.underline ? "underline" : "none",
-            color: n.textColor ?? "#E8E6E1",
+            color: n.textColor ?? "#FFFFFF",
             outline: "none",
             textAlign: "center",
             lineHeight: 1.55,
@@ -655,9 +655,9 @@ export const NodeView = React.memo(function NodeView({
                 cx="11"
                 cy="11"
                 r="9"
-                fill="#141618"
+                fill="#0C2018"
                 stroke={
-                  isSource ? "rgba(255,177,98,0.85)" : "rgba(255,177,98,0.3)"
+                  isSource ? "rgba(241,178,74,0.85)" : "rgba(241,178,74,0.3)"
                 }
                 strokeWidth={isSource ? "2" : "1.5"}
               />
@@ -665,7 +665,7 @@ export const NodeView = React.memo(function NodeView({
                 cx="11"
                 cy="11"
                 r={isSource ? "6.5" : "5.5"}
-                fill={isSource ? "#FFB162" : "rgba(255,177,98,0.65)"}
+                fill={isSource ? "#F1B24A" : "rgba(241,178,74,0.65)"}
               />
             </svg>
           </div>
