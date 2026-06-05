@@ -2161,9 +2161,22 @@ export default function Canvas() {
       const contentW = Math.ceil(maxX - minX);
       const contentH = Math.ceil(maxY - minY);
 
-      // Pan so the bounding box top-left lands exactly at canvas (0, 0)
-      setPan({ x: -minX, y: -minY });
-      setZoom(1);
+      // jsPDF hard limit is 14400 user units per page dimension.
+      // Use 14000 as the safe ceiling. If content exceeds it, apply a
+      // uniform scale so both axes shrink proportionally.
+      // Also cap the html2canvas capture (scale×pdfDim) to 14000 px so
+      // browsers don't refuse to allocate a backing store for the canvas.
+      const SAFE_MAX = 14000;
+      const maxDim = Math.max(contentW, contentH);
+      const exportScale = maxDim > SAFE_MAX ? SAFE_MAX / maxDim : 1;
+      const pdfW = Math.round(contentW * exportScale);
+      const pdfH = Math.round(contentH * exportScale);
+      // Desired 2× quality, but reduce if the resulting canvas would exceed SAFE_MAX.
+      const h2cScale = Math.min(2, SAFE_MAX / Math.max(pdfW, pdfH));
+
+      // Pan so content top-left maps to canvas origin at exportScale.
+      setPan({ x: -minX * exportScale, y: -minY * exportScale });
+      setZoom(exportScale);
 
       // Two rAF ticks — let React commit pan/zoom before capture
       await new Promise<void>((r) =>
@@ -2172,18 +2185,18 @@ export default function Canvas() {
         }),
       );
 
-      // Temporarily expand the canvas div to the full content size so
-      // html2canvas can see nodes that lie outside the current viewport
+      // Expand the canvas div to the (possibly scaled) content size so
+      // html2canvas sees the full board regardless of viewport size.
       const el = canvasRef.current;
-      el.style.width = `${contentW}px`;
-      el.style.height = `${contentH}px`;
+      el.style.width = `${pdfW}px`;
+      el.style.height = `${pdfH}px`;
 
       const { default: html2canvas } = await import("html2canvas");
       const { jsPDF } = await import("jspdf");
 
       const cvs = await html2canvas(el, {
         backgroundColor: "#0C2018",
-        scale: 2,
+        scale: h2cScale,
         useCORS: true,
         logging: false,
         scrollX: 0,
@@ -2195,14 +2208,15 @@ export default function Canvas() {
 
       const imgData = cvs.toDataURL("image/jpeg", 0.92);
       const pdf = new jsPDF({
-        orientation: contentW >= contentH ? "landscape" : "portrait",
+        orientation: pdfW >= pdfH ? "landscape" : "portrait",
         unit: "px",
-        format: [contentW, contentH],
+        format: [pdfW, pdfH],
       });
-      pdf.addImage(imgData, "JPEG", 0, 0, contentW, contentH);
+      pdf.addImage(imgData, "JPEG", 0, 0, pdfW, pdfH);
       pdf.save("dnkrm.pdf");
-    } catch {
-      setToast({ msg: "Export failed", variant: "error" });
+    } catch (err) {
+      console.error("[PDF export]", err);
+      setToast({ msg: "PDF export failed", variant: "error" });
     } finally {
       if (canvasRef.current) {
         canvasRef.current.style.width = "";
