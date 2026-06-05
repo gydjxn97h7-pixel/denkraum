@@ -6,6 +6,8 @@ import {
   forceLink,
   forceCenter,
   forceCollide,
+  forceX,
+  forceY,
 } from "d3-force";
 import "./canvas.css";
 import {
@@ -1641,10 +1643,12 @@ export default function Canvas() {
           forceLink<SimNode, { source: number; target: number }>(simLinks)
             .id((d) => d.id)
             .distance(180)
-            .strength(0.8),
+            .strength(0.5),
         )
-        .force("charge", forceManyBody<SimNode>().strength(-400))
-        .force("center", forceCenter<SimNode>(0, 0))
+        .force("charge", forceManyBody<SimNode>().strength(-150))
+        .force("center", forceCenter<SimNode>(oldCx, oldCy))
+        .force("x", forceX<SimNode>(oldCx).strength(0.05))
+        .force("y", forceY<SimNode>(oldCy).strength(0.05))
         .force(
           "collide",
           forceCollide<SimNode>((d) => Math.hypot(d.w, d.h) / 2 + 20),
@@ -2147,7 +2151,6 @@ export default function Canvas() {
     const savedZoom = zoomRef.current;
 
     try {
-      // Bug 1: compute tight bounding box of all nodes + padding
       const PAD = 40;
       const minX = nodes.reduce((m, n) => Math.min(m, n.x), Infinity) - PAD;
       const minY = nodes.reduce((m, n) => Math.min(m, n.y), Infinity) - PAD;
