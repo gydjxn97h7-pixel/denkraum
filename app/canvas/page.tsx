@@ -2330,28 +2330,84 @@ export default function Canvas() {
       format: [pdfW, pdfH],
     });
 
+    // Translate world coordinate → PDF coordinate.
+    const px = (wx: number) => (wx - minX) * exportScale;
+    const py = (wy: number) => (wy - minY) * exportScale;
+
     // Background fill.
     const [bgR, bgG, bgB] = hexToRgbPdf("#0C2018");
     doc.setFillColor(bgR, bgG, bgB);
     doc.rect(0, 0, pdfW, pdfH, "F");
 
-    // Block nodes only — drawn as filled rectangles.
+    // ── 1. Connection lines (drawn first so they sit behind nodes) ─────────────
+    // Geometry replicates ConnectionLine exactly: axis-dominant edge selection,
+    // cpOffset = max(40, dist*0.4), cubic bezier tangent perpendicular to edge.
+    // On-screen stroke is rgba(255,255,255,0.7) on #0C2018.
+    // Blended opaque equivalent: rgb(182,188,186) — used here since jsPDF has no alpha.
+    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    doc.setDrawColor(182, 188, 186);
+    doc.setLineWidth(1.5);
+    doc.setLineCap("round");
+
+    for (const c of connections) {
+      const fn = nodeMap.get(c.from);
+      const tn = nodeMap.get(c.to);
+      if (!fn || !tn) continue;
+
+      const fcx = fn.x + fn.w / 2;
+      const fcy = fn.y + fn.h / 2;
+      const tcx = tn.x + tn.w / 2;
+      const tcy = tn.y + tn.h / 2;
+      const dx = tcx - fcx;
+      const dy = tcy - fcy;
+
+      let x1: number, y1: number, x2: number, y2: number, cpOffset: number;
+
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        const dist = Math.abs(dx);
+        cpOffset = Math.max(40, dist * 0.4);
+        if (dx >= 0) {
+          x1 = fn.x + fn.w; y1 = fcy; x2 = tn.x; y2 = tcy;
+        } else {
+          x1 = fn.x; y1 = fcy; x2 = tn.x + tn.w; y2 = tcy;
+        }
+      } else {
+        const dist = Math.abs(dy);
+        cpOffset = Math.max(40, dist * 0.4);
+        if (dy >= 0) {
+          x1 = fcx; y1 = fn.y + fn.h; x2 = tcx; y2 = tn.y;
+        } else {
+          x1 = fcx; y1 = fn.y; x2 = tcx; y2 = tn.y + tn.h;
+        }
+      }
+
+      let c1x: number, c1y: number, c2x: number, c2y: number;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        const sign = dx >= 0 ? 1 : -1;
+        c1x = x1 + sign * cpOffset; c1y = y1;
+        c2x = x2 - sign * cpOffset; c2y = y2;
+      } else {
+        const sign = dy >= 0 ? 1 : -1;
+        c1x = x1; c1y = y1 + sign * cpOffset;
+        c2x = x2; c2y = y2 - sign * cpOffset;
+      }
+
+      doc.moveTo(px(x1), py(y1));
+      doc.curveTo(px(c1x), py(c1y), px(c2x), py(c2y), px(x2), py(y2));
+      doc.stroke();
+    }
+
+    // ── 2. Block nodes — filled rectangles (drawn over lines) ─────────────────
     for (const n of nodes) {
       if (n.type !== "block") continue;
       const [r, g, b] = hexToRgbPdf(n.color || "#1D5C50");
       doc.setFillColor(r, g, b);
-      doc.rect(
-        (n.x - minX) * exportScale,
-        (n.y - minY) * exportScale,
-        n.w * exportScale,
-        n.h * exportScale,
-        "F",
-      );
+      doc.rect(px(n.x), py(n.y), n.w * exportScale, n.h * exportScale, "F");
     }
 
     const safeName = boardName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "board";
     doc.save(`${safeName}-vector.pdf`);
-  }, [nodes, boardName]);
+  }, [nodes, connections, boardName]);
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const panelOpen = activePanel !== null;
