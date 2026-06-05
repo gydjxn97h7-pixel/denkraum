@@ -514,6 +514,7 @@ export default function Canvas() {
     constrain: boolean; // keep w === h (circle)
   } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const connSvgRef = useRef<SVGSVGElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFileInputRef = useRef<HTMLInputElement>(null);
   const denkraumFileInputRef = useRef<HTMLInputElement>(null);
@@ -2191,6 +2192,21 @@ export default function Canvas() {
       el.style.width = `${pdfW}px`;
       el.style.height = `${pdfH}px`;
 
+      // The connection SVG lives at CSS left:-5000, top:-5000 (world-local)
+      // so its element box sits outside the canvas div's overflow:hidden boundary,
+      // making html2canvas clip it away even though it renders fine on screen.
+      // Fix: move the SVG box to cover the content area exactly, adjust the
+      // inner <g> transform to compensate, then restore both in finally.
+      const svgEl = connSvgRef.current;
+      const gEl = svgEl?.firstElementChild as SVGGElement | null;
+      if (svgEl && gEl) {
+        svgEl.style.left = `${minX}px`;
+        svgEl.style.top = `${minY}px`;
+        svgEl.style.width = `${contentW}px`;
+        svgEl.style.height = `${contentH}px`;
+        gEl.setAttribute("transform", `translate(${-minX}, ${-minY})`);
+      }
+
       const { default: html2canvas } = await import("html2canvas");
       const { jsPDF } = await import("jspdf");
 
@@ -2221,6 +2237,17 @@ export default function Canvas() {
       if (canvasRef.current) {
         canvasRef.current.style.width = "";
         canvasRef.current.style.height = "";
+      }
+      // Restore connection SVG to its original off-canvas position before
+      // React re-renders so on-screen rendering is never disrupted.
+      const svgEl = connSvgRef.current;
+      const gEl = svgEl?.firstElementChild as SVGGElement | null;
+      if (svgEl && gEl) {
+        svgEl.style.left = "-5000px";
+        svgEl.style.top = "-5000px";
+        svgEl.style.width = "10000px";
+        svgEl.style.height = "10000px";
+        gEl.setAttribute("transform", "translate(5000, 5000)");
       }
       setPan(savedPan);
       setZoom(savedZoom);
@@ -3875,6 +3902,7 @@ export default function Canvas() {
           {/* Connections SVG — positioned at (-5000,-5000) so the internal
               coordinate origin matches world (0,0) via the translate below. */}
           <svg
+            ref={connSvgRef}
             style={{
               position: "absolute",
               left: -5000,
