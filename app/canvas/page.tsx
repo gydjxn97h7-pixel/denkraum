@@ -450,6 +450,12 @@ const ConnectionLine = memo(function ConnectionLine({
   );
 });
 
+// Local hex→RGB for the vector PDF path (avoids importing from color-helpers).
+function hexToRgbPdf(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
 // ── Main Canvas ───────────────────────────────────────────────────────────────
 export default function Canvas() {
   const [nodes, setNodes] = useState<CanvasNode[]>(DEFAULT_NODES);
@@ -2192,20 +2198,59 @@ export default function Canvas() {
       el.style.width = `${pdfW}px`;
       el.style.height = `${pdfH}px`;
 
-      // The connection SVG lives at CSS left:-5000, top:-5000 (world-local)
-      // so its element box sits outside the canvas div's overflow:hidden boundary,
-      // making html2canvas clip it away even though it renders fine on screen.
-      // Fix: move the SVG box to cover the content area exactly, adjust the
-      // inner <g> transform to compensate, then restore both in finally.
+      // ── DIAG: check what's in the DOM before repositioning ──────────────────
       const svgEl = connSvgRef.current;
       const gEl = svgEl?.firstElementChild as SVGGElement | null;
+
+      // (a) Before repositioning
+      if (svgEl) {
+        const bcr = svgEl.getBoundingClientRect();
+        console.log("[PDF-DIAG] (a) svgEl ref:", svgEl.tagName, svgEl);
+        console.log("[PDF-DIAG] (a) svgEl.style left/top/w/h:", svgEl.style.left, svgEl.style.top, svgEl.style.width, svgEl.style.height);
+        console.log("[PDF-DIAG] (a) svgEl BCR:", JSON.stringify({ x: bcr.x, y: bcr.y, w: bcr.width, h: bcr.height }));
+        console.log("[PDF-DIAG] (a) gEl transform:", gEl?.getAttribute("transform"));
+        const paths = svgEl.querySelectorAll("path");
+        console.log("[PDF-DIAG] (a) path count inside svgEl:", paths.length);
+        paths.forEach((p, i) => console.log(`  path[${i}] d="${p.getAttribute("d")?.slice(0,60)}" stroke="${p.getAttribute("stroke")}"`));
+        // Also check: are there visible paths ANYWHERE in the canvas div?
+        const allPaths = el.querySelectorAll("path[stroke]");
+        console.log("[PDF-DIAG] (a) ALL stroke paths inside canvas div:", allPaths.length);
+      } else {
+        console.warn("[PDF-DIAG] connSvgRef.current is NULL — ref not attached");
+        // Fallback: find any SVG with connection paths in the canvas div
+        const allSvgs = el.querySelectorAll("svg");
+        console.log("[PDF-DIAG] SVGs found in canvas div:", allSvgs.length);
+        allSvgs.forEach((s, i) => {
+          const r = s.getBoundingClientRect();
+          console.log(`  svg[${i}] BCR:`, JSON.stringify({ x: r.x, y: r.y, w: r.width, h: r.height }), "paths:", s.querySelectorAll("path").length, "style.left:", s.style.left);
+        });
+      }
+
+      // The connection SVG lives at CSS left:-5000, top:-5000 (world-local)
+      // so its element box sits outside the canvas div's overflow:hidden boundary.
       if (svgEl && gEl) {
         svgEl.style.left = `${minX}px`;
         svgEl.style.top = `${minY}px`;
         svgEl.style.width = `${contentW}px`;
         svgEl.style.height = `${contentH}px`;
         gEl.setAttribute("transform", `translate(${-minX}, ${-minY})`);
+
+        // (b) After repositioning — confirm canvas-space position
+        const bcrAfter = svgEl.getBoundingClientRect();
+        const elBCR = el.getBoundingClientRect();
+        console.log("[PDF-DIAG] (b) svgEl BCR after reposition:", JSON.stringify({ x: bcrAfter.x, y: bcrAfter.y, w: bcrAfter.width, h: bcrAfter.height }));
+        console.log("[PDF-DIAG] (b) canvas div BCR:", JSON.stringify({ x: elBCR.x, y: elBCR.y, w: elBCR.width, h: elBCR.height }));
+        console.log("[PDF-DIAG] (b) svgEl position relative to canvas div:", {
+          left: bcrAfter.x - elBCR.x,
+          top: bcrAfter.y - elBCR.y,
+          right: bcrAfter.right - elBCR.x,
+          bottom: bcrAfter.bottom - elBCR.y,
+        });
+        console.log("[PDF-DIAG] (b) pdfW/pdfH (canvas div target size):", pdfW, pdfH);
+        console.log("[PDF-DIAG] (b) gEl transform:", gEl.getAttribute("transform"));
+        console.log("[PDF-DIAG] (b) svgEl inline style.left:", svgEl.style.left, "top:", svgEl.style.top);
       }
+      // ── END DIAG ──────────────────────────────────────────────────────────────
 
       const { default: html2canvas } = await import("html2canvas");
       const { jsPDF } = await import("jspdf");
@@ -2221,6 +2266,8 @@ export default function Canvas() {
         ignoreElements: (el) =>
           window.getComputedStyle(el).position === "fixed",
       });
+      // (c) After capture
+      console.log("[PDF-DIAG] (c) html2canvas output canvas size:", cvs.width, "×", cvs.height);
 
       const imgData = cvs.toDataURL("image/jpeg", 0.92);
       const pdf = new jsPDF({
@@ -2254,6 +2301,57 @@ export default function Canvas() {
       setExporting(false);
     }
   }, [nodes]);
+
+  // ── Vector PDF export (jsPDF direct — no html2canvas) ────────────────────────
+  const exportPdfVector = useCallback(async () => {
+    if (nodes.length === 0) return;
+
+    const { jsPDF } = await import("jspdf");
+
+    const PAD = 40;
+    const minX = nodes.reduce((m, n) => Math.min(m, n.x), Infinity) - PAD;
+    const minY = nodes.reduce((m, n) => Math.min(m, n.y), Infinity) - PAD;
+    const maxX = nodes.reduce((m, n) => Math.max(m, n.x + n.w), -Infinity) + PAD;
+    const maxY = nodes.reduce((m, n) => Math.max(m, n.y + n.h), -Infinity) + PAD;
+    const contentW = Math.ceil(maxX - minX);
+    const contentH = Math.ceil(maxY - minY);
+
+    // Same 14000-unit safety cap as the html2canvas path.
+    const SAFE_MAX = 14000;
+    const exportScale = Math.max(contentW, contentH) > SAFE_MAX
+      ? SAFE_MAX / Math.max(contentW, contentH)
+      : 1;
+    const pdfW = Math.round(contentW * exportScale);
+    const pdfH = Math.round(contentH * exportScale);
+
+    const doc = new jsPDF({
+      orientation: pdfW >= pdfH ? "landscape" : "portrait",
+      unit: "px",
+      format: [pdfW, pdfH],
+    });
+
+    // Background fill.
+    const [bgR, bgG, bgB] = hexToRgbPdf("#0C2018");
+    doc.setFillColor(bgR, bgG, bgB);
+    doc.rect(0, 0, pdfW, pdfH, "F");
+
+    // Block nodes only — drawn as filled rectangles.
+    for (const n of nodes) {
+      if (n.type !== "block") continue;
+      const [r, g, b] = hexToRgbPdf(n.color || "#1D5C50");
+      doc.setFillColor(r, g, b);
+      doc.rect(
+        (n.x - minX) * exportScale,
+        (n.y - minY) * exportScale,
+        n.w * exportScale,
+        n.h * exportScale,
+        "F",
+      );
+    }
+
+    const safeName = boardName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "board";
+    doc.save(`${safeName}-vector.pdf`);
+  }, [nodes, boardName]);
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const panelOpen = activePanel !== null;
@@ -3549,6 +3647,39 @@ export default function Canvas() {
               Export PDF
             </>
           )}
+        </button>
+
+        {/* [TEMP] Vector PDF button — step 1 scaffold */}
+        <button
+          onClick={exportPdfVector}
+          disabled={nodes.length === 0}
+          style={{
+            padding: "6px 13px",
+            borderRadius: 8,
+            border: "none",
+            fontSize: 12.5,
+            fontFamily: "inherit",
+            cursor: nodes.length === 0 ? "default" : "pointer",
+            background: "transparent",
+            color: nodes.length === 0
+              ? "rgba(255,255,255,0.4)"
+              : "rgba(255,255,255,0.85)",
+            transition: "color 0.15s",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            letterSpacing: "-0.1px",
+          }}
+          onMouseEnter={(e) => {
+            if (nodes.length > 0)
+              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
+          }}
+          onMouseLeave={(e) => {
+            if (nodes.length > 0)
+              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
+          }}
+        >
+          PDF (vector)
         </button>
 
         {/* Divider */}
