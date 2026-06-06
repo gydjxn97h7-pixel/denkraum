@@ -450,10 +450,36 @@ const ConnectionLine = memo(function ConnectionLine({
   );
 });
 
-// Local hex→RGB for the vector PDF path (avoids importing from color-helpers).
-function hexToRgbPdf(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+// Canvas background in RGB — used to composite rgba node colors into solid values.
+const PDF_BG_RGB: [number, number, number] = [12, 32, 24]; // #0C2018
+
+// Parses any color format nodes can store (hex, rgb, rgba) into [r,g,b] integers
+// for jsPDF, which has no alpha channel on fill colors. rgba colors are composited
+// over the canvas background so the tinted solid color matches on-screen appearance.
+// Never throws — returns the default node fill on any unparseable value.
+function parseColorForPdf(color: string): [number, number, number] {
+  try {
+    if (typeof color === "string" && color.startsWith("#") && color.length === 7) {
+      const h = color.slice(1);
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+    const m = typeof color === "string" && color.match(
+      /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/,
+    );
+    if (m) {
+      const r = parseInt(m[1]), g = parseInt(m[2]), b = parseInt(m[3]);
+      const a = m[4] !== undefined ? parseFloat(m[4]) : 1;
+      if (a >= 1) return [r, g, b];
+      return [
+        Math.round(a * r + (1 - a) * PDF_BG_RGB[0]),
+        Math.round(a * g + (1 - a) * PDF_BG_RGB[1]),
+        Math.round(a * b + (1 - a) * PDF_BG_RGB[2]),
+      ];
+    }
+  } catch {
+    // fall through to default
+  }
+  return [29, 92, 80]; // #1D5C50
 }
 
 // ── Main Canvas ───────────────────────────────────────────────────────────────
@@ -2335,7 +2361,7 @@ export default function Canvas() {
     const py = (wy: number) => (wy - minY) * exportScale;
 
     // Background fill.
-    const [bgR, bgG, bgB] = hexToRgbPdf("#0C2018");
+    const [bgR, bgG, bgB] = parseColorForPdf("#0C2018");
     doc.setFillColor(bgR, bgG, bgB);
     doc.rect(0, 0, pdfW, pdfH, "F");
 
@@ -2402,7 +2428,7 @@ export default function Canvas() {
     // All other types get a filled shape so connection line endpoints are visible.
     for (const n of nodes) {
       if (n.type === "text") continue;
-      const [r, g, b] = hexToRgbPdf(n.color || "#1D5C50");
+      const [r, g, b] = parseColorForPdf(n.color || "#1D5C50");
       doc.setFillColor(r, g, b);
       const nx = px(n.x), ny = py(n.y);
       const nw = n.w * exportScale, nh = n.h * exportScale;
