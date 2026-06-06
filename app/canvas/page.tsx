@@ -2397,12 +2397,30 @@ export default function Canvas() {
       doc.stroke();
     }
 
-    // ── 2. Block nodes — filled rectangles (drawn over lines) ─────────────────
+    // ── 2. All shape nodes (drawn over connection lines) ────────────────────────
+    // "text" nodes have no filled background on-screen, so we skip them.
+    // All other types get a filled shape so connection line endpoints are visible.
     for (const n of nodes) {
-      if (n.type !== "block") continue;
+      if (n.type === "text") continue;
       const [r, g, b] = hexToRgbPdf(n.color || "#1D5C50");
       doc.setFillColor(r, g, b);
-      doc.rect(px(n.x), py(n.y), n.w * exportScale, n.h * exportScale, "F");
+      const nx = px(n.x), ny = py(n.y);
+      const nw = n.w * exportScale, nh = n.h * exportScale;
+      if (n.type === "circle" || n.type === "oval") {
+        doc.ellipse(nx + nw / 2, ny + nh / 2, nw / 2, nh / 2, "F");
+      } else if (n.type === "diamond") {
+        const cx = nx + nw / 2, cy = ny + nh / 2;
+        doc.moveTo(cx, ny);
+        doc.lineTo(nx + nw, cy);
+        doc.lineTo(cx, ny + nh);
+        doc.lineTo(nx, cy);
+        doc.fill();
+      } else if (n.type === "rounded") {
+        const cr = Math.min(12 * exportScale, nw / 4, nh / 4);
+        doc.roundedRect(nx, ny, nw, nh, cr, cr, "F");
+      } else {
+        doc.rect(nx, ny, nw, nh, "F");
+      }
     }
 
     const safeName = boardName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "board";
