@@ -2426,13 +2426,31 @@ export default function Canvas() {
     // ── 2. All shape nodes (drawn over connection lines) ────────────────────────
     // "text" nodes have no filled background on-screen, so we skip them.
     // All other types get a filled shape so connection line endpoints are visible.
+    // Image nodes: n.imageUrl is already a data URL in React state (loaded from
+    // IndexedDB at hydration time) — no async fetch needed. addImage() is
+    // synchronous for data URLs, so all images are embedded before doc.save().
     for (const n of nodes) {
       if (n.type === "text") continue;
       const [r, g, b] = parseColorForPdf(n.color || "#1D5C50");
       doc.setFillColor(r, g, b);
       const nx = px(n.x), ny = py(n.y);
       const nw = n.w * exportScale, nh = n.h * exportScale;
-      if (n.type === "circle" || n.type === "oval") {
+
+      if (n.type === "image") {
+        let embedded = false;
+        if (n.imageUrl) {
+          try {
+            const fmtMatch = n.imageUrl.match(/^data:image\/([a-z0-9]+);/i);
+            const rawFmt = fmtMatch ? fmtMatch[1].toUpperCase() : "JPEG";
+            const fmt = rawFmt === "JPG" ? "JPEG" : rawFmt;
+            doc.addImage(n.imageUrl, fmt, nx, ny, nw, nh);
+            embedded = true;
+          } catch {
+            // Unsupported format or corrupt data — fall through to rectangle
+          }
+        }
+        if (!embedded) doc.rect(nx, ny, nw, nh, "F");
+      } else if (n.type === "circle" || n.type === "oval") {
         doc.ellipse(nx + nw / 2, ny + nh / 2, nw / 2, nh / 2, "F");
       } else if (n.type === "diamond") {
         const cx = nx + nw / 2, cy = ny + nh / 2;
@@ -2445,6 +2463,7 @@ export default function Canvas() {
         const cr = Math.min(12 * exportScale, nw / 4, nh / 4);
         doc.roundedRect(nx, ny, nw, nh, cr, cr, "F");
       } else {
+        // block, textfile — solid rectangle
         doc.rect(nx, ny, nw, nh, "F");
       }
     }
