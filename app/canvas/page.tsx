@@ -660,6 +660,7 @@ export default function Canvas() {
   // Tracks which node IDs currently have an entry in IndexedDB so we can
   // delete stale records when a node is removed or loses its asset fields.
   const prevAssetNodeIdsRef = useRef(new Set<number>());
+  const needsHistoryPushRef = useRef(false);
 
   // ── Undo / Redo history ───────────────────────────────────────────────────────
   type HistorySnapshot = {
@@ -907,23 +908,26 @@ export default function Canvas() {
       autoLabel = `${baseLabel} ${maxIdx + 1}`;
     }
 
-    setNodes((prev) => [
-      ...prev,
-      {
-        id: newId,
-        x: cx - w / 2,
-        y: cy - h / 2,
-        w,
-        h,
-        title: "",
-        label: autoLabel,
-        body: "",
-        type,
-        color: isText ? "transparent" : "#1D5C50",
-        fontSize: isText ? 15 : 13,
-      },
-    ]);
-    setPresentationOrder((prev) => [...prev, newId]);
+    const newNode: CanvasNode = {
+      id: newId,
+      x: cx - w / 2,
+      y: cy - h / 2,
+      w,
+      h,
+      title: "",
+      label: autoLabel,
+      body: "",
+      type,
+      color: isText ? "transparent" : "#1D5C50",
+      fontSize: isText ? 15 : 13,
+    };
+    const newNodes = [...nodesRef.current, newNode];
+    const newOrder = [...presentationOrderRef.current, newId];
+    nodesRef.current = newNodes;
+    presentationOrderRef.current = newOrder;
+    pushHistory();
+    setNodes(newNodes);
+    setPresentationOrder(newOrder);
     setSelected(newId);
     setContextMenu(null);
     setTimeout(() => setActiveShapeType(null), 600);
@@ -936,7 +940,7 @@ export default function Canvas() {
         el?.focus();
       }, 50);
     }
-  }, []);
+  }, [pushHistory]);
 
   const handleImageInsert = useCallback((cx: number, cy: number) => {
     pendingImagePos.current = { cx, cy };
@@ -963,33 +967,26 @@ export default function Canvas() {
             idCounterRef.current = maxExistingId + 1;
           const newId = idCounterRef.current;
           idCounterRef.current += 1;
-          setNodes((prev) => [
-            ...prev,
-            {
-              id: newId,
-              x: pos.cx - w / 2,
-              y: pos.cy - h / 2,
-              w,
-              h,
-              title: "",
-              label: (() => {
-                const re = /^Image\s+(\d+)$/;
-                let maxIdx = 0;
-                for (const node of nodeMapRef.current.values()) {
-                  if (node.type === "image") {
-                    const m = (node.label ?? "").match(re);
-                    if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
-                  }
-                }
-                return `Image ${maxIdx + 1}`;
-              })(),
-              body: "",
-              type: "image",
-              color: "#1D5C50",
-              imageUrl,
-            },
-          ]);
-          setPresentationOrder((prev) => [...prev, newId]);
+          const re = /^Image\s+(\d+)$/;
+          let maxIdx = 0;
+          for (const node of nodeMapRef.current.values()) {
+            if (node.type === "image") {
+              const m = (node.label ?? "").match(re);
+              if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
+            }
+          }
+          const imgNode: CanvasNode = {
+            id: newId, x: pos.cx - w / 2, y: pos.cy - h / 2, w, h,
+            title: "", label: `Image ${maxIdx + 1}`, body: "",
+            type: "image", color: "#1D5C50", imageUrl,
+          };
+          const newNodes = [...nodesRef.current, imgNode];
+          const newOrder = [...presentationOrderRef.current, newId];
+          nodesRef.current = newNodes;
+          presentationOrderRef.current = newOrder;
+          pushHistory();
+          setNodes(newNodes);
+          setPresentationOrder(newOrder);
           pendingImagePos.current = null;
         };
         img.src = imageUrl;
@@ -997,7 +994,7 @@ export default function Canvas() {
       reader.readAsDataURL(file);
       e.target.value = "";
     },
-    [],
+    [pushHistory],
   );
 
   const handleTextFileInsert = useCallback((cx: number, cy: number) => {
@@ -1022,31 +1019,25 @@ export default function Canvas() {
           idCounterRef.current = maxExistingId + 1;
         const newId = idCounterRef.current;
         idCounterRef.current += 1;
-        setNodes((prev) => [
-          ...prev,
-          {
-            id: newId,
-            x: pos.cx - w / 2,
-            y: pos.cy - h / 2,
-            w,
-            h,
-            title: "",
-            label: fileName,
-            body: "",
-            type: "textfile",
-            color: "#1D5C50",
-            fontSize: 13,
-            textFileContent,
-            textFileName: fileName,
-          },
-        ]);
-        setPresentationOrder((prev) => [...prev, newId]);
+        const tfNode: CanvasNode = {
+          id: newId, x: pos.cx - w / 2, y: pos.cy - h / 2, w, h,
+          title: "", label: fileName, body: "",
+          type: "textfile", color: "#1D5C50", fontSize: 13,
+          textFileContent, textFileName: fileName,
+        };
+        const newNodes = [...nodesRef.current, tfNode];
+        const newOrder = [...presentationOrderRef.current, newId];
+        nodesRef.current = newNodes;
+        presentationOrderRef.current = newOrder;
+        pushHistory();
+        setNodes(newNodes);
+        setPresentationOrder(newOrder);
         pendingTextFilePos.current = null;
       };
       reader.readAsText(file);
       e.target.value = "";
     },
-    [],
+    [pushHistory],
   );
 
   const openColorPicker = useCallback(
@@ -1259,6 +1250,19 @@ export default function Canvas() {
     };
   }, [nodes, connections, boardName, presentationOrder, hydrated]);
 
+  // Push initial history snapshot once after the board has hydrated
+  useEffect(() => {
+    if (hydrated) pushHistory();
+  }, [hydrated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Push one history snapshot after drag/resize/layout completes (flag set in mouseUp/layout)
+  useEffect(() => {
+    if (needsHistoryPushRef.current) {
+      needsHistoryPushRef.current = false;
+      pushHistory();
+    }
+  }, [nodes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Show entry overlay once each time presentation mode is entered
   useEffect(() => {
     if (!isPresenting) return;
@@ -1458,10 +1462,13 @@ export default function Canvas() {
     setHoveredConnKey((k) => (k === key ? null : k));
   }, []);
   const onConnDelete = useCallback((from: number, to: number) => {
-    setConnections((prev) =>
-      prev.filter((x) => !(x.from === from && x.to === to)),
+    const newConns = connectionsRef.current.filter(
+      (x) => !(x.from === from && x.to === to),
     );
-  }, []);
+    connectionsRef.current = newConns;
+    pushHistory();
+    setConnections(newConns);
+  }, [pushHistory]);
 
   // Finalizes a pending connection on click (fires after mouseup, so
   // connectDragRef is guaranteed to hold the latest state).
@@ -1470,13 +1477,21 @@ export default function Canvas() {
     if (!cd) return;
     e.stopPropagation();
     if (id !== cd.fromId) {
-      setConnections((prev) => {
-        const dup = prev.some((c) => c.from === cd.fromId && c.to === id);
-        return dup ? prev : [...prev, { from: cd.fromId, to: id }];
-      });
+      const dup = connectionsRef.current.some(
+        (c) => c.from === cd.fromId && c.to === id,
+      );
+      if (!dup) {
+        const newConns = [
+          ...connectionsRef.current,
+          { from: cd.fromId, to: id },
+        ];
+        connectionsRef.current = newConns;
+        pushHistory();
+        setConnections(newConns);
+      }
     }
     setConnectDrag(null);
-  }, []);
+  }, [pushHistory]);
 
   // ── Global mouse move + up ────────────────────────────────────────────────────
 
@@ -1686,6 +1701,9 @@ export default function Canvas() {
       setMarqueeRect(null);
     }
 
+    if (dragging.current || resizing.current || multiDragging.current) {
+      needsHistoryPushRef.current = true;
+    }
     dragging.current = null;
     resizing.current = null;
     multiDragging.current = null;
@@ -1712,17 +1730,29 @@ export default function Canvas() {
 
   // ── Keyboard ──────────────────────────────────────────────────────────────────
   const arrangeBringToFront = useCallback((id: number) => {
-    setNodes((prev) => bringToFront(prev, id));
-  }, []);
+    const newNodes = bringToFront(nodesRef.current, id);
+    nodesRef.current = newNodes;
+    pushHistory();
+    setNodes(newNodes);
+  }, [pushHistory]);
   const arrangeBringForward = useCallback((id: number) => {
-    setNodes((prev) => bringForward(prev, id));
-  }, []);
+    const newNodes = bringForward(nodesRef.current, id);
+    nodesRef.current = newNodes;
+    pushHistory();
+    setNodes(newNodes);
+  }, [pushHistory]);
   const arrangeSendBackward = useCallback((id: number) => {
-    setNodes((prev) => sendBackward(prev, id));
-  }, []);
+    const newNodes = sendBackward(nodesRef.current, id);
+    nodesRef.current = newNodes;
+    pushHistory();
+    setNodes(newNodes);
+  }, [pushHistory]);
   const arrangeSendToBack = useCallback((id: number) => {
-    setNodes((prev) => sendToBack(prev, id));
-  }, []);
+    const newNodes = sendToBack(nodesRef.current, id);
+    nodesRef.current = newNodes;
+    pushHistory();
+    setNodes(newNodes);
+  }, [pushHistory]);
 
   // ── Force-directed layout ──────────────────────────────────────────────────
   const computeForceLayout = useCallback(
@@ -1851,6 +1881,7 @@ export default function Canvas() {
         );
         layoutRafRef.current = null;
         layoutFromRef.current = null;
+        needsHistoryPushRef.current = true;
       }
     };
 
@@ -1860,24 +1891,38 @@ export default function Canvas() {
   const deleteSelected = useCallback(() => {
     if (selectedIdsRef.current.size > 0) {
       const ids = selectedIdsRef.current;
-      setNodes((prev) => prev.filter((n) => !ids.has(n.id)));
-      setConnections((prev) =>
-        prev.filter((c) => !ids.has(c.from) && !ids.has(c.to)),
+      const newNodes = nodesRef.current.filter((n) => !ids.has(n.id));
+      const newConns = connectionsRef.current.filter(
+        (c) => !ids.has(c.from) && !ids.has(c.to),
       );
-      setPresentationOrder((prev) => prev.filter((id) => !ids.has(id)));
+      const newOrder = presentationOrderRef.current.filter((id) => !ids.has(id));
+      nodesRef.current = newNodes;
+      connectionsRef.current = newConns;
+      presentationOrderRef.current = newOrder;
+      pushHistory();
+      setNodes(newNodes);
+      setConnections(newConns);
+      setPresentationOrder(newOrder);
       setSelectedIds(new Set());
       setSelected(null);
     } else {
       const id = selectedRef.current;
       if (id === null) return;
-      setNodes((prev) => prev.filter((n) => n.id !== id));
-      setConnections((prev) =>
-        prev.filter((c) => c.from !== id && c.to !== id),
+      const newNodes = nodesRef.current.filter((n) => n.id !== id);
+      const newConns = connectionsRef.current.filter(
+        (c) => c.from !== id && c.to !== id,
       );
-      setPresentationOrder((prev) => prev.filter((p) => p !== id));
+      const newOrder = presentationOrderRef.current.filter((p) => p !== id);
+      nodesRef.current = newNodes;
+      connectionsRef.current = newConns;
+      presentationOrderRef.current = newOrder;
+      pushHistory();
+      setNodes(newNodes);
+      setConnections(newConns);
+      setPresentationOrder(newOrder);
       setSelected(null);
     }
-  }, []);
+  }, [pushHistory]);
 
   const copySelected = useCallback(() => {
     const id = selectedRef.current;
@@ -1902,58 +1947,80 @@ export default function Canvas() {
       cy !== undefined
         ? cy - node.h / 2
         : lastMousePosRef.current.y - node.h / 2 + 10;
-    setNodes((prev) => [...prev, { ...node, id: newId, x: tx, y: ty }]);
-    setPresentationOrder((prev) => [...prev, newId]);
+    const pastedNode = { ...node, id: newId, x: tx, y: ty };
+    const newNodes = [...nodesRef.current, pastedNode];
+    const newOrder = [...presentationOrderRef.current, newId];
+    nodesRef.current = newNodes;
+    presentationOrderRef.current = newOrder;
+    pushHistory();
+    setNodes(newNodes);
+    setPresentationOrder(newOrder);
     setSelected(newId);
     setContextMenu(null);
-  }, []);
+  }, [pushHistory]);
 
   const movePresentationNodeUp = useCallback((id: number) => {
-    setPresentationOrder((prev) => {
-      const idx = prev.indexOf(id);
-      if (idx <= 0) return prev;
-      const next = [...prev];
-      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-      return next;
-    });
-  }, []);
+    const prev = presentationOrderRef.current;
+    const idx = prev.indexOf(id);
+    if (idx <= 0) return;
+    const next = [...prev];
+    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+    presentationOrderRef.current = next;
+    pushHistory();
+    setPresentationOrder(next);
+  }, [pushHistory]);
 
   const movePresentationNodeDown = useCallback((id: number) => {
-    setPresentationOrder((prev) => {
-      const idx = prev.indexOf(id);
-      if (idx === -1 || idx === prev.length - 1) return prev;
-      const next = [...prev];
-      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-      return next;
-    });
-  }, []);
+    const prev = presentationOrderRef.current;
+    const idx = prev.indexOf(id);
+    if (idx === -1 || idx === prev.length - 1) return;
+    const next = [...prev];
+    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+    presentationOrderRef.current = next;
+    pushHistory();
+    setPresentationOrder(next);
+  }, [pushHistory]);
 
   const updateNodeField = useCallback(
     (id: number, field: "title" | "body", value: string) => {
-      setNodes((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, [field]: value } : n)),
+      const old = nodesRef.current.find((n) => n.id === id)?.[field] ?? "";
+      const newNodes = nodesRef.current.map((n) =>
+        n.id === id ? { ...n, [field]: value } : n,
       );
+      nodesRef.current = newNodes;
+      if (value !== old) pushHistory();
+      setNodes(newNodes);
     },
-    [],
+    [pushHistory],
   );
 
   const updateNodeLabel = useCallback((id: number, label: string) => {
-    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, label } : n)));
-  }, []);
+    const old = nodesRef.current.find((n) => n.id === id)?.label ?? "";
+    const newNodes = nodesRef.current.map((n) => (n.id === id ? { ...n, label } : n));
+    nodesRef.current = newNodes;
+    if (label !== old) pushHistory();
+    setNodes(newNodes);
+  }, [pushHistory]);
 
   const updateFontSize = useCallback((id: number, size: number) => {
-    setNodes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, fontSize: size } : n)),
+    const newNodes = nodesRef.current.map((n) =>
+      n.id === id ? { ...n, fontSize: size } : n,
     );
-  }, []);
+    nodesRef.current = newNodes;
+    pushHistory();
+    setNodes(newNodes);
+  }, [pushHistory]);
 
   const updateNodeFormat = useCallback(
     (id: number, field: "bold" | "italic" | "underline", value: boolean) => {
-      setNodes((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, [field]: value } : n)),
+      const newNodes = nodesRef.current.map((n) =>
+        n.id === id ? { ...n, [field]: value } : n,
       );
+      nodesRef.current = newNodes;
+      pushHistory();
+      setNodes(newNodes);
     },
-    [],
+    [pushHistory],
   );
 
   const toggleExcludeFromPresentation = useCallback(
@@ -1962,13 +2029,14 @@ export default function Canvas() {
         selectedIdsRef.current.size > 0 && selectedIdsRef.current.has(id)
           ? selectedIdsRef.current
           : new Set([id]);
-      setNodes((prev) =>
-        prev.map((n) =>
-          ids.has(n.id) ? { ...n, excludeFromPresentation: toExclude } : n,
-        ),
+      const newNodes = nodesRef.current.map((n) =>
+        ids.has(n.id) ? { ...n, excludeFromPresentation: toExclude } : n,
       );
+      nodesRef.current = newNodes;
+      pushHistory();
+      setNodes(newNodes);
     },
-    [],
+    [pushHistory],
   );
 
   const focusNode = useCallback((id: number) => {
@@ -2168,24 +2236,21 @@ export default function Canvas() {
               const m = (node.label ?? "").match(re1);
               if (m) maxBlockIdx1 = Math.max(maxBlockIdx1, parseInt(m[1], 10));
             }
-          setNodes((prev) => [
-            ...prev,
-            {
-              id: newId,
-              x: n.x + n.w + 80,
-              y: n.y,
-              w: 200,
-              h: 80,
-              title: "",
-              label: `Block ${maxBlockIdx1 + 1}`,
-              body: "",
-              type: "block",
-              color: "#1D5C50",
-              fontSize: 13,
-            },
-          ]);
-          setConnections((prev) => [...prev, { from: selId, to: newId }]);
-          setPresentationOrder((prev) => [...prev, newId]);
+          const tabNode: CanvasNode = {
+            id: newId, x: n.x + n.w + 80, y: n.y, w: 200, h: 80,
+            title: "", label: `Block ${maxBlockIdx1 + 1}`, body: "",
+            type: "block", color: "#1D5C50", fontSize: 13,
+          };
+          const tabNodes = [...nodesRef.current, tabNode];
+          const tabConns = [...connectionsRef.current, { from: selId, to: newId }];
+          const tabOrder = [...presentationOrderRef.current, newId];
+          nodesRef.current = tabNodes;
+          connectionsRef.current = tabConns;
+          presentationOrderRef.current = tabOrder;
+          pushHistory();
+          setNodes(tabNodes);
+          setConnections(tabConns);
+          setPresentationOrder(tabOrder);
           setSelected(newId);
           editingNodeIdRef.current = newId;
           setTimeout(() => {
@@ -2217,23 +2282,18 @@ export default function Canvas() {
               const m = (node.label ?? "").match(re2);
               if (m) maxBlockIdx2 = Math.max(maxBlockIdx2, parseInt(m[1], 10));
             }
-          setNodes((prev) => [
-            ...prev,
-            {
-              id: newId,
-              x: n.x,
-              y: n.y + n.h + 40,
-              w: 200,
-              h: 80,
-              title: "",
-              label: `Block ${maxBlockIdx2 + 1}`,
-              body: "",
-              type: "block",
-              color: "#1D5C50",
-              fontSize: 13,
-            },
-          ]);
-          setPresentationOrder((prev) => [...prev, newId]);
+          const enterNode: CanvasNode = {
+            id: newId, x: n.x, y: n.y + n.h + 40, w: 200, h: 80,
+            title: "", label: `Block ${maxBlockIdx2 + 1}`, body: "",
+            type: "block", color: "#1D5C50", fontSize: 13,
+          };
+          const enterNodes = [...nodesRef.current, enterNode];
+          const enterOrder = [...presentationOrderRef.current, newId];
+          nodesRef.current = enterNodes;
+          presentationOrderRef.current = enterOrder;
+          pushHistory();
+          setNodes(enterNodes);
+          setPresentationOrder(enterOrder);
           setSelected(newId);
           editingNodeIdRef.current = newId;
           setTimeout(() => {
@@ -2254,6 +2314,7 @@ export default function Canvas() {
     pasteNode,
     focusNode,
     centerNodeForPresentation,
+    pushHistory,
   ]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -5097,7 +5158,7 @@ export default function Canvas() {
         <ColorPickerWindow
           picker={colorPicker}
           onColorChange={onPickerColorChange}
-          onClose={() => setColorPicker(null)}
+          onClose={() => { pushHistory(); setColorPicker(null); }}
         />
       )}
 
@@ -5106,7 +5167,7 @@ export default function Canvas() {
         <ColorPickerWindow
           picker={textColorPicker}
           onColorChange={onPickerTextColorChange}
-          onClose={() => setTextColorPicker(null)}
+          onClose={() => { pushHistory(); setTextColorPicker(null); }}
         />
       )}
 
