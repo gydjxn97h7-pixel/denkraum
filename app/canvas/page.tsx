@@ -711,6 +711,9 @@ export default function Canvas() {
 
   saveBoardRef.current = saveBoard;
 
+  const undoRef = useRef<() => void>(() => {});
+  const redoRef = useRef<() => void>(() => {});
+
   const pushHistory = useCallback(() => {
     const snapshot: HistorySnapshot = {
       nodes: nodesRef.current.map((n) => ({ ...n })),
@@ -745,6 +748,9 @@ export default function Canvas() {
     setConnections(snap.connections.map((c) => ({ ...c })));
     setPresentationOrder([...snap.presentationOrder]);
   }, []);
+
+  undoRef.current = undo;
+  redoRef.current = redo;
 
   const onDenkraumFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2132,9 +2138,9 @@ export default function Canvas() {
       ) {
         e.preventDefault();
         if (e.shiftKey) {
-          redo();
+          redoRef.current();
         } else {
-          undo();
+          undoRef.current();
         }
         return;
       }
@@ -2248,8 +2254,6 @@ export default function Canvas() {
     pasteNode,
     focusNode,
     centerNodeForPresentation,
-    undo,
-    redo,
   ]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
