@@ -1281,7 +1281,7 @@ export default function Canvas() {
         const rect = el.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
-        const delta = -e.deltaY * 0.012;
+        const delta = -e.deltaY * 0.016;
         const prev = zoomRef.current;
         const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta * prev));
         const p = panRef.current;
