@@ -500,7 +500,6 @@ export default function Canvas() {
   const [activePanel, setActivePanel] = useState<
     "board" | "nodes" | "presentation" | "saveload" | "shortcuts" | null
   >(null);
-  const [exporting, setExporting] = useState(false);
   const [textFileViewer, setTextFileViewer] = useState<{
     nodeId: number;
     fileName: string;
@@ -546,7 +545,6 @@ export default function Canvas() {
     constrain: boolean; // keep w === h (circle)
   } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const connSvgRef = useRef<SVGSVGElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFileInputRef = useRef<HTMLInputElement>(null);
   const denkraumFileInputRef = useRef<HTMLInputElement>(null);
@@ -2175,160 +2173,7 @@ export default function Canvas() {
       : "transparent";
   };
 
-  // ── Export PDF ────────────────────────────────────────────────────────────────
-  const handleExportPDF = useCallback(async () => {
-    if (!canvasRef.current || nodes.length === 0) return;
-    setExporting(true);
-
-    const savedPan = { ...panRef.current };
-    const savedZoom = zoomRef.current;
-
-    try {
-      const PAD = 40;
-      const minX = nodes.reduce((m, n) => Math.min(m, n.x), Infinity) - PAD;
-      const minY = nodes.reduce((m, n) => Math.min(m, n.y), Infinity) - PAD;
-      const maxX =
-        nodes.reduce((m, n) => Math.max(m, n.x + n.w), -Infinity) + PAD;
-      const maxY =
-        nodes.reduce((m, n) => Math.max(m, n.y + n.h), -Infinity) + PAD;
-      const contentW = Math.ceil(maxX - minX);
-      const contentH = Math.ceil(maxY - minY);
-
-      // jsPDF hard limit is 14400 user units per page dimension.
-      // Use 14000 as the safe ceiling. If content exceeds it, apply a
-      // uniform scale so both axes shrink proportionally.
-      // Also cap the html2canvas capture (scale×pdfDim) to 14000 px so
-      // browsers don't refuse to allocate a backing store for the canvas.
-      const SAFE_MAX = 14000;
-      const maxDim = Math.max(contentW, contentH);
-      const exportScale = maxDim > SAFE_MAX ? SAFE_MAX / maxDim : 1;
-      const pdfW = Math.round(contentW * exportScale);
-      const pdfH = Math.round(contentH * exportScale);
-      // Desired 2× quality, but reduce if the resulting canvas would exceed SAFE_MAX.
-      const h2cScale = Math.min(2, SAFE_MAX / Math.max(pdfW, pdfH));
-
-      // Pan so content top-left maps to canvas origin at exportScale.
-      setPan({ x: -minX * exportScale, y: -minY * exportScale });
-      setZoom(exportScale);
-
-      // Two rAF ticks — let React commit pan/zoom before capture
-      await new Promise<void>((r) =>
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => r());
-        }),
-      );
-
-      // Expand the canvas div to the (possibly scaled) content size so
-      // html2canvas sees the full board regardless of viewport size.
-      const el = canvasRef.current;
-      el.style.width = `${pdfW}px`;
-      el.style.height = `${pdfH}px`;
-
-      // ── DIAG: check what's in the DOM before repositioning ──────────────────
-      const svgEl = connSvgRef.current;
-      const gEl = svgEl?.firstElementChild as SVGGElement | null;
-
-      // (a) Before repositioning
-      if (svgEl) {
-        const bcr = svgEl.getBoundingClientRect();
-        console.log("[PDF-DIAG] (a) svgEl ref:", svgEl.tagName, svgEl);
-        console.log("[PDF-DIAG] (a) svgEl.style left/top/w/h:", svgEl.style.left, svgEl.style.top, svgEl.style.width, svgEl.style.height);
-        console.log("[PDF-DIAG] (a) svgEl BCR:", JSON.stringify({ x: bcr.x, y: bcr.y, w: bcr.width, h: bcr.height }));
-        console.log("[PDF-DIAG] (a) gEl transform:", gEl?.getAttribute("transform"));
-        const paths = svgEl.querySelectorAll("path");
-        console.log("[PDF-DIAG] (a) path count inside svgEl:", paths.length);
-        paths.forEach((p, i) => console.log(`  path[${i}] d="${p.getAttribute("d")?.slice(0,60)}" stroke="${p.getAttribute("stroke")}"`));
-        // Also check: are there visible paths ANYWHERE in the canvas div?
-        const allPaths = el.querySelectorAll("path[stroke]");
-        console.log("[PDF-DIAG] (a) ALL stroke paths inside canvas div:", allPaths.length);
-      } else {
-        console.warn("[PDF-DIAG] connSvgRef.current is NULL — ref not attached");
-        // Fallback: find any SVG with connection paths in the canvas div
-        const allSvgs = el.querySelectorAll("svg");
-        console.log("[PDF-DIAG] SVGs found in canvas div:", allSvgs.length);
-        allSvgs.forEach((s, i) => {
-          const r = s.getBoundingClientRect();
-          console.log(`  svg[${i}] BCR:`, JSON.stringify({ x: r.x, y: r.y, w: r.width, h: r.height }), "paths:", s.querySelectorAll("path").length, "style.left:", s.style.left);
-        });
-      }
-
-      // The connection SVG lives at CSS left:-5000, top:-5000 (world-local)
-      // so its element box sits outside the canvas div's overflow:hidden boundary.
-      if (svgEl && gEl) {
-        svgEl.style.left = `${minX}px`;
-        svgEl.style.top = `${minY}px`;
-        svgEl.style.width = `${contentW}px`;
-        svgEl.style.height = `${contentH}px`;
-        gEl.setAttribute("transform", `translate(${-minX}, ${-minY})`);
-
-        // (b) After repositioning — confirm canvas-space position
-        const bcrAfter = svgEl.getBoundingClientRect();
-        const elBCR = el.getBoundingClientRect();
-        console.log("[PDF-DIAG] (b) svgEl BCR after reposition:", JSON.stringify({ x: bcrAfter.x, y: bcrAfter.y, w: bcrAfter.width, h: bcrAfter.height }));
-        console.log("[PDF-DIAG] (b) canvas div BCR:", JSON.stringify({ x: elBCR.x, y: elBCR.y, w: elBCR.width, h: elBCR.height }));
-        console.log("[PDF-DIAG] (b) svgEl position relative to canvas div:", {
-          left: bcrAfter.x - elBCR.x,
-          top: bcrAfter.y - elBCR.y,
-          right: bcrAfter.right - elBCR.x,
-          bottom: bcrAfter.bottom - elBCR.y,
-        });
-        console.log("[PDF-DIAG] (b) pdfW/pdfH (canvas div target size):", pdfW, pdfH);
-        console.log("[PDF-DIAG] (b) gEl transform:", gEl.getAttribute("transform"));
-        console.log("[PDF-DIAG] (b) svgEl inline style.left:", svgEl.style.left, "top:", svgEl.style.top);
-      }
-      // ── END DIAG ──────────────────────────────────────────────────────────────
-
-      const { default: html2canvas } = await import("html2canvas");
-      const { jsPDF } = await import("jspdf");
-
-      const cvs = await html2canvas(el, {
-        backgroundColor: "#0C2018",
-        scale: h2cScale,
-        useCORS: true,
-        logging: false,
-        scrollX: 0,
-        scrollY: 0,
-        // Skip all fixed-position overlays (sidebar, toolbars, pickers)
-        ignoreElements: (el) =>
-          window.getComputedStyle(el).position === "fixed",
-      });
-      // (c) After capture
-      console.log("[PDF-DIAG] (c) html2canvas output canvas size:", cvs.width, "×", cvs.height);
-
-      const imgData = cvs.toDataURL("image/jpeg", 0.92);
-      const pdf = new jsPDF({
-        orientation: pdfW >= pdfH ? "landscape" : "portrait",
-        unit: "px",
-        format: [pdfW, pdfH],
-      });
-      pdf.addImage(imgData, "JPEG", 0, 0, pdfW, pdfH);
-      pdf.save("dnkrm.pdf");
-    } catch (err) {
-      console.error("[PDF export]", err);
-      setToast({ msg: "PDF export failed", variant: "error" });
-    } finally {
-      if (canvasRef.current) {
-        canvasRef.current.style.width = "";
-        canvasRef.current.style.height = "";
-      }
-      // Restore connection SVG to its original off-canvas position before
-      // React re-renders so on-screen rendering is never disrupted.
-      const svgEl = connSvgRef.current;
-      const gEl = svgEl?.firstElementChild as SVGGElement | null;
-      if (svgEl && gEl) {
-        svgEl.style.left = "-5000px";
-        svgEl.style.top = "-5000px";
-        svgEl.style.width = "10000px";
-        svgEl.style.height = "10000px";
-        gEl.setAttribute("transform", "translate(5000, 5000)");
-      }
-      setPan(savedPan);
-      setZoom(savedZoom);
-      setExporting(false);
-    }
-  }, [nodes]);
-
-  // ── Vector PDF export (jsPDF direct — no html2canvas) ────────────────────────
+  // ── Vector PDF export (jsPDF direct) ────────────────────────────────────────
   const exportPdfVector = useCallback(async () => {
     if (nodes.length === 0) return;
 
@@ -2342,7 +2187,7 @@ export default function Canvas() {
     const contentW = Math.ceil(maxX - minX);
     const contentH = Math.ceil(maxY - minY);
 
-    // Same 14000-unit safety cap as the html2canvas path.
+    // Same 14000-unit safety cap as before.
     const SAFE_MAX = 14000;
     const exportScale = Math.max(contentW, contentH) > SAFE_MAX
       ? SAFE_MAX / Math.max(contentW, contentH)
@@ -3885,75 +3730,6 @@ export default function Canvas() {
         />
 
         <button
-          onClick={handleExportPDF}
-          disabled={exporting}
-          style={{
-            padding: "6px 13px",
-            borderRadius: 8,
-            border: "none",
-            fontSize: 12.5,
-            fontFamily: "inherit",
-            cursor: exporting ? "default" : "pointer",
-            background: "transparent",
-            color: exporting
-              ? "rgba(255,255,255,0.4)"
-              : "rgba(255,255,255,0.85)",
-            transition: "color 0.15s",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            letterSpacing: "-0.1px",
-          }}
-          onMouseEnter={(e) => {
-            if (!exporting)
-              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
-          }}
-          onMouseLeave={(e) => {
-            if (!exporting)
-              (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.85)";
-          }}
-        >
-          {exporting ? (
-            <>
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ animation: "spin 1s linear infinite" }}
-              >
-                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-              </svg>
-              Exporting…
-            </>
-          ) : (
-            <>
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              Export PDF
-            </>
-          )}
-        </button>
-
-        {/* [TEMP] Vector PDF button — step 1 scaffold */}
-        <button
           onClick={exportPdfVector}
           disabled={nodes.length === 0}
           style={{
@@ -3982,7 +3758,21 @@ export default function Canvas() {
               (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
           }}
         >
-          PDF (vector)
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export PDF
         </button>
 
         {/* Divider */}
@@ -4336,7 +4126,6 @@ export default function Canvas() {
           {/* Connections SVG — positioned at (-5000,-5000) so the internal
               coordinate origin matches world (0,0) via the translate below. */}
           <svg
-            ref={connSvgRef}
             style={{
               position: "absolute",
               left: -5000,
