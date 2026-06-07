@@ -46,10 +46,20 @@ function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+const MIN_ZOOM = 0.05;
+const MAX_ZOOM = 3;
+
 // ── .dnkrm file validation ────────────────────────────────────────────────────
 
 const VALID_NODE_TYPES = new Set<string>([
-  "block", "text", "circle", "oval", "diamond", "rounded", "image", "textfile",
+  "block",
+  "text",
+  "circle",
+  "oval",
+  "diamond",
+  "rounded",
+  "image",
+  "textfile",
 ]);
 
 function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
@@ -71,16 +81,21 @@ function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
     title: typeof n.title === "string" ? n.title : "",
     body: typeof n.body === "string" ? n.body : "",
     color: typeof n.color === "string" ? n.color : "#1D5C50",
-    ...(typeof n.fontSize === "number" && Number.isFinite(n.fontSize) && { fontSize: n.fontSize as number }),
+    ...(typeof n.fontSize === "number" &&
+      Number.isFinite(n.fontSize) && { fontSize: n.fontSize as number }),
     ...(typeof n.label === "string" && { label: n.label }),
     ...(typeof n.imageUrl === "string" && { imageUrl: n.imageUrl }),
-    ...(typeof n.textFileContent === "string" && { textFileContent: n.textFileContent }),
+    ...(typeof n.textFileContent === "string" && {
+      textFileContent: n.textFileContent,
+    }),
     ...(typeof n.textFileName === "string" && { textFileName: n.textFileName }),
     ...(typeof n.bold === "boolean" && { bold: n.bold }),
     ...(typeof n.italic === "boolean" && { italic: n.italic }),
     ...(typeof n.underline === "boolean" && { underline: n.underline }),
     ...(typeof n.textColor === "string" && { textColor: n.textColor }),
-    ...(typeof n.excludeFromPresentation === "boolean" && { excludeFromPresentation: n.excludeFromPresentation }),
+    ...(typeof n.excludeFromPresentation === "boolean" && {
+      excludeFromPresentation: n.excludeFromPresentation,
+    }),
   };
 }
 
@@ -459,15 +474,27 @@ const PDF_BG_RGB: [number, number, number] = [12, 32, 24]; // #0C2018
 // Never throws — returns the default node fill on any unparseable value.
 function parseColorForPdf(color: string): [number, number, number] {
   try {
-    if (typeof color === "string" && color.startsWith("#") && color.length === 7) {
+    if (
+      typeof color === "string" &&
+      color.startsWith("#") &&
+      color.length === 7
+    ) {
       const h = color.slice(1);
-      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+      return [
+        parseInt(h.slice(0, 2), 16),
+        parseInt(h.slice(2, 4), 16),
+        parseInt(h.slice(4, 6), 16),
+      ];
     }
-    const m = typeof color === "string" && color.match(
-      /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/,
-    );
+    const m =
+      typeof color === "string" &&
+      color.match(
+        /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/,
+      );
     if (m) {
-      const r = parseInt(m[1]), g = parseInt(m[2]), b = parseInt(m[3]);
+      const r = parseInt(m[1]),
+        g = parseInt(m[2]),
+        b = parseInt(m[3]);
       const a = m[4] !== undefined ? parseFloat(m[4]) : 1;
       if (a >= 1) return [r, g, b];
       return [
@@ -770,7 +797,8 @@ export default function Canvas() {
   useEffect(() => {
     return () => {
       if (animRafRef.current !== null) cancelAnimationFrame(animRafRef.current);
-      if (layoutRafRef.current !== null) cancelAnimationFrame(layoutRafRef.current);
+      if (layoutRafRef.current !== null)
+        cancelAnimationFrame(layoutRafRef.current);
     };
   }, []);
 
@@ -1198,7 +1226,7 @@ export default function Canvas() {
         const my = e.clientY - rect.top;
         const delta = -e.deltaY * 0.005;
         setZoom((prev) => {
-          const next = Math.min(3, Math.max(0.2, prev + delta * prev));
+          const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta * prev));
           setPan((p) => ({
             x: mx - (mx - p.x) * (next / prev),
             y: my - (my - p.y) * (next / prev),
@@ -1741,7 +1769,11 @@ export default function Canvas() {
             const f = from.get(n.id);
             const tgt = targetMap.get(n.id);
             if (!f || !tgt) return n;
-            return { ...n, x: f.x + (tgt.newX - f.x) * e, y: f.y + (tgt.newY - f.y) * e };
+            return {
+              ...n,
+              x: f.x + (tgt.newX - f.x) * e,
+              y: f.y + (tgt.newY - f.y) * e,
+            };
           }),
         );
         // Track interpolated positions using from+targetMap (both stable in this
@@ -1750,7 +1782,10 @@ export default function Canvas() {
           Array.from(from.entries()).map(([id, f]) => {
             const tgt = targetMap.get(id);
             if (!tgt) return [id, f];
-            return [id, { x: f.x + (tgt.newX - f.x) * e, y: f.y + (tgt.newY - f.y) * e }];
+            return [
+              id,
+              { x: f.x + (tgt.newX - f.x) * e, y: f.y + (tgt.newY - f.y) * e },
+            ];
           }),
         );
         layoutRafRef.current = requestAnimationFrame(tick);
@@ -2182,16 +2217,19 @@ export default function Canvas() {
     const PAD = 40;
     const minX = nodes.reduce((m, n) => Math.min(m, n.x), Infinity) - PAD;
     const minY = nodes.reduce((m, n) => Math.min(m, n.y), Infinity) - PAD;
-    const maxX = nodes.reduce((m, n) => Math.max(m, n.x + n.w), -Infinity) + PAD;
-    const maxY = nodes.reduce((m, n) => Math.max(m, n.y + n.h), -Infinity) + PAD;
+    const maxX =
+      nodes.reduce((m, n) => Math.max(m, n.x + n.w), -Infinity) + PAD;
+    const maxY =
+      nodes.reduce((m, n) => Math.max(m, n.y + n.h), -Infinity) + PAD;
     const contentW = Math.ceil(maxX - minX);
     const contentH = Math.ceil(maxY - minY);
 
     // Same 14000-unit safety cap as before.
     const SAFE_MAX = 14000;
-    const exportScale = Math.max(contentW, contentH) > SAFE_MAX
-      ? SAFE_MAX / Math.max(contentW, contentH)
-      : 1;
+    const exportScale =
+      Math.max(contentW, contentH) > SAFE_MAX
+        ? SAFE_MAX / Math.max(contentW, contentH)
+        : 1;
     const pdfW = Math.round(contentW * exportScale);
     const pdfH = Math.round(contentH * exportScale);
 
@@ -2238,29 +2276,45 @@ export default function Canvas() {
         const dist = Math.abs(dx);
         cpOffset = Math.max(40, dist * 0.4);
         if (dx >= 0) {
-          x1 = fn.x + fn.w; y1 = fcy; x2 = tn.x; y2 = tcy;
+          x1 = fn.x + fn.w;
+          y1 = fcy;
+          x2 = tn.x;
+          y2 = tcy;
         } else {
-          x1 = fn.x; y1 = fcy; x2 = tn.x + tn.w; y2 = tcy;
+          x1 = fn.x;
+          y1 = fcy;
+          x2 = tn.x + tn.w;
+          y2 = tcy;
         }
       } else {
         const dist = Math.abs(dy);
         cpOffset = Math.max(40, dist * 0.4);
         if (dy >= 0) {
-          x1 = fcx; y1 = fn.y + fn.h; x2 = tcx; y2 = tn.y;
+          x1 = fcx;
+          y1 = fn.y + fn.h;
+          x2 = tcx;
+          y2 = tn.y;
         } else {
-          x1 = fcx; y1 = fn.y; x2 = tcx; y2 = tn.y + tn.h;
+          x1 = fcx;
+          y1 = fn.y;
+          x2 = tcx;
+          y2 = tn.y + tn.h;
         }
       }
 
       let c1x: number, c1y: number, c2x: number, c2y: number;
       if (Math.abs(dx) >= Math.abs(dy)) {
         const sign = dx >= 0 ? 1 : -1;
-        c1x = x1 + sign * cpOffset; c1y = y1;
-        c2x = x2 - sign * cpOffset; c2y = y2;
+        c1x = x1 + sign * cpOffset;
+        c1y = y1;
+        c2x = x2 - sign * cpOffset;
+        c2y = y2;
       } else {
         const sign = dy >= 0 ? 1 : -1;
-        c1x = x1; c1y = y1 + sign * cpOffset;
-        c2x = x2; c2y = y2 - sign * cpOffset;
+        c1x = x1;
+        c1y = y1 + sign * cpOffset;
+        c2x = x2;
+        c2y = y2 - sign * cpOffset;
       }
 
       doc.moveTo(px(x1), py(y1));
@@ -2278,8 +2332,10 @@ export default function Canvas() {
       if (n.type === "text") continue;
       const [r, g, b] = parseColorForPdf(n.color || "#1D5C50");
       doc.setFillColor(r, g, b);
-      const nx = px(n.x), ny = py(n.y);
-      const nw = n.w * exportScale, nh = n.h * exportScale;
+      const nx = px(n.x),
+        ny = py(n.y);
+      const nw = n.w * exportScale,
+        nh = n.h * exportScale;
 
       if (n.type === "image") {
         let embedded = false;
@@ -2298,7 +2354,8 @@ export default function Canvas() {
       } else if (n.type === "circle" || n.type === "oval") {
         doc.ellipse(nx + nw / 2, ny + nh / 2, nw / 2, nh / 2, "F");
       } else if (n.type === "diamond") {
-        const cx = nx + nw / 2, cy = ny + nh / 2;
+        const cx = nx + nw / 2,
+          cy = ny + nh / 2;
         doc.moveTo(cx, ny);
         doc.lineTo(nx + nw, cy);
         doc.lineTo(cx, ny + nh);
@@ -2325,25 +2382,35 @@ export default function Canvas() {
       try {
         const [fr, fg, fb] = parseColorForPdf(n.color || "#1D5C50");
         const isDark = (0.299 * fr + 0.587 * fg + 0.114 * fb) / 255 < 0.45;
-        const nx = px(n.x), ny = py(n.y);
-        const nw = n.w * exportScale, nh = n.h * exportScale;
+        const nx = px(n.x),
+          ny = py(n.y);
+        const nw = n.w * exportScale,
+          nh = n.h * exportScale;
         // text nodes have no fill — composite against canvas background
         const bgR = n.type === "text" ? PDF_BG_RGB[0] : fr;
         const bgG = n.type === "text" ? PDF_BG_RGB[1] : fg;
         const bgB = n.type === "text" ? PDF_BG_RGB[2] : fb;
 
         const fs = n.fontSize ?? 13;
-        const sTitleFs = fs * exportScale;           // title font size, px
+        const sTitleFs = fs * exportScale; // title font size, px
         const sBodyFs = Math.max(11, fs - 2) * exportScale; // body font size, px
         const titleFsPt = sTitleFs * 0.75;
         const bodyFsPt = sBodyFs * 0.75;
         const titleLineH = sTitleFs * 1.2;
         const bodyLineH = sBodyFs * 1.55;
         const fStyle: string =
-          n.bold && n.italic ? "bolditalic" : n.bold ? "bold" : n.italic ? "italic" : "normal";
+          n.bold && n.italic
+            ? "bolditalic"
+            : n.bold
+              ? "bold"
+              : n.italic
+                ? "italic"
+                : "normal";
 
         // Title color
-        const [tcR, tcG, tcB] = parseColorForPdf(n.textColor ?? (isDark ? "#FFFFFF" : "#111111"));
+        const [tcR, tcG, tcB] = parseColorForPdf(
+          n.textColor ?? (isDark ? "#FFFFFF" : "#111111"),
+        );
 
         // Body color — matches NodeView: n.textColor+"bb" (≈73% alpha) or rgba(255,255,255,0.82)
         const AB = 0xbb / 0xff; // 73.3%
@@ -2380,7 +2447,6 @@ export default function Canvas() {
               align: "center",
             }),
           );
-
         } else if (n.type === "textfile") {
           const label = (n.textFileName ?? n.title ?? "").trim();
           if (!label) continue;
@@ -2396,25 +2462,33 @@ export default function Canvas() {
           const lines: string[] = doc.splitTextToSize(label, maxW);
           const startY = ny + nh / 2 - titleLineH / 2;
           doc.text(lines[0], nx + padH, startY, { baseline: "top" });
-
         } else if (n.type === "diamond") {
           const padH = 28 * exportScale;
           const maxW = Math.max(10, nw - 2 * padH);
           doc.setFont("helvetica", fStyle);
           doc.setFontSize(titleFsPt);
-          const titleLines: string[] = title ? doc.splitTextToSize(title, maxW) : [];
+          const titleLines: string[] = title
+            ? doc.splitTextToSize(title, maxW)
+            : [];
           doc.setFontSize(bodyFsPt);
-          const bodyLines: string[] = body ? doc.splitTextToSize(body, maxW) : [];
+          const bodyLines: string[] = body
+            ? doc.splitTextToSize(body, maxW)
+            : [];
           const totalH =
             titleLines.length * titleLineH +
-            (bodyLines.length > 0 ? 3 * exportScale + bodyLines.length * bodyLineH : 0);
+            (bodyLines.length > 0
+              ? 3 * exportScale + bodyLines.length * bodyLineH
+              : 0);
           let curY = ny + (nh - totalH) / 2;
           if (titleLines.length > 0) {
             doc.setFont("helvetica", fStyle);
             doc.setFontSize(titleFsPt);
             doc.setTextColor(tcR, tcG, tcB);
             titleLines.forEach((line: string) => {
-              doc.text(line, nx + nw / 2, curY, { baseline: "top", align: "center" });
+              doc.text(line, nx + nw / 2, curY, {
+                baseline: "top",
+                align: "center",
+              });
               curY += titleLineH;
             });
           }
@@ -2424,29 +2498,40 @@ export default function Canvas() {
             doc.setFontSize(bodyFsPt);
             doc.setTextColor(bR, bG, bB);
             bodyLines.forEach((line: string) => {
-              doc.text(line, nx + nw / 2, curY, { baseline: "top", align: "center" });
+              doc.text(line, nx + nw / 2, curY, {
+                baseline: "top",
+                align: "center",
+              });
               curY += bodyLineH;
             });
           }
-
         } else if (n.type === "circle" || n.type === "oval") {
           const padH = 16 * exportScale;
           const maxW = Math.max(10, nw - 2 * padH);
           doc.setFont("helvetica", fStyle);
           doc.setFontSize(titleFsPt);
-          const titleLines: string[] = title ? doc.splitTextToSize(title, maxW) : [];
+          const titleLines: string[] = title
+            ? doc.splitTextToSize(title, maxW)
+            : [];
           doc.setFontSize(bodyFsPt);
-          const bodyLines: string[] = body ? doc.splitTextToSize(body, maxW) : [];
+          const bodyLines: string[] = body
+            ? doc.splitTextToSize(body, maxW)
+            : [];
           const totalH =
             titleLines.length * titleLineH +
-            (bodyLines.length > 0 ? 5 * exportScale + bodyLines.length * bodyLineH : 0);
+            (bodyLines.length > 0
+              ? 5 * exportScale + bodyLines.length * bodyLineH
+              : 0);
           let curY = ny + (nh - totalH) / 2;
           if (titleLines.length > 0) {
             doc.setFont("helvetica", fStyle);
             doc.setFontSize(titleFsPt);
             doc.setTextColor(tcR, tcG, tcB);
             titleLines.forEach((line: string) => {
-              doc.text(line, nx + nw / 2, curY, { baseline: "top", align: "center" });
+              doc.text(line, nx + nw / 2, curY, {
+                baseline: "top",
+                align: "center",
+              });
               curY += titleLineH;
             });
           }
@@ -2456,11 +2541,13 @@ export default function Canvas() {
             doc.setFontSize(bodyFsPt);
             doc.setTextColor(bR, bG, bB);
             bodyLines.forEach((line: string) => {
-              doc.text(line, nx + nw / 2, curY, { baseline: "top", align: "center" });
+              doc.text(line, nx + nw / 2, curY, {
+                baseline: "top",
+                align: "center",
+              });
               curY += bodyLineH;
             });
           }
-
         } else {
           // block, rounded — top-left aligned
           const padH = 18 * exportScale;
@@ -2468,9 +2555,13 @@ export default function Canvas() {
           const maxW = Math.max(10, nw - 2 * padH);
           doc.setFont("helvetica", fStyle);
           doc.setFontSize(titleFsPt);
-          const titleLines: string[] = title ? doc.splitTextToSize(title, maxW) : [];
+          const titleLines: string[] = title
+            ? doc.splitTextToSize(title, maxW)
+            : [];
           doc.setFontSize(bodyFsPt);
-          const bodyLines: string[] = body ? doc.splitTextToSize(body, maxW) : [];
+          const bodyLines: string[] = body
+            ? doc.splitTextToSize(body, maxW)
+            : [];
           let curY = ny + padTop;
           if (titleLines.length > 0) {
             doc.setFont("helvetica", fStyle);
@@ -2497,7 +2588,8 @@ export default function Canvas() {
       }
     }
 
-    const safeName = boardName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "board";
+    const safeName =
+      boardName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "board";
     doc.save(`${safeName}-vector.pdf`);
   }, [nodes, connections, boardName]);
 
@@ -3740,9 +3832,10 @@ export default function Canvas() {
             fontFamily: "inherit",
             cursor: nodes.length === 0 ? "default" : "pointer",
             background: "transparent",
-            color: nodes.length === 0
-              ? "rgba(255,255,255,0.4)"
-              : "rgba(255,255,255,0.85)",
+            color:
+              nodes.length === 0
+                ? "rgba(255,255,255,0.4)"
+                : "rgba(255,255,255,0.85)",
             transition: "color 0.15s",
             display: "flex",
             alignItems: "center",
@@ -3755,7 +3848,8 @@ export default function Canvas() {
           }}
           onMouseLeave={(e) => {
             if (nodes.length > 0)
-              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
+              (e.currentTarget as HTMLElement).style.color =
+                "rgba(255,255,255,0.85)";
           }}
         >
           <svg
@@ -4979,7 +5073,7 @@ export default function Canvas() {
       >
         <button
           onClick={() =>
-            setZoom((z) => Math.max(0.2, parseFloat((z - 0.1).toFixed(2))))
+            setZoom((z) => Math.max(MIN_ZOOM, parseFloat((z - 0.1).toFixed(2))))
           }
           style={{
             border: "none",
@@ -5004,7 +5098,7 @@ export default function Canvas() {
         </span>
         <button
           onClick={() =>
-            setZoom((z) => Math.min(3, parseFloat((z + 0.1).toFixed(2))))
+            setZoom((z) => Math.min(MAX_ZOOM, parseFloat((z + 0.1).toFixed(2))))
           }
           style={{
             border: "none",
