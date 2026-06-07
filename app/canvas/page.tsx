@@ -2007,9 +2007,8 @@ export default function Canvas() {
       n.id === id ? { ...n, fontSize: size } : n,
     );
     nodesRef.current = newNodes;
-    pushHistory();
     setNodes(newNodes);
-  }, [pushHistory]);
+  }, []);
 
   const updateNodeFormat = useCallback(
     (id: number, field: "bold" | "italic" | "underline", value: boolean) => {
@@ -4557,6 +4556,7 @@ export default function Canvas() {
                     value={n.fontSize ?? 13}
                     onMouseDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateFontSize(n.id, +e.target.value)}
+                    onPointerUp={() => pushHistory()}
                     style={{ flex: 1, cursor: "pointer", minWidth: 0 }}
                   />
                   <span
