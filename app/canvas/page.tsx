@@ -849,18 +849,6 @@ export default function Canvas() {
     };
   }, []);
 
-  // Temporary console hooks for manual undo/redo testing
-  useEffect(() => {
-    (window as unknown as Record<string, unknown>).__pushHistory = pushHistory;
-    (window as unknown as Record<string, unknown>).__testUndo = undo;
-    (window as unknown as Record<string, unknown>).__testRedo = redo;
-    return () => {
-      delete (window as unknown as Record<string, unknown>).__pushHistory;
-      delete (window as unknown as Record<string, unknown>).__testUndo;
-      delete (window as unknown as Record<string, unknown>).__testRedo;
-    };
-  }, [pushHistory, undo, redo]);
-
   const addNode = useCallback((cx: number, cy: number, type: NodeType) => {
     const isText = type === "text";
     const isCircle = type === "circle";
@@ -2136,6 +2124,20 @@ export default function Canvas() {
         saveBoardRef.current();
         return;
       }
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.key === "z" &&
+        !t.isContentEditable &&
+        t.tagName !== "INPUT"
+      ) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === "c" && !t.isContentEditable)
         copySelected();
       if ((e.metaKey || e.ctrlKey) && e.key === "v" && !t.isContentEditable)
@@ -2246,6 +2248,8 @@ export default function Canvas() {
     pasteNode,
     focusNode,
     centerNodeForPresentation,
+    undo,
+    redo,
   ]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
