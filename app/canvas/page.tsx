@@ -1282,13 +1282,13 @@ export default function Canvas() {
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
         const delta = -e.deltaY * 0.005;
-        setZoom((prev) => {
-          const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta * prev));
-          setPan((p) => ({
-            x: mx - (mx - p.x) * (next / prev),
-            y: my - (my - p.y) * (next / prev),
-          }));
-          return next;
+        const prev = zoomRef.current;
+        const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta * prev));
+        const p = panRef.current;
+        setZoom(next);
+        setPan({
+          x: mx - (mx - p.x) * (next / prev),
+          y: my - (my - p.y) * (next / prev),
         });
       } else {
         setPan((prev) => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
