@@ -16,6 +16,7 @@ import {
   LS_CONNECTIONS,
   LS_BOARD_NAME,
   LS_PRESENTATION_ORDER,
+  LS_CAMERA,
   DEFAULT_NODES,
   DEFAULT_CONNECTIONS,
 } from "./lib/canvas-types";
@@ -657,6 +658,7 @@ export default function Canvas() {
     null,
   );
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cameraTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks which node IDs currently have an entry in IndexedDB so we can
   // delete stale records when a node is removed or loses its asset fields.
   const prevAssetNodeIdsRef = useRef(new Set<number>());
@@ -686,6 +688,8 @@ export default function Canvas() {
           version: 1,
           exportedAt: new Date().toISOString(),
           boardName,
+          pan,
+          zoom,
           nodes,
           connections,
           presentationOrder,
@@ -708,7 +712,7 @@ export default function Canvas() {
     } catch {
       setToast({ msg: "Save failed", variant: "error" });
     }
-  }, [nodes, connections, boardName, presentationOrder]);
+  }, [nodes, connections, boardName, presentationOrder, pan, zoom]);
 
   saveBoardRef.current = saveBoard;
 
@@ -828,6 +832,20 @@ export default function Canvas() {
             setPresentationOrder(
               [...loadedNodes].sort((a, b) => a.id - b.id).map((n) => n.id),
             );
+          }
+          if (
+            data.pan &&
+            typeof data.pan.x === "number" &&
+            typeof data.pan.y === "number"
+          ) {
+            setPan(data.pan as { x: number; y: number });
+          } else {
+            setPan({ x: 0, y: 0 });
+          }
+          if (typeof data.zoom === "number" && isFinite(data.zoom)) {
+            setZoom(data.zoom as number);
+          } else {
+            setZoom(1);
           }
           setToast({ msg: "Board loaded", variant: "success" });
         } catch {
@@ -1193,6 +1211,20 @@ export default function Canvas() {
       } catch {
         // JSON parse error — keep DEFAULT_NODES
       } finally {
+        const rawCamera = localStorage.getItem(LS_CAMERA);
+        if (rawCamera) {
+          try {
+            const cam = JSON.parse(rawCamera) as { pan?: { x: number; y: number }; zoom?: number };
+            if (cam.pan && typeof cam.pan.x === "number" && typeof cam.pan.y === "number") {
+              setPan(cam.pan);
+            }
+            if (typeof cam.zoom === "number" && isFinite(cam.zoom)) {
+              setZoom(cam.zoom);
+            }
+          } catch {
+            // malformed — use defaults
+          }
+        }
         setHydrated(true);
       }
     })();
@@ -1249,6 +1281,21 @@ export default function Canvas() {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, [nodes, connections, boardName, presentationOrder, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (cameraTimerRef.current) clearTimeout(cameraTimerRef.current);
+    cameraTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(LS_CAMERA, JSON.stringify({ pan, zoom }));
+      } catch {
+        // quota exceeded — non-critical
+      }
+    }, 500);
+    return () => {
+      if (cameraTimerRef.current) clearTimeout(cameraTimerRef.current);
+    };
+  }, [pan, zoom, hydrated]);
 
   // Push initial history snapshot once after the board has hydrated
   useEffect(() => {

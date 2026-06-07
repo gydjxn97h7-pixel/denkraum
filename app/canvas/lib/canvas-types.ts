@@ -80,6 +80,7 @@ export const LS_NODES = "denkraum_nodes";
 export const LS_CONNECTIONS = "denkraum_connections";
 export const LS_BOARD_NAME = "denkraum_board_name";
 export const LS_PRESENTATION_ORDER = "denkraum_presentation_order";
+export const LS_CAMERA = "denkraum_camera";
 
 export const DEFAULT_NODES: CanvasNode[] = [
   {
