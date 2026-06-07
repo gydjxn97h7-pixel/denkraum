@@ -605,6 +605,7 @@ export default function Canvas() {
   const idCounterRef = useRef(3);
   const copiedNodeRef = useRef<CanvasNode | null>(null);
   const connectionsRef = useRef(connections);
+  const nodesRef = useRef(nodes); // mirrors nodes state; kept current in the sync block below
 
   // ── rAF-based interaction refs ────────────────────────────────────────────────
   // Mirror latest state into refs so mouse handlers never capture stale closures
@@ -625,6 +626,7 @@ export default function Canvas() {
   selectedIdsRef.current = selectedIds;
   copiedNodeRef.current = copiedNode;
   connectionsRef.current = connections;
+  nodesRef.current = nodes;
   presentationOrderRef.current = presentationOrder;
   presentationIndexRef.current = presentationIndex;
   isPresentingRef.current = isPresenting;
@@ -658,6 +660,16 @@ export default function Canvas() {
   // Tracks which node IDs currently have an entry in IndexedDB so we can
   // delete stale records when a node is removed or loses its asset fields.
   const prevAssetNodeIdsRef = useRef(new Set<number>());
+
+  // ── Undo / Redo history ───────────────────────────────────────────────────────
+  type HistorySnapshot = {
+    nodes: CanvasNode[];
+    connections: Connection[];
+    presentationOrder: number[];
+  };
+  const HISTORY_LIMIT = 40;
+  const historyRef = useRef<HistorySnapshot[]>([]);
+  const historyIndexRef = useRef<number>(-1);
 
   const saveBoard = useCallback(() => {
     try {
@@ -698,6 +710,41 @@ export default function Canvas() {
   }, [nodes, connections, boardName, presentationOrder]);
 
   saveBoardRef.current = saveBoard;
+
+  const pushHistory = useCallback(() => {
+    const snapshot: HistorySnapshot = {
+      nodes: nodesRef.current.map((n) => ({ ...n })),
+      connections: connectionsRef.current.map((c) => ({ ...c })),
+      presentationOrder: [...presentationOrderRef.current],
+    };
+    const newHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+    newHistory.push(snapshot);
+    if (newHistory.length > HISTORY_LIMIT) newHistory.shift();
+    historyRef.current = newHistory;
+    historyIndexRef.current = newHistory.length - 1;
+  }, []);
+
+  const undo = useCallback(() => {
+    const idx = historyIndexRef.current;
+    if (idx <= 0) return;
+    const target = historyIndexRef.current - 1;
+    historyIndexRef.current = target;
+    const snap = historyRef.current[target];
+    setNodes(snap.nodes.map((n) => ({ ...n })));
+    setConnections(snap.connections.map((c) => ({ ...c })));
+    setPresentationOrder([...snap.presentationOrder]);
+  }, []);
+
+  const redo = useCallback(() => {
+    const idx = historyIndexRef.current;
+    if (idx >= historyRef.current.length - 1) return;
+    const target = historyIndexRef.current + 1;
+    historyIndexRef.current = target;
+    const snap = historyRef.current[target];
+    setNodes(snap.nodes.map((n) => ({ ...n })));
+    setConnections(snap.connections.map((c) => ({ ...c })));
+    setPresentationOrder([...snap.presentationOrder]);
+  }, []);
 
   const onDenkraumFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -801,6 +848,18 @@ export default function Canvas() {
         cancelAnimationFrame(layoutRafRef.current);
     };
   }, []);
+
+  // Temporary console hooks for manual undo/redo testing
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__pushHistory = pushHistory;
+    (window as unknown as Record<string, unknown>).__testUndo = undo;
+    (window as unknown as Record<string, unknown>).__testRedo = redo;
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__pushHistory;
+      delete (window as unknown as Record<string, unknown>).__testUndo;
+      delete (window as unknown as Record<string, unknown>).__testRedo;
+    };
+  }, [pushHistory, undo, redo]);
 
   const addNode = useCallback((cx: number, cy: number, type: NodeType) => {
     const isText = type === "text";
