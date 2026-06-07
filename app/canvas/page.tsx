@@ -3668,12 +3668,20 @@ export default function Canvas() {
             {(
               [
                 { kbd: "⌫  Delete", desc: "Delete selected" },
+                { kbd: "⌘ C", desc: "Copy node" },
+                { kbd: "⌘ V", desc: "Paste node" },
+                { kbd: "⌘ S", desc: "Save board" },
                 { kbd: "Tab", desc: "Add child node" },
                 { kbd: "Enter", desc: "Add sibling node" },
-                { kbd: "Esc", desc: "Cancel connect" },
+                { kbd: "Double-click", desc: "Edit node text" },
+                { kbd: "F", desc: "Toggle filter" },
+                { kbd: "↓ / ↑", desc: "Cycle filter results" },
+                { kbd: "Esc", desc: "Cancel / close" },
                 { kbd: "⌃ Scroll", desc: "Zoom in / out" },
                 { kbd: "Right-click", desc: "Insert shape" },
                 { kbd: "Click dot →", desc: "Connect nodes" },
+                { kbd: "→ / Space", desc: "Next slide" },
+                { kbd: "←", desc: "Prev slide" },
               ] as { kbd: string; desc: string }[]
             ).map(({ kbd, desc }) => (
               <div
