@@ -2,6 +2,25 @@
   --accent: #F1B24A;
 }
 
+.mobile-fallback {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .mobile-fallback {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    inset: 0;
+    background: #0C2018;
+    z-index: 9999;
+    padding: 32px;
+    box-sizing: border-box;
+  }
+}
+
 input[type="range"].fmt-slider {
   -webkit-appearance: none;
   appearance: none;

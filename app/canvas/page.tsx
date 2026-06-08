@@ -5503,6 +5503,17 @@ export default function Canvas() {
           {toast.msg}
         </div>
       )}
+
+      {/* ── Mobile fallback ── */}
+      <div className="mobile-fallback">
+        <svg width="48" height="24" viewBox="0 0 48 24" fill="none" aria-hidden="true">
+          <text x="0" y="20" fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" fontSize="20" fontWeight="700" letterSpacing="0.12em" fill="#F1B24A">DNKRM</text>
+        </svg>
+        <div style={{ width: 32, height: 2, background: "#F1B24A", borderRadius: 1, margin: "20px 0 24px" }} />
+        <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 16, lineHeight: 1.6, textAlign: "center", maxWidth: 280, margin: 0 }}>
+          DNKRM is built for desktop.<br />Open it on your computer for the full experience.
+        </p>
+      </div>
     </div>
   );
 }
