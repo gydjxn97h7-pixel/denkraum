@@ -1,45 +1,9 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { ACCENT } from "../lib/canvas-types";
-import type { CanvasNode, ConnectDrag } from "../lib/canvas-types";
+import type { CanvasNode, ConnectDrag, RichText } from "../lib/canvas-types";
 import { parseColor } from "../lib/color-helpers";
-
-// Serializes a contenteditable's DOM back to plain text with exactly one "\n"
-// per visual line. Chrome wraps each Enter-created line in a <div> (an empty
-// line becomes <div><br></div>); reading that back via innerText under
-// white-space: pre-wrap counts both the block boundary and the <br>, so every
-// edit round trip would gain blank lines.
-function editablePlainText(root: HTMLElement): string {
-  const blockLines = (el: Node): string[] => {
-    const out: string[] = [];
-    let cur = "";
-    for (const child of Array.from(el.childNodes)) {
-      if (child.nodeType === Node.ELEMENT_NODE) {
-        const tag = (child as HTMLElement).tagName;
-        if (tag === "BR") {
-          out.push(cur);
-          cur = "";
-          continue;
-        }
-        if (tag === "DIV" || tag === "P") {
-          if (cur !== "") {
-            out.push(cur);
-            cur = "";
-          }
-          out.push(...blockLines(child));
-          continue;
-        }
-      }
-      cur += child.textContent ?? "";
-    }
-    // Close the final line. When it is empty and lines were already emitted,
-    // the trailing <br> was just the browser's placeholder for the line that
-    // produced it — not an extra break.
-    if (cur !== "" || out.length === 0) out.push(cur);
-    return out;
-  };
-  return blockLines(root).join("\n");
-}
+import { setEditableContent, editableRichText } from "../lib/rich-text";
 
 interface NodeViewProps {
   n: CanvasNode;
@@ -55,7 +19,7 @@ interface NodeViewProps {
     v: { nodeId: number; fileName: string; content: string } | null,
   ) => void;
   setHoveredId: React.Dispatch<React.SetStateAction<number | null>>;
-  updateNodeField: (id: number, field: "title" | "body", value: string) => void;
+  commitNodeText: (id: number, field: "title" | "body", rich: RichText) => void;
   startNodeDrag: (e: React.MouseEvent, id: number) => void;
   onDotClick: (e: React.MouseEvent, id: number) => void;
   onResizeMouseDown: (e: React.MouseEvent, id: number) => void;
@@ -76,7 +40,7 @@ export const NodeView = React.memo(function NodeView({
   onNodeClick,
   setTextFileViewer,
   setHoveredId,
-  updateNodeField,
+  commitNodeText,
   startNodeDrag,
   onDotClick,
   onResizeMouseDown,
@@ -293,7 +257,7 @@ export const NodeView = React.memo(function NodeView({
             <div
               ref={(el) => {
                 if (el && editingNodeIdRef.current !== n.id)
-                  el.textContent = n.title;
+                  setEditableContent(el, n.titleRich, n.title);
               }}
               contentEditable={isEditing}
               suppressContentEditableWarning
@@ -304,10 +268,10 @@ export const NodeView = React.memo(function NodeView({
                 editingNodeIdRef.current = n.id;
               }}
               onBlur={(e) => {
-                updateNodeField(
+                commitNodeText(
                   n.id,
                   "title",
-                  editablePlainText(e.target as HTMLElement),
+                  editableRichText(e.target as HTMLElement),
                 );
                 editingNodeIdRef.current = null;
                 setIsEditing(false);
@@ -334,7 +298,7 @@ export const NodeView = React.memo(function NodeView({
               <div
                 ref={(el) => {
                   if (el && editingNodeIdRef.current !== n.id)
-                    el.textContent = n.body;
+                    setEditableContent(el, n.bodyRich, n.body);
                 }}
                 contentEditable={isEditing}
                 suppressContentEditableWarning
@@ -344,10 +308,10 @@ export const NodeView = React.memo(function NodeView({
                   editingNodeIdRef.current = n.id;
                 }}
                 onBlur={(e) => {
-                  updateNodeField(
+                  commitNodeText(
                     n.id,
                     "body",
-                    editablePlainText(e.target as HTMLElement),
+                    editableRichText(e.target as HTMLElement),
                   );
                   editingNodeIdRef.current = null;
                   setIsEditing(false);
@@ -485,7 +449,7 @@ export const NodeView = React.memo(function NodeView({
           <div
             ref={(el) => {
               if (el && editingNodeIdRef.current !== n.id)
-                el.textContent = n.title;
+                setEditableContent(el, n.titleRich, n.title);
             }}
             contentEditable={isEditing}
             suppressContentEditableWarning
@@ -504,10 +468,10 @@ export const NodeView = React.memo(function NodeView({
               editingNodeIdRef.current = n.id;
             }}
             onBlur={(e) => {
-              updateNodeField(
+              commitNodeText(
                 n.id,
                 "title",
-                editablePlainText(e.target as HTMLElement),
+                editableRichText(e.target as HTMLElement),
               );
               editingNodeIdRef.current = null;
               setIsEditing(false);
@@ -535,7 +499,7 @@ export const NodeView = React.memo(function NodeView({
           <div
             ref={(el) => {
               if (el && editingNodeIdRef.current !== n.id)
-                el.textContent = n.body;
+                setEditableContent(el, n.bodyRich, n.body);
             }}
             contentEditable={isEditing}
             suppressContentEditableWarning
@@ -545,10 +509,10 @@ export const NodeView = React.memo(function NodeView({
               editingNodeIdRef.current = n.id;
             }}
             onBlur={(e) => {
-              updateNodeField(
+              commitNodeText(
                 n.id,
                 "body",
-                editablePlainText(e.target as HTMLElement),
+                editableRichText(e.target as HTMLElement),
               );
               editingNodeIdRef.current = null;
               setIsEditing(false);
@@ -587,7 +551,7 @@ export const NodeView = React.memo(function NodeView({
         <div
           ref={(el) => {
             if (el && editingNodeIdRef.current !== n.id)
-              el.textContent = n.title;
+              setEditableContent(el, n.titleRich, n.title);
           }}
           contentEditable
           suppressContentEditableWarning
@@ -597,10 +561,10 @@ export const NodeView = React.memo(function NodeView({
             editingNodeIdRef.current = n.id;
           }}
           onBlur={(e) => {
-            updateNodeField(
+            commitNodeText(
               n.id,
               "title",
-              editablePlainText(e.target as HTMLElement),
+              editableRichText(e.target as HTMLElement),
             );
             editingNodeIdRef.current = null;
           }}

@@ -10,7 +10,9 @@ import type {
   ContextMenu,
   ColorPicker,
   PanelSection,
+  RichText,
 } from "./lib/canvas-types";
+import { richToPlain, richHasMarks } from "./lib/rich-text";
 import {
   bringToFront,
   bringForward,
@@ -915,14 +917,27 @@ export default function Canvas() {
     setPresentationOrder(next);
   }, [pushHistory]);
 
-  const updateNodeField = useCallback(
-    (id: number, field: "title" | "body", value: string) => {
-      const old = nodesRef.current.find((n) => n.id === id)?.[field] ?? "";
-      const newNodes = nodesRef.current.map((n) =>
-        n.id === id ? { ...n, [field]: value } : n,
-      );
+  // Commits an edited field: runs are the source of truth, the plain string
+  // mirror is derived, and rich storage is dropped when no marks remain.
+  const commitNodeText = useCallback(
+    (id: number, field: "title" | "body", rich: RichText) => {
+      const plain = richToPlain(rich);
+      const richKey = field === "title" ? "titleRich" : "bodyRich";
+      const keepRich = richHasMarks(rich) ? rich : undefined;
+      const oldNode = nodesRef.current.find((n) => n.id === id);
+      const oldPlain = oldNode?.[field] ?? "";
+      const changed =
+        plain !== oldPlain ||
+        JSON.stringify(keepRich) !== JSON.stringify(oldNode?.[richKey]);
+      const newNodes = nodesRef.current.map((n) => {
+        if (n.id !== id) return n;
+        const next = { ...n, [field]: plain };
+        if (keepRich) next[richKey] = keepRich;
+        else delete next[richKey];
+        return next;
+      });
       nodesRef.current = newNodes;
-      if (value !== old) pushHistory();
+      if (changed) pushHistory();
       setNodes(newNodes);
     },
     [pushHistory],
@@ -1310,7 +1325,7 @@ export default function Canvas() {
               onNodeClick={onNodeClick}
               setTextFileViewer={setTextFileViewer}
               setHoveredId={setHoveredId}
-              updateNodeField={updateNodeField}
+              commitNodeText={commitNodeText}
               startNodeDrag={startNodeDrag}
               onDotClick={onDotClick}
               onResizeMouseDown={onResizeMouseDown}
