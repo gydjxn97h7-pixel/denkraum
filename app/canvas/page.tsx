@@ -42,6 +42,7 @@ import { CanvasContextMenu } from "./components/CanvasContextMenu";
 import { ZoomControls } from "./components/ZoomControls";
 import { PresentationOverlays } from "./components/PresentationOverlays";
 import { Toast } from "./components/Toast";
+import { FormatBar } from "./components/FormatBar";
 
 // ── Main Canvas ───────────────────────────────────────────────────────────────
 export default function Canvas() {
@@ -1482,6 +1483,9 @@ export default function Canvas() {
       />
 
       <Toast toast={toast} />
+
+      {/* ── Inline formatting bar (shows above text selections in nodes) ── */}
+      <FormatBar />
 
       {/* ── Mobile fallback ── */}
       <div className="mobile-fallback">

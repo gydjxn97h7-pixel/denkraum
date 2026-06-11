@@ -175,6 +175,35 @@ export function editableRichText(root: HTMLElement): RichText {
   return blockLines(root, { b: false, i: false, u: false }).map(normalizeLine);
 }
 
+export const FONT_SIZE_LADDER = [9, 11, 13, 15, 18, 24, 32, 48];
+
+// Wraps the current selection in a font-size span. execCommand("fontSize")
+// only supports the legacy 1–7 scale, so this is done with range surgery:
+// extractContents auto-splits partially-selected nodes; nested size spans in
+// the extracted fragment are cleared so the new size wins; the blur-time
+// parser re-normalizes whatever nesting this produces.
+export function applyFontSizeToSelection(px: number): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+  const clamped = Math.min(
+    MAX_RUN_FONT_SIZE,
+    Math.max(MIN_RUN_FONT_SIZE, Math.round(px)),
+  );
+  const range = sel.getRangeAt(0);
+  const frag = range.extractContents();
+  frag.querySelectorAll("span").forEach((s) => {
+    if (s.style.fontSize) s.style.fontSize = "";
+  });
+  const span = document.createElement("span");
+  span.style.fontSize = `${clamped}px`;
+  span.appendChild(frag);
+  range.insertNode(span);
+  const r = document.createRange();
+  r.selectNodeContents(span);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
 // Structural validation for untrusted payloads (localStorage, .dnkrm files) —
 // same philosophy as sanitizeLoadedNode: accept only known fields with the
 // right types, clamp numbers, reject anything malformed.
