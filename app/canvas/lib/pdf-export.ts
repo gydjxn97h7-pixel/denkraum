@@ -1,4 +1,5 @@
-import type { CanvasNode, Connection } from "./canvas-types";
+import type { CanvasNode, Connection, RichText } from "./canvas-types";
+import { plainToRich } from "./rich-text";
 
 // Canvas background in RGB — used to composite rgba node colors into solid values.
 const PDF_BG_RGB: [number, number, number] = [12, 32, 24]; // #0C2018
@@ -209,12 +210,196 @@ export async function exportBoardPdf(
   }
 
   // ── 3. Text labels (drawn last so they sit above shapes) ─────────────────
-  // Padding values mirror NodeView's CSS exactly.
+  // Run-aware layout. Each field is a list of lines of styled runs (plain
+  // fields become one unstyled run per line via plainToRich). Tokens are
+  // measured with their own font/size, wrapped greedily, and each laid line
+  // takes its height from its largest run. Inline marks are additive on top
+  // of the node's base bold/italic/underline.
+  // Padding and line-height factors mirror NodeView's CSS exactly.
   // Font sizes: CSS px × 0.75 = pt (jsPDF always takes pt for setFontSize).
-  // Line heights: 1.2× for title (no explicit lineHeight on screen),
-  //               1.55× for body (matches on-screen lineHeight: 1.55).
-  // Wrapping: splitTextToSize uses the current font size for char-width
-  //           measurement, so setFontSize must be called before it.
+
+  type LaidSeg = {
+    t: string;
+    w: number;
+    bold: boolean;
+    italic: boolean;
+    underline: boolean;
+    fsPx: number;
+  };
+  type LaidLine = { segs: LaidSeg[]; width: number; height: number; ascent: number };
+
+  const fontStyleFor = (bold: boolean, italic: boolean): string =>
+    bold && italic ? "bolditalic" : bold ? "bold" : italic ? "italic" : "normal";
+
+  const setSegFont = (bold: boolean, italic: boolean, fsPx: number) => {
+    doc.setFont("helvetica", fontStyleFor(bold, italic));
+    doc.setFontSize(fsPx * exportScale * 0.75);
+  };
+
+  const layoutField = (
+    rich: RichText,
+    maxW: number,
+    baseFsPx: number,
+    lineHFactor: number,
+    base: { bold: boolean; italic: boolean; underline: boolean },
+  ): LaidLine[] => {
+    type Tok = LaidSeg & { ws: boolean };
+    const measure = (
+      t: string,
+      bold: boolean,
+      italic: boolean,
+      fsPx: number,
+    ): number => {
+      setSegFont(bold, italic, fsPx);
+      return doc.getTextWidth(t);
+    };
+    const laid: LaidLine[] = [];
+    for (const srcLine of rich) {
+      const toks: Tok[] = [];
+      for (const run of srcLine) {
+        const bold = !!run.b || base.bold;
+        const italic = !!run.i || base.italic;
+        const underline = !!run.u || base.underline;
+        const fsPx = run.fs ?? baseFsPx;
+        for (const piece of run.t.split(/(\s+)/)) {
+          if (piece === "") continue;
+          toks.push({
+            t: piece,
+            bold,
+            italic,
+            underline,
+            fsPx,
+            w: measure(piece, bold, italic, fsPx),
+            ws: /^\s+$/.test(piece),
+          });
+        }
+      }
+      if (toks.length === 0) {
+        // Intentional empty line — keeps base line height.
+        laid.push({
+          segs: [],
+          width: 0,
+          height: lineHFactor * baseFsPx * exportScale,
+          ascent: 0.8 * baseFsPx * exportScale,
+        });
+        continue;
+      }
+
+      let cur: Tok[] = [];
+      let wrapped = false;
+      const curW = () => cur.reduce((sum, t) => sum + t.w, 0);
+      const flush = () => {
+        // Wrapped continuation lines shouldn't start with the break's space;
+        // trailing whitespace never renders (splitTextToSize trimmed it too).
+        if (wrapped) while (cur.length && cur[0].ws) cur.shift();
+        while (cur.length && cur[cur.length - 1].ws) cur.pop();
+        const segs: LaidSeg[] = [];
+        for (const t of cur) {
+          const prev = segs[segs.length - 1];
+          if (
+            prev &&
+            prev.bold === t.bold &&
+            prev.italic === t.italic &&
+            prev.underline === t.underline &&
+            prev.fsPx === t.fsPx
+          ) {
+            prev.t += t.t;
+            prev.w += t.w;
+          } else {
+            segs.push({
+              t: t.t,
+              w: t.w,
+              bold: t.bold,
+              italic: t.italic,
+              underline: t.underline,
+              fsPx: t.fsPx,
+            });
+          }
+        }
+        const maxFs = segs.reduce((m, sg) => Math.max(m, sg.fsPx), baseFsPx);
+        laid.push({
+          segs,
+          width: segs.reduce((sum, sg) => sum + sg.w, 0),
+          height: lineHFactor * maxFs * exportScale,
+          ascent: 0.8 * maxFs * exportScale,
+        });
+        cur = [];
+        wrapped = true;
+      };
+
+      for (const tok of toks) {
+        if (cur.length > 0 && !tok.ws && curW() + tok.w > maxW) flush();
+        if (!tok.ws && tok.w > maxW) {
+          // Hard-split a token wider than the field (long words / URLs).
+          let rest = tok.t;
+          while (rest.length > 1) {
+            let lo = 1,
+              hi = rest.length,
+              fit = 1;
+            while (lo <= hi) {
+              const mid = (lo + hi) >> 1;
+              if (
+                measure(rest.slice(0, mid), tok.bold, tok.italic, tok.fsPx) <=
+                maxW
+              ) {
+                fit = mid;
+                lo = mid + 1;
+              } else hi = mid - 1;
+            }
+            if (fit >= rest.length) break;
+            const head = rest.slice(0, fit);
+            cur.push({
+              ...tok,
+              t: head,
+              w: measure(head, tok.bold, tok.italic, tok.fsPx),
+            });
+            flush();
+            rest = rest.slice(fit);
+          }
+          cur.push({
+            ...tok,
+            t: rest,
+            w: measure(rest, tok.bold, tok.italic, tok.fsPx),
+          });
+          continue;
+        }
+        cur.push(tok);
+      }
+      flush();
+    }
+    return laid;
+  };
+
+  const fieldHeight = (laid: LaidLine[]): number =>
+    laid.reduce((sum, l) => sum + l.height, 0);
+
+  const drawField = (
+    laid: LaidLine[],
+    xLeft: number,
+    centerX: number | null,
+    yTop: number,
+    color: [number, number, number],
+  ) => {
+    let y = yTop;
+    for (const line of laid) {
+      let x = centerX !== null ? centerX - line.width / 2 : xLeft;
+      const yBase = y + line.ascent;
+      for (const seg of line.segs) {
+        setSegFont(seg.bold, seg.italic, seg.fsPx);
+        doc.setTextColor(color[0], color[1], color[2]);
+        doc.text(seg.t, x, yBase);
+        if (seg.underline) {
+          doc.setDrawColor(color[0], color[1], color[2]);
+          doc.setLineWidth(Math.max(0.4, seg.fsPx * exportScale * 0.05));
+          const uy = yBase + seg.fsPx * exportScale * 0.1;
+          doc.line(x, uy, x + seg.w, uy);
+        }
+        x += seg.w;
+      }
+      y += line.height;
+    }
+  };
+
   for (const n of nodes) {
     if (n.type === "image") continue;
     try {
@@ -230,20 +415,12 @@ export async function exportBoardPdf(
       const bgB = n.type === "text" ? PDF_BG_RGB[2] : fb;
 
       const fs = n.fontSize ?? 13;
-      const sTitleFs = fs * exportScale; // title font size, px
-      const sBodyFs = Math.max(11, fs - 2) * exportScale; // body font size, px
-      const titleFsPt = sTitleFs * 0.75;
-      const bodyFsPt = sBodyFs * 0.75;
-      const titleLineH = sTitleFs * 1.2;
-      const bodyLineH = sBodyFs * 1.55;
-      const fStyle: string =
-        n.bold && n.italic
-          ? "bolditalic"
-          : n.bold
-            ? "bold"
-            : n.italic
-              ? "italic"
-              : "normal";
+      const bodyFsPx = Math.max(11, fs - 2);
+      const base = {
+        bold: !!n.bold,
+        italic: !!n.italic,
+        underline: !!n.underline,
+      };
 
       // Title color
       const [tcR, tcG, tcB] = parseColorForPdf(
@@ -268,23 +445,18 @@ export async function exportBoardPdf(
 
       const title = (n.title ?? "").trim();
       const body = (n.body ?? "").trim();
+      const titleSrc: RichText | null =
+        n.titleRich ?? (title ? plainToRich(title) : null);
+      const bodySrc: RichText | null =
+        n.bodyRich ?? (body ? plainToRich(body) : null);
 
       if (n.type === "text") {
-        if (!title) continue;
+        if (!titleSrc) continue;
         const [cr, cg, cb] = parseColorForPdf(n.textColor ?? "#FFFFFF");
-        doc.setFont("helvetica", fStyle);
-        doc.setFontSize(titleFsPt);
-        doc.setTextColor(cr, cg, cb);
         const maxW = Math.max(10, nw - 24 * exportScale);
-        const lines: string[] = doc.splitTextToSize(title, maxW);
-        const totalH = lines.length * titleLineH;
-        const startY = ny + nh / 2 - totalH / 2;
-        lines.forEach((line: string, i: number) =>
-          doc.text(line, nx + nw / 2, startY + i * titleLineH, {
-            baseline: "top",
-            align: "center",
-          }),
-        );
+        const laid = layoutField(titleSrc, maxW, fs, 1.2, base);
+        const startY = ny + nh / 2 - fieldHeight(laid) / 2;
+        drawField(laid, 0, nx + nw / 2, startY, [cr, cg, cb]);
       } else if (n.type === "textfile") {
         const label = (n.textFileName ?? n.title ?? "").trim();
         if (!label) continue;
@@ -293,6 +465,8 @@ export async function exportBoardPdf(
         const lfG = Math.round(0.82 * 255 + 0.18 * fg);
         const lfB = Math.round(0.82 * 255 + 0.18 * fb);
         const padH = 12 * exportScale;
+        const titleFsPt = fs * exportScale * 0.75;
+        const titleLineH = fs * exportScale * 1.2;
         doc.setFont("helvetica", "normal");
         doc.setFontSize(titleFsPt);
         doc.setTextColor(lfR, lfG, lfB);
@@ -300,119 +474,43 @@ export async function exportBoardPdf(
         const lines: string[] = doc.splitTextToSize(label, maxW);
         const startY = ny + nh / 2 - titleLineH / 2;
         doc.text(lines[0], nx + padH, startY, { baseline: "top" });
-      } else if (n.type === "diamond") {
-        const padH = 28 * exportScale;
-        const maxW = Math.max(10, nw - 2 * padH);
-        doc.setFont("helvetica", fStyle);
-        doc.setFontSize(titleFsPt);
-        const titleLines: string[] = title
-          ? doc.splitTextToSize(title, maxW)
-          : [];
-        doc.setFontSize(bodyFsPt);
-        const bodyLines: string[] = body ? doc.splitTextToSize(body, maxW) : [];
-        const totalH =
-          titleLines.length * titleLineH +
-          (bodyLines.length > 0
-            ? 3 * exportScale + bodyLines.length * bodyLineH
-            : 0);
-        let curY = ny + (nh - totalH) / 2;
-        if (titleLines.length > 0) {
-          doc.setFont("helvetica", fStyle);
-          doc.setFontSize(titleFsPt);
-          doc.setTextColor(tcR, tcG, tcB);
-          titleLines.forEach((line: string) => {
-            doc.text(line, nx + nw / 2, curY, {
-              baseline: "top",
-              align: "center",
-            });
-            curY += titleLineH;
-          });
-        }
-        if (bodyLines.length > 0) {
-          curY += 3 * exportScale;
-          doc.setFont("helvetica", fStyle);
-          doc.setFontSize(bodyFsPt);
-          doc.setTextColor(bR, bG, bB);
-          bodyLines.forEach((line: string) => {
-            doc.text(line, nx + nw / 2, curY, {
-              baseline: "top",
-              align: "center",
-            });
-            curY += bodyLineH;
-          });
-        }
-      } else if (n.type === "circle" || n.type === "oval") {
-        const padH = 16 * exportScale;
-        const maxW = Math.max(10, nw - 2 * padH);
-        doc.setFont("helvetica", fStyle);
-        doc.setFontSize(titleFsPt);
-        const titleLines: string[] = title
-          ? doc.splitTextToSize(title, maxW)
-          : [];
-        doc.setFontSize(bodyFsPt);
-        const bodyLines: string[] = body ? doc.splitTextToSize(body, maxW) : [];
-        const totalH =
-          titleLines.length * titleLineH +
-          (bodyLines.length > 0
-            ? 5 * exportScale + bodyLines.length * bodyLineH
-            : 0);
-        let curY = ny + (nh - totalH) / 2;
-        if (titleLines.length > 0) {
-          doc.setFont("helvetica", fStyle);
-          doc.setFontSize(titleFsPt);
-          doc.setTextColor(tcR, tcG, tcB);
-          titleLines.forEach((line: string) => {
-            doc.text(line, nx + nw / 2, curY, {
-              baseline: "top",
-              align: "center",
-            });
-            curY += titleLineH;
-          });
-        }
-        if (bodyLines.length > 0) {
-          curY += 5 * exportScale;
-          doc.setFont("helvetica", fStyle);
-          doc.setFontSize(bodyFsPt);
-          doc.setTextColor(bR, bG, bB);
-          bodyLines.forEach((line: string) => {
-            doc.text(line, nx + nw / 2, curY, {
-              baseline: "top",
-              align: "center",
-            });
-            curY += bodyLineH;
-          });
-        }
       } else {
-        // block, rounded — top-left aligned
-        const padH = 18 * exportScale;
-        const padTop = 14 * exportScale;
+        // diamond / circle / oval — centered; block / rounded — top-left
+        const centered =
+          n.type === "diamond" || n.type === "circle" || n.type === "oval";
+        const padH =
+          (n.type === "diamond" ? 28 : centered ? 16 : 18) * exportScale;
+        const gap = (n.type === "diamond" ? 3 : 5) * exportScale;
         const maxW = Math.max(10, nw - 2 * padH);
-        doc.setFont("helvetica", fStyle);
-        doc.setFontSize(titleFsPt);
-        const titleLines: string[] = title
-          ? doc.splitTextToSize(title, maxW)
+        const titleLaid = titleSrc
+          ? layoutField(titleSrc, maxW, fs, 1.2, base)
           : [];
-        doc.setFontSize(bodyFsPt);
-        const bodyLines: string[] = body ? doc.splitTextToSize(body, maxW) : [];
-        let curY = ny + padTop;
-        if (titleLines.length > 0) {
-          doc.setFont("helvetica", fStyle);
-          doc.setFontSize(titleFsPt);
-          doc.setTextColor(tcR, tcG, tcB);
-          titleLines.forEach((line: string) => {
-            doc.text(line, nx + padH, curY, { baseline: "top" });
-            curY += titleLineH;
-          });
+        const bodyLaid = bodySrc
+          ? layoutField(bodySrc, maxW, bodyFsPx, 1.55, base)
+          : [];
+        const titleH = fieldHeight(titleLaid);
+        const bodyH = fieldHeight(bodyLaid);
+        const totalH = titleH + (bodyLaid.length > 0 ? gap + bodyH : 0);
+        let curY = centered ? ny + (nh - totalH) / 2 : ny + 14 * exportScale;
+        if (titleLaid.length > 0) {
+          drawField(
+            titleLaid,
+            nx + padH,
+            centered ? nx + nw / 2 : null,
+            curY,
+            [tcR, tcG, tcB],
+          );
+          curY += titleH;
         }
-        if (bodyLines.length > 0) {
-          curY += 5 * exportScale;
-          doc.setFont("helvetica", fStyle);
-          doc.setFontSize(bodyFsPt);
-          doc.setTextColor(bR, bG, bB);
-          bodyLines.forEach((line: string) => {
-            doc.text(line, nx + padH, curY, { baseline: "top" });
-            curY += bodyLineH;
-          });
+        if (bodyLaid.length > 0) {
+          curY += gap;
+          drawField(
+            bodyLaid,
+            nx + padH,
+            centered ? nx + nw / 2 : null,
+            curY,
+            [bR, bG, bB],
+          );
         }
       }
     } catch {
