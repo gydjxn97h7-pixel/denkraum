@@ -76,6 +76,16 @@ export const PRESET_COLORS = [
 
 export const SIDEBAR_W = 220;
 
+export const MIN_ZOOM = 0.05;
+export const MAX_ZOOM = 3;
+
+export type PanelSection =
+  | "board"
+  | "nodes"
+  | "presentation"
+  | "saveload"
+  | "shortcuts";
+
 export const LS_NODES = "denkraum_nodes";
 export const LS_CONNECTIONS = "denkraum_connections";
 export const LS_BOARD_NAME = "denkraum_board_name";

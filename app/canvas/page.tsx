@@ -1,25 +1,7 @@
 "use client";
-import { useRef, useState, useCallback, useEffect, useMemo, memo } from "react";
-import {
-  forceSimulation,
-  forceManyBody,
-  forceLink,
-  forceCenter,
-  forceCollide,
-  forceX,
-  forceY,
-} from "d3-force";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import "./canvas.css";
-import {
-  ACCENT,
-  LS_NODES,
-  LS_CONNECTIONS,
-  LS_BOARD_NAME,
-  LS_PRESENTATION_ORDER,
-  LS_CAMERA,
-  DEFAULT_NODES,
-  DEFAULT_CONNECTIONS,
-} from "./lib/canvas-types";
+import { ACCENT, LS_BOARD_NAME, DEFAULT_NODES, DEFAULT_CONNECTIONS } from "./lib/canvas-types";
 import type {
   NodeType,
   CanvasNode,
@@ -27,9 +9,8 @@ import type {
   ConnectDrag,
   ContextMenu,
   ColorPicker,
-  AssetRecord,
+  PanelSection,
 } from "./lib/canvas-types";
-import { stripHtml } from "./lib/color-helpers";
 import {
   bringToFront,
   bringForward,
@@ -37,485 +18,33 @@ import {
   sendToBack,
   getMaxNodeId,
 } from "./lib/canvas-helpers";
-import { setAsset, deleteAsset, getAllAssets } from "./lib/idb";
+import { sanitizeLoadedNode } from "./lib/dnkrm-file";
+import { exportBoardPdf } from "./lib/pdf-export";
+import { useUndoRedo } from "./hooks/useUndoRedo";
+import { useBoardPersistence } from "./hooks/useBoardPersistence";
+import { useCanvasInteraction } from "./hooks/useCanvasInteraction";
+import { useForceLayout } from "./hooks/useForceLayout";
+import { usePresentation } from "./hooks/usePresentation";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { ColorPickerWindow } from "./components/ColorPickerWindow";
 import { TextFileViewerWindow } from "./components/TextFileViewerWindow";
 import { NodeView } from "./components/NodeView";
-import { SidebarNodeItem } from "./components/SidebarNodeItem";
-
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-const MIN_ZOOM = 0.05;
-const MAX_ZOOM = 3;
-
-// ── .dnkrm file validation ────────────────────────────────────────────────────
-
-const VALID_NODE_TYPES = new Set<string>([
-  "block",
-  "text",
-  "circle",
-  "oval",
-  "diamond",
-  "rounded",
-  "image",
-  "textfile",
-]);
-
-function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
-  if (!raw || typeof raw !== "object") return null;
-  const n = raw as Record<string, unknown>;
-  if (typeof n.id !== "number" || !Number.isFinite(n.id)) return null;
-  if (typeof n.x !== "number" || !Number.isFinite(n.x)) return null;
-  if (typeof n.y !== "number" || !Number.isFinite(n.y)) return null;
-  if (typeof n.w !== "number" || !Number.isFinite(n.w) || n.w < 1) return null;
-  if (typeof n.h !== "number" || !Number.isFinite(n.h) || n.h < 1) return null;
-  if (typeof n.type !== "string" || !VALID_NODE_TYPES.has(n.type)) return null;
-  return {
-    id: Math.trunc(n.id as number),
-    x: n.x as number,
-    y: n.y as number,
-    w: Math.max(10, n.w as number),
-    h: Math.max(10, n.h as number),
-    type: n.type as NodeType,
-    title: typeof n.title === "string" ? n.title : "",
-    body: typeof n.body === "string" ? n.body : "",
-    color: typeof n.color === "string" ? n.color : "#1D5C50",
-    ...(typeof n.fontSize === "number" &&
-      Number.isFinite(n.fontSize) && { fontSize: n.fontSize as number }),
-    ...(typeof n.label === "string" && { label: n.label }),
-    ...(typeof n.imageUrl === "string" && { imageUrl: n.imageUrl }),
-    ...(typeof n.textFileContent === "string" && {
-      textFileContent: n.textFileContent,
-    }),
-    ...(typeof n.textFileName === "string" && { textFileName: n.textFileName }),
-    ...(typeof n.bold === "boolean" && { bold: n.bold }),
-    ...(typeof n.italic === "boolean" && { italic: n.italic }),
-    ...(typeof n.underline === "boolean" && { underline: n.underline }),
-    ...(typeof n.textColor === "string" && { textColor: n.textColor }),
-    ...(typeof n.excludeFromPresentation === "boolean" && {
-      excludeFromPresentation: n.excludeFromPresentation,
-    }),
-  };
-}
-
-// ── Toolbar helpers ───────────────────────────────────────────────────────────
-
-function renderShapeIcon(
-  type: string,
-  stroke: string,
-  active: boolean,
-): React.ReactNode {
-  const fid = active ? "gShapeA" : "gShapeN";
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20">
-      {type === "block" && (
-        <>
-          <rect
-            x="1"
-            y="1"
-            width="18"
-            height="18"
-            rx="1.5"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <rect
-            x="2"
-            y="2"
-            width="16"
-            height="4"
-            rx="1"
-            fill="rgba(255,255,255,0.07)"
-          />
-        </>
-      )}
-      {type === "rounded" && (
-        <>
-          <rect
-            x="1"
-            y="1"
-            width="18"
-            height="18"
-            rx="6"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <rect
-            x="2"
-            y="2"
-            width="16"
-            height="4"
-            rx="2"
-            fill="rgba(255,255,255,0.07)"
-          />
-        </>
-      )}
-      {type === "circle" && (
-        <>
-          <circle
-            cx="10"
-            cy="10"
-            r="9"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <ellipse
-            cx="7"
-            cy="6"
-            rx="4"
-            ry="2.5"
-            fill="rgba(255,255,255,0.07)"
-          />
-        </>
-      )}
-      {type === "oval" && (
-        <>
-          <ellipse
-            cx="10"
-            cy="10"
-            rx="9"
-            ry="6"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <ellipse cx="7" cy="7" rx="4" ry="2" fill="rgba(255,255,255,0.07)" />
-        </>
-      )}
-      {type === "diamond" && (
-        <>
-          <polygon
-            points="10,1 19,10 10,19 1,10"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-            strokeLinejoin="miter"
-          />
-          <polygon
-            points="10,1 19,10 10,10 1,10"
-            fill="rgba(255,255,255,0.05)"
-            stroke="none"
-          />
-          <line
-            x1="10"
-            y1="1"
-            x2="10"
-            y2="19"
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth="0.8"
-          />
-        </>
-      )}
-      {type === "text" && (
-        <>
-          <rect
-            x="1"
-            y="1"
-            width="18"
-            height="18"
-            rx="1.5"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <rect
-            x="3"
-            y="5"
-            width="14"
-            height="3.5"
-            rx="0.5"
-            fill="rgba(255,255,255,0.82)"
-          />
-          <rect
-            x="8.5"
-            y="5"
-            width="3"
-            height="11"
-            rx="0.5"
-            fill="rgba(255,255,255,0.82)"
-          />
-        </>
-      )}
-      {type === "image" && (
-        <>
-          <rect
-            x="1"
-            y="1"
-            width="18"
-            height="18"
-            rx="1.5"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <circle cx="5.5" cy="5.5" r="2.5" fill="rgba(255,255,255,0.55)" />
-          <polyline
-            points="1,14 6,9 10,13 14,8 19,14"
-            fill="none"
-            stroke="rgba(255,255,255,0.8)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </>
-      )}
-      {type === "textfile" && (
-        <>
-          <path
-            d="M3 1 L13 1 L19 7 L19 19 L3 19 Z"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M13 1 L13 7 L19 7"
-            fill="none"
-            stroke={stroke}
-            strokeWidth="2"
-            strokeLinejoin="round"
-          />
-          <rect
-            x="6"
-            y="10"
-            width="9"
-            height="2"
-            rx="1"
-            fill="rgba(255,255,255,0.55)"
-          />
-          <rect
-            x="6"
-            y="14"
-            width="7"
-            height="2"
-            rx="1"
-            fill="rgba(255,255,255,0.35)"
-          />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function ShapeButton({
-  label,
-  isActive,
-  onClick,
-  children,
-}: {
-  label: string;
-  isActive: boolean;
-  onClick: () => void;
-  children: (stroke: string, isActive: boolean) => React.ReactNode;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const stroke = isActive
-    ? "#A07030"
-    : hovered
-      ? "rgba(255,255,255,1)"
-      : "rgba(255,255,255,0.8)";
-  return (
-    <button
-      title={label}
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        width: 36,
-        height: 36,
-        border: "none",
-        background: isActive ? "rgba(241,178,74,0.06)" : "transparent",
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: 8,
-        padding: 0,
-        transition: "background 0.12s",
-      }}
-    >
-      {children(stroke, isActive)}
-    </button>
-  );
-}
-
-// ── Connection line ───────────────────────────────────────────────────────────
-const ConnectionLine = memo(function ConnectionLine({
-  connKey,
-  fromNode,
-  toNode,
-  isHovered,
-  zoom,
-  connDimmed,
-  onHoverEnter,
-  onHoverLeave,
-  onDelete,
-}: {
-  connKey: string;
-  fromNode: CanvasNode;
-  toNode: CanvasNode;
-  isHovered: boolean;
-  zoom: number;
-  connDimmed: boolean;
-  onHoverEnter: (key: string) => void;
-  onHoverLeave: (key: string) => void;
-  onDelete: (from: number, to: number) => void;
-}) {
-  // Centers of each node
-  const fcx = fromNode.x + fromNode.w / 2;
-  const fcy = fromNode.y + fromNode.h / 2;
-  const tcx = toNode.x + toNode.w / 2;
-  const tcy = toNode.y + toNode.h / 2;
-
-  const dx = tcx - fcx;
-  const dy = tcy - fcy;
-
-  // Pick exit/entry edges based on which axis dominates center-to-center
-  let x1: number, y1: number, x2: number, y2: number;
-  let cpOffset: number;
-
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    // Horizontal dominant: use right/left edges
-    const dist = Math.abs(dx);
-    cpOffset = Math.max(40, dist * 0.4);
-    if (dx >= 0) {
-      // target is to the right
-      x1 = fromNode.x + fromNode.w;
-      y1 = fcy;
-      x2 = toNode.x;
-      y2 = tcy;
-    } else {
-      // target is to the left
-      x1 = fromNode.x;
-      y1 = fcy;
-      x2 = toNode.x + toNode.w;
-      y2 = tcy;
-    }
-  } else {
-    // Vertical dominant: use top/bottom edges
-    const dist = Math.abs(dy);
-    cpOffset = Math.max(40, dist * 0.4);
-    if (dy >= 0) {
-      // target is below
-      x1 = fcx;
-      y1 = fromNode.y + fromNode.h;
-      x2 = tcx;
-      y2 = toNode.y;
-    } else {
-      // target is above
-      x1 = fcx;
-      y1 = fromNode.y;
-      x2 = tcx;
-      y2 = toNode.y + toNode.h;
-    }
-  }
-
-  // Control points: tangent perpendicular to the chosen edge
-  let c1x: number, c1y: number, c2x: number, c2y: number;
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    // Horizontal: offset control points along x
-    const sign = dx >= 0 ? 1 : -1;
-    c1x = x1 + sign * cpOffset;
-    c1y = y1;
-    c2x = x2 - sign * cpOffset;
-    c2y = y2;
-  } else {
-    // Vertical: offset control points along y
-    const sign = dy >= 0 ? 1 : -1;
-    c1x = x1;
-    c1y = y1 + sign * cpOffset;
-    c2x = x2;
-    c2y = y2 - sign * cpOffset;
-  }
-
-  const d = `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
-  return (
-    <g
-      style={{
-        opacity: connDimmed ? 0.15 : 1,
-        transition: "opacity 0.2s ease",
-      }}
-    >
-      <path
-        d={d}
-        stroke={isHovered ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.7)"}
-        strokeWidth={isHovered ? 2.5 / zoom : 1.5 / zoom}
-        fill="none"
-        strokeLinecap="round"
-        style={{
-          pointerEvents: "none",
-          transition: "stroke 0.12s, stroke-width 0.12s",
-        }}
-      />
-      <path
-        d={d}
-        stroke="transparent"
-        strokeWidth={12 / zoom}
-        fill="none"
-        style={{ cursor: "pointer" }}
-        onMouseEnter={() => onHoverEnter(connKey)}
-        onMouseLeave={() => onHoverLeave(connKey)}
-        onDoubleClick={() => onDelete(fromNode.id, toNode.id)}
-      />
-    </g>
-  );
-});
-
-// Canvas background in RGB — used to composite rgba node colors into solid values.
-const PDF_BG_RGB: [number, number, number] = [12, 32, 24]; // #0C2018
-
-// Parses any color format nodes can store (hex, rgb, rgba) into [r,g,b] integers
-// for jsPDF, which has no alpha channel on fill colors. rgba colors are composited
-// over the canvas background so the tinted solid color matches on-screen appearance.
-// Never throws — returns the default node fill on any unparseable value.
-function parseColorForPdf(color: string): [number, number, number] {
-  try {
-    if (
-      typeof color === "string" &&
-      color.startsWith("#") &&
-      color.length === 7
-    ) {
-      const h = color.slice(1);
-      return [
-        parseInt(h.slice(0, 2), 16),
-        parseInt(h.slice(2, 4), 16),
-        parseInt(h.slice(4, 6), 16),
-      ];
-    }
-    const m =
-      typeof color === "string" &&
-      color.match(
-        /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/,
-      );
-    if (m) {
-      const r = parseInt(m[1]),
-        g = parseInt(m[2]),
-        b = parseInt(m[3]);
-      const a = m[4] !== undefined ? parseFloat(m[4]) : 1;
-      if (a >= 1) return [r, g, b];
-      return [
-        Math.round(a * r + (1 - a) * PDF_BG_RGB[0]),
-        Math.round(a * g + (1 - a) * PDF_BG_RGB[1]),
-        Math.round(a * b + (1 - a) * PDF_BG_RGB[2]),
-      ];
-    }
-  } catch {
-    // fall through to default
-  }
-  return [29, 92, 80]; // #1D5C50
-}
+import { ConnectionLine } from "./components/ConnectionLine";
+import { SidebarStrip } from "./components/SidebarStrip";
+import { SidebarPanel } from "./components/SidebarPanel";
+import { CanvasToolbar } from "./components/CanvasToolbar";
+import { FilterBar } from "./components/FilterBar";
+import { NodeContextMenu } from "./components/NodeContextMenu";
+import { CanvasContextMenu } from "./components/CanvasContextMenu";
+import { ZoomControls } from "./components/ZoomControls";
+import { PresentationOverlays } from "./components/PresentationOverlays";
+import { Toast } from "./components/Toast";
 
 // ── Main Canvas ───────────────────────────────────────────────────────────────
 export default function Canvas() {
   const [nodes, setNodes] = useState<CanvasNode[]>(DEFAULT_NODES);
   const [connections, setConnections] =
     useState<Connection[]>(DEFAULT_CONNECTIONS);
-  const [hydrated, setHydrated] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [connectDrag, setConnectDrag] = useState<ConnectDrag>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
@@ -525,9 +54,7 @@ export default function Canvas() {
   const [hoveredConnKey, setHoveredConnKey] = useState<string | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [activePanel, setActivePanel] = useState<
-    "board" | "nodes" | "presentation" | "saveload" | "shortcuts" | null
-  >(null);
+  const [activePanel, setActivePanel] = useState<PanelSection | null>(null);
   const [textFileViewer, setTextFileViewer] = useState<{
     nodeId: number;
     fileName: string;
@@ -555,23 +82,11 @@ export default function Canvas() {
   const [presentationOrder, setPresentationOrder] = useState<number[]>(() =>
     DEFAULT_NODES.map((n) => n.id),
   );
-  const [isPresenting, setIsPresenting] = useState(false);
-  const [presentationIndex, setPresentationIndex] = useState(0);
-  const [showPresentOverlay, setShowPresentOverlay] = useState(false);
   const [toast, setToast] = useState<{
     msg: string;
     variant: "success" | "error";
   } | null>(null);
 
-  const dragging = useRef<{ id: number; ox: number; oy: number } | null>(null);
-  const resizing = useRef<{
-    id: number;
-    startX: number;
-    startY: number;
-    startW: number;
-    startH: number;
-    constrain: boolean; // keep w === h (circle)
-  } | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFileInputRef = useRef<HTMLInputElement>(null);
@@ -583,26 +98,11 @@ export default function Canvas() {
   const filterJumpIndexRef = useRef(0);
   const matchedNodesSortedRef = useRef<CanvasNode[]>([]);
   const selectedIdsRef = useRef<Set<number>>(new Set());
-  const marquee = useRef<{
-    startX: number;
-    startY: number;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  } | null>(null);
-  const multiDragging = useRef<{
-    startMouseX: number;
-    startMouseY: number;
-    startPositions: Map<number, { x: number; y: number }>;
-  } | null>(null);
-  const pendingMultiDragDelta = useRef<{ dx: number; dy: number } | null>(null);
   const pendingImagePos = useRef<{ cx: number; cy: number } | null>(null);
   const pendingTextFilePos = useRef<{ cx: number; cy: number } | null>(null);
   // Tracks which node is actively being edited so ref callbacks never clobber
   // in-progress input (more reliable than document.activeElement checks).
   const editingNodeIdRef = useRef<number | null>(null);
-  const lastMousePosRef = useRef({ x: 0, y: 0 });
   const idCounterRef = useRef(3);
   const copiedNodeRef = useRef<CanvasNode | null>(null);
   const connectionsRef = useRef(connections);
@@ -615,12 +115,6 @@ export default function Canvas() {
   const connectDragRef = useRef(connectDrag);
   const selectedRef = useRef(selected);
   const presentationOrderRef = useRef(presentationOrder);
-  const presentationIndexRef = useRef(presentationIndex);
-  const isPresentingRef = useRef(isPresenting);
-  const prePresentState = useRef<{
-    pan: { x: number; y: number };
-    zoom: number;
-  } | null>(null);
   panRef.current = pan;
   zoomRef.current = zoom;
   connectDragRef.current = connectDrag;
@@ -629,50 +123,101 @@ export default function Canvas() {
   connectionsRef.current = connections;
   nodesRef.current = nodes;
   presentationOrderRef.current = presentationOrder;
-  presentationIndexRef.current = presentationIndex;
-  isPresentingRef.current = isPresenting;
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
 
-  // Presentation camera animation
-  const animRafRef = useRef<number | null>(null);
-  const animCurrentRef = useRef<{
-    pan: { x: number; y: number };
-    zoom: number;
-  } | null>(null);
-
-  // Force-directed layout animation
-  const layoutRafRef = useRef<number | null>(null);
-  const layoutFromRef = useRef<Map<number, { x: number; y: number }> | null>(
-    null,
-  );
-
-  // Pending values accumulated during a mousemove burst; applied once per frame
-  const rafRef = useRef<number | null>(null);
-  const pendingPanDelta = useRef({ x: 0, y: 0 });
-  const pendingDragPos = useRef<{ id: number; x: number; y: number } | null>(
-    null,
-  );
-  const pendingResizeSize = useRef<{ id: number; w: number; h: number } | null>(
-    null,
-  );
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cameraTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Tracks which node IDs currently have an entry in IndexedDB so we can
-  // delete stale records when a node is removed or loses its asset fields.
-  const prevAssetNodeIdsRef = useRef(new Set<number>());
   const needsHistoryPushRef = useRef(false);
 
+  // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
+  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  const nodeMapRef = useRef(nodeMap);
+  nodeMapRef.current = nodeMap;
+
+  // ── Presentation mode (state + animated camera) ──────────────────────────────
+  const {
+    isPresenting,
+    setIsPresenting,
+    presentationIndex,
+    setPresentationIndex,
+    showPresentOverlay,
+    isPresentingRef,
+    presentationIndexRef,
+    prePresentStateRef,
+    animRafRef,
+    animCurrentRef,
+    centerNodeForPresentation,
+  } = usePresentation({ canvasRef, nodeMapRef, panRef, zoomRef, setPan, setZoom });
+
+  // Nodes whose excludeFromPresentation is truthy are skipped from navigation
+  const presentActiveSeq = useMemo(
+    () =>
+      presentationOrder.filter(
+        (id) => !nodeMap.get(id)?.excludeFromPresentation,
+      ),
+    [presentationOrder, nodeMap],
+  );
+  const presentActiveSeqRef = useRef(presentActiveSeq);
+  presentActiveSeqRef.current = presentActiveSeq;
+
+  const filterActive = filterText !== "" || filterType !== "all";
+  const matchedNodeIds = useMemo(() => {
+    if (filterText === "" && filterType === "all") return new Set<number>();
+    const s = new Set<number>();
+    for (const n of nodes) {
+      const typeOk = filterType === "all" || n.type === filterType;
+      const q = filterText.toLowerCase();
+      const textOk =
+        !q ||
+        n.title.toLowerCase().includes(q) ||
+        n.body.toLowerCase().includes(q) ||
+        (n.label ?? "").toLowerCase().includes(q);
+      if (typeOk && textOk) s.add(n.id);
+    }
+    return s;
+  }, [nodes, filterText, filterType]);
+  const matchedNodes = useMemo(
+    () => nodes.filter((n) => matchedNodeIds.has(n.id)),
+    [nodes, matchedNodeIds],
+  );
+  filterOpenRef.current = filterOpen;
+  filterActiveRef.current = filterActive;
+  filterJumpIndexRef.current = filterJumpIndex;
+  matchedNodesSortedRef.current = matchedNodes;
+
   // ── Undo / Redo history ───────────────────────────────────────────────────────
-  type HistorySnapshot = {
-    nodes: CanvasNode[];
-    connections: Connection[];
-    presentationOrder: number[];
-  };
-  const HISTORY_LIMIT = 40;
-  const historyRef = useRef<HistorySnapshot[]>([]);
-  const historyIndexRef = useRef<number>(-1);
+  const { pushHistory, undo, redo } = useUndoRedo({
+    nodesRef,
+    connectionsRef,
+    presentationOrderRef,
+    setNodes,
+    setConnections,
+    setPresentationOrder,
+  });
+
+  // ── Wheel zoom/pan + global mouse pipeline (drag / resize / marquee) ─────────
+  const { draggingRef, resizingRef, marqueeRef, multiDraggingRef, lastMousePosRef } =
+    useCanvasInteraction({
+      canvasRef,
+      panRef,
+      zoomRef,
+      nodeMapRef,
+      needsHistoryPushRef,
+      setPan,
+      setZoom,
+      setNodes,
+      setSnapGuides,
+      setMarqueeRect,
+      setSelectedIds,
+    });
+
+  // ── Force-directed layout ──────────────────────────────────────────────────
+  const runForceLayout = useForceLayout({
+    nodeMapRef,
+    connectionsRef,
+    needsHistoryPushRef,
+    setNodes,
+  });
 
   const saveBoard = useCallback(() => {
     try {
@@ -715,47 +260,6 @@ export default function Canvas() {
   }, [nodes, connections, boardName, presentationOrder, pan, zoom]);
 
   saveBoardRef.current = saveBoard;
-
-  const undoRef = useRef<() => void>(() => {});
-  const redoRef = useRef<() => void>(() => {});
-
-  const pushHistory = useCallback(() => {
-    const snapshot: HistorySnapshot = {
-      nodes: nodesRef.current.map((n) => ({ ...n })),
-      connections: connectionsRef.current.map((c) => ({ ...c })),
-      presentationOrder: [...presentationOrderRef.current],
-    };
-    const newHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
-    newHistory.push(snapshot);
-    if (newHistory.length > HISTORY_LIMIT) newHistory.shift();
-    historyRef.current = newHistory;
-    historyIndexRef.current = newHistory.length - 1;
-  }, []);
-
-  const undo = useCallback(() => {
-    const idx = historyIndexRef.current;
-    if (idx <= 0) return;
-    const target = historyIndexRef.current - 1;
-    historyIndexRef.current = target;
-    const snap = historyRef.current[target];
-    setNodes(snap.nodes.map((n) => ({ ...n })));
-    setConnections(snap.connections.map((c) => ({ ...c })));
-    setPresentationOrder([...snap.presentationOrder]);
-  }, []);
-
-  const redo = useCallback(() => {
-    const idx = historyIndexRef.current;
-    if (idx >= historyRef.current.length - 1) return;
-    const target = historyIndexRef.current + 1;
-    historyIndexRef.current = target;
-    const snap = historyRef.current[target];
-    setNodes(snap.nodes.map((n) => ({ ...n })));
-    setConnections(snap.connections.map((c) => ({ ...c })));
-    setPresentationOrder([...snap.presentationOrder]);
-  }, []);
-
-  undoRef.current = undo;
-  redoRef.current = redo;
 
   const onDenkraumFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -862,17 +366,6 @@ export default function Canvas() {
     const t = setTimeout(() => setToast(null), 2800);
     return () => clearTimeout(t);
   }, [toast]);
-
-  // Cancel any in-flight rAF loops when the component unmounts so we don't
-  // call setState after unmount (wasted work; React 18 silences the warning
-  // but the computation still runs).
-  useEffect(() => {
-    return () => {
-      if (animRafRef.current !== null) cancelAnimationFrame(animRafRef.current);
-      if (layoutRafRef.current !== null)
-        cancelAnimationFrame(layoutRafRef.current);
-    };
-  }, []);
 
   const addNode = useCallback((cx: number, cy: number, type: NodeType) => {
     const isText = type === "text";
@@ -1111,191 +604,22 @@ export default function Canvas() {
     [],
   );
 
-  // ── localStorage ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    void (async () => {
-      try {
-        // ① localStorage (synchronous)
-        const savedBoardName = localStorage.getItem(LS_BOARD_NAME);
-        if (savedBoardName) setBoardName(savedBoardName);
-
-        const rawConns = localStorage.getItem(LS_CONNECTIONS);
-        if (rawConns) {
-          const seen = new Set<string>();
-          const deduped = (JSON.parse(rawConns) as Connection[]).filter((c) => {
-            const key = `${c.from}→${c.to}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          setConnections(deduped);
-        }
-
-        const rawNodes = localStorage.getItem(LS_NODES);
-        if (rawNodes) {
-          let loadedNodes: CanvasNode[] = (
-            JSON.parse(rawNodes) as CanvasNode[]
-          ).map((n) => ({
-            ...n,
-            title: stripHtml(n.title),
-            body: stripHtml(n.body),
-            ...(n.label != null && { label: stripHtml(n.label) }),
-            ...(n.textFileName != null && {
-              textFileName: stripHtml(n.textFileName),
-            }),
-          }));
-          const maxId = loadedNodes.reduce((m, n) => Math.max(m, n.id), -1);
-          if (maxId >= idCounterRef.current) idCounterRef.current = maxId + 1;
-
-          // ② IndexedDB (async) — merge textFileContent / imageUrl back in
-          try {
-            const allAssets = await getAllAssets();
-            if (allAssets.size > 0) {
-              loadedNodes = loadedNodes.map((n) => {
-                const a = allAssets.get(n.id);
-                return a
-                  ? {
-                      ...n,
-                      ...(a.textFileContent != null && {
-                        textFileContent: a.textFileContent,
-                      }),
-                      ...(a.imageUrl != null && { imageUrl: a.imageUrl }),
-                    }
-                  : n;
-              });
-              // Orphan cleanup: IDB keys with no matching node
-              const nodeIdSet = new Set(loadedNodes.map((n) => n.id));
-              for (const id of allAssets.keys()) {
-                if (!nodeIdSet.has(id)) deleteAsset(id).catch(() => {});
-              }
-            }
-          } catch {
-            // IDB unavailable (e.g. private-browsing) — proceed without assets
-          }
-
-          // ③ Initialise prevAssetNodeIdsRef before setHydrated triggers the
-          //    save effect, so the first save doesn't delete any IDB entries.
-          prevAssetNodeIdsRef.current = new Set(
-            loadedNodes
-              .filter((n) => n.textFileContent != null || n.imageUrl != null)
-              .map((n) => n.id),
-          );
-          setNodes(loadedNodes);
-
-          // ④ presentationOrder — load from localStorage, migrate if needed
-          const rawOrder = localStorage.getItem(LS_PRESENTATION_ORDER);
-          const loadedIdSet = new Set(loadedNodes.map((n) => n.id));
-          if (rawOrder) {
-            try {
-              const parsed: number[] = JSON.parse(rawOrder);
-              const parsedSet = new Set(parsed);
-              const missing = loadedNodes
-                .filter((n) => !parsedSet.has(n.id))
-                .sort((a, b) => a.id - b.id)
-                .map((n) => n.id);
-              setPresentationOrder([
-                ...parsed.filter((id) => loadedIdSet.has(id)),
-                ...missing,
-              ]);
-            } catch {
-              setPresentationOrder(
-                [...loadedNodes].sort((a, b) => a.id - b.id).map((n) => n.id),
-              );
-            }
-          } else {
-            setPresentationOrder(
-              [...loadedNodes].sort((a, b) => a.id - b.id).map((n) => n.id),
-            );
-          }
-        }
-      } catch {
-        // JSON parse error — keep DEFAULT_NODES
-      } finally {
-        const rawCamera = localStorage.getItem(LS_CAMERA);
-        if (rawCamera) {
-          try {
-            const cam = JSON.parse(rawCamera) as { pan?: { x: number; y: number }; zoom?: number };
-            if (cam.pan && typeof cam.pan.x === "number" && typeof cam.pan.y === "number") {
-              setPan(cam.pan);
-            }
-            if (typeof cam.zoom === "number" && isFinite(cam.zoom)) {
-              setZoom(cam.zoom);
-            }
-          } catch {
-            // malformed — use defaults
-          }
-        }
-        setHydrated(true);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      // ── localStorage: strip large asset fields ──────────────────────────────
-      try {
-        const nodesToSave = nodes.map(
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          ({ textFileContent: _tc, imageUrl: _iu, ...rest }) => rest,
-        );
-        localStorage.setItem(LS_NODES, JSON.stringify(nodesToSave));
-        localStorage.setItem(LS_CONNECTIONS, JSON.stringify(connections));
-        localStorage.setItem(LS_BOARD_NAME, boardName);
-        localStorage.setItem(
-          LS_PRESENTATION_ORDER,
-          JSON.stringify(presentationOrder),
-        );
-      } catch (err) {
-        if (
-          err instanceof DOMException &&
-          (err.name === "QuotaExceededError" ||
-            err.name === "NS_ERROR_DOM_QUOTA_REACHED")
-        ) {
-          console.warn(
-            "[dnkrm] localStorage quota exceeded — canvas not saved.",
-          );
-        }
-      }
-
-      // ── IndexedDB: write assets / delete stale entries ──────────────────────
-      const currentAssetIds = new Set<number>();
-      for (const n of nodes) {
-        const record: AssetRecord = {};
-        if (n.textFileContent != null)
-          record.textFileContent = n.textFileContent;
-        if (n.imageUrl != null) record.imageUrl = n.imageUrl;
-        if (Object.keys(record).length > 0) {
-          currentAssetIds.add(n.id);
-          setAsset(n.id, record).catch(() => {});
-        }
-      }
-      // Delete entries whose node was removed or lost all asset fields
-      for (const id of prevAssetNodeIdsRef.current) {
-        if (!currentAssetIds.has(id)) deleteAsset(id).catch(() => {});
-      }
-      prevAssetNodeIdsRef.current = currentAssetIds;
-    }, 500);
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [nodes, connections, boardName, presentationOrder, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    if (cameraTimerRef.current) clearTimeout(cameraTimerRef.current);
-    cameraTimerRef.current = setTimeout(() => {
-      try {
-        localStorage.setItem(LS_CAMERA, JSON.stringify({ pan, zoom }));
-      } catch {
-        // quota exceeded — non-critical
-      }
-    }, 500);
-    return () => {
-      if (cameraTimerRef.current) clearTimeout(cameraTimerRef.current);
-    };
-  }, [pan, zoom, hydrated]);
+  // ── localStorage + IndexedDB persistence ─────────────────────────────────────
+  const hydrated = useBoardPersistence({
+    nodes,
+    connections,
+    boardName,
+    presentationOrder,
+    pan,
+    zoom,
+    idCounterRef,
+    setNodes,
+    setConnections,
+    setBoardName,
+    setPresentationOrder,
+    setPan,
+    setZoom,
+  });
 
   // Push initial history snapshot once after the board has hydrated
   useEffect(() => {
@@ -1310,40 +634,6 @@ export default function Canvas() {
     }
   }, [nodes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show entry overlay once each time presentation mode is entered
-  useEffect(() => {
-    if (!isPresenting) return;
-    setShowPresentOverlay(true);
-    const t = setTimeout(() => setShowPresentOverlay(false), 2000);
-    return () => clearTimeout(t);
-  }, [isPresenting]);
-
-  // ── Wheel ─────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
-        const rect = el.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const delta = -e.deltaY * 0.016;
-        const prev = zoomRef.current;
-        const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta * prev));
-        const p = panRef.current;
-        const newPanX = mx - (mx - p.x) * (next / prev);
-        const newPanY = my - (my - p.y) * (next / prev);
-        setZoom(next);
-        setPan({ x: newPanX, y: newPanY });
-      } else {
-        setPan((prev) => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
-      }
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
-
   // ── Context menus ─────────────────────────────────────────────────────────────
   const onNodeContextMenu = useCallback((e: React.MouseEvent, id: number) => {
     e.preventDefault();
@@ -1351,7 +641,7 @@ export default function Canvas() {
     if (isPresentingRef.current) return;
     setSelected(id);
     setContextMenu({ kind: "node", x: e.clientX, y: e.clientY, id });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onCanvasContextMenu = useCallback((e: React.MouseEvent) => {
     const t = e.target as HTMLElement;
@@ -1363,7 +653,7 @@ export default function Canvas() {
     const cx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
     const cy = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
     setContextMenu({ kind: "canvas", x: e.clientX, y: e.clientY, cx, cy });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Mouse down handlers ───────────────────────────────────────────────────────
   const onCanvasMouseDown = useCallback(
@@ -1384,53 +674,12 @@ export default function Canvas() {
       const r = canvasRef.current.getBoundingClientRect();
       const cx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
       const cy = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
-      marquee.current = { startX: cx, startY: cy, x: cx, y: cy, w: 0, h: 0 };
+      marqueeRef.current = { startX: cx, startY: cy, x: cx, y: cy, w: 0, h: 0 };
       setSelected(null);
       setSelectedIds(new Set());
     },
-    [contextMenu],
+    [contextMenu], // eslint-disable-line react-hooks/exhaustive-deps
   );
-
-  // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
-  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
-  const nodeMapRef = useRef(nodeMap);
-  nodeMapRef.current = nodeMap;
-
-  // Nodes whose excludeFromPresentation is truthy are skipped from navigation
-  const presentActiveSeq = useMemo(
-    () =>
-      presentationOrder.filter(
-        (id) => !nodeMap.get(id)?.excludeFromPresentation,
-      ),
-    [presentationOrder, nodeMap],
-  );
-  const presentActiveSeqRef = useRef(presentActiveSeq);
-  presentActiveSeqRef.current = presentActiveSeq;
-
-  const filterActive = filterText !== "" || filterType !== "all";
-  const matchedNodeIds = useMemo(() => {
-    if (filterText === "" && filterType === "all") return new Set<number>();
-    const s = new Set<number>();
-    for (const n of nodes) {
-      const typeOk = filterType === "all" || n.type === filterType;
-      const q = filterText.toLowerCase();
-      const textOk =
-        !q ||
-        n.title.toLowerCase().includes(q) ||
-        n.body.toLowerCase().includes(q) ||
-        (n.label ?? "").toLowerCase().includes(q);
-      if (typeOk && textOk) s.add(n.id);
-    }
-    return s;
-  }, [nodes, filterText, filterType]);
-  const matchedNodes = useMemo(
-    () => nodes.filter((n) => matchedNodeIds.has(n.id)),
-    [nodes, matchedNodeIds],
-  );
-  filterOpenRef.current = filterOpen;
-  filterActiveRef.current = filterActive;
-  filterJumpIndexRef.current = filterJumpIndex;
-  matchedNodesSortedRef.current = matchedNodes;
 
   const startNodeDrag = useCallback((e: React.MouseEvent, id: number) => {
     setContextMenu(null);
@@ -1441,9 +690,9 @@ export default function Canvas() {
     const r = canvasRef.current.getBoundingClientRect();
     const mx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
     const my = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
-    dragging.current = { id, ox: mx - n.x, oy: my - n.y };
+    draggingRef.current = { id, ox: mx - n.x, oy: my - n.y };
     e.preventDefault();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onNodeMouseDown = useCallback((e: React.MouseEvent, id: number) => {
     if (e.button !== 0) return;
@@ -1465,7 +714,7 @@ export default function Canvas() {
         const node = nodeMapRef.current.get(nid);
         if (node) startPositions.set(nid, { x: node.x, y: node.y });
       }
-      multiDragging.current = {
+      multiDraggingRef.current = {
         startMouseX: mx,
         startMouseY: my,
         startPositions,
@@ -1474,14 +723,14 @@ export default function Canvas() {
     } else {
       startNodeDrag(e, id);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onResizeMouseDown = useCallback((e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     e.preventDefault();
     const n = nodeMapRef.current.get(id);
     if (!n) return;
-    resizing.current = {
+    resizingRef.current = {
       id,
       startX: e.clientX,
       startY: e.clientY,
@@ -1489,7 +738,7 @@ export default function Canvas() {
       startH: n.h,
       constrain: n.type === "circle",
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onDotClick = useCallback((e: React.MouseEvent, id: number) => {
     e.stopPropagation();
@@ -1539,233 +788,6 @@ export default function Canvas() {
     setConnectDrag(null);
   }, [pushHistory]);
 
-  // ── Global mouse move + up ────────────────────────────────────────────────────
-
-  // Apply all pending updates in a single React render (called from rAF or mouseup)
-  const flushPending = useCallback(() => {
-    rafRef.current = null;
-
-    const panDelta = pendingPanDelta.current;
-    if (panDelta.x !== 0 || panDelta.y !== 0) {
-      const { x, y } = panDelta;
-      pendingPanDelta.current = { x: 0, y: 0 };
-      setPan((prev) => ({ x: prev.x + x, y: prev.y + y }));
-    }
-
-    const drag = pendingDragPos.current;
-    if (drag) {
-      pendingDragPos.current = null;
-      const SNAP_T = 8;
-      let finalX = drag.x;
-      let finalY = drag.y;
-      const guides: { x?: number; y?: number } = {};
-      const dragNode = nodeMapRef.current.get(drag.id);
-      if (dragNode) {
-        const dw = dragNode.w;
-        const dh = dragNode.h;
-        outer: for (const node of nodeMapRef.current.values()) {
-          if (node.id === drag.id) continue;
-          const xPairs: [number, number][] = [
-            [finalX, node.x],
-            [finalX, node.x + node.w],
-            [finalX + dw, node.x],
-            [finalX + dw, node.x + node.w],
-            [finalX + dw / 2, node.x + node.w / 2],
-          ];
-          for (const [a, b] of xPairs) {
-            if (Math.abs(a - b) < SNAP_T) {
-              finalX += b - a;
-              guides.x = b;
-              break;
-            }
-          }
-          const yPairs: [number, number][] = [
-            [finalY, node.y],
-            [finalY, node.y + node.h],
-            [finalY + dh, node.y],
-            [finalY + dh, node.y + node.h],
-            [finalY + dh / 2, node.y + node.h / 2],
-          ];
-          for (const [a, b] of yPairs) {
-            if (Math.abs(a - b) < SNAP_T) {
-              finalY += b - a;
-              guides.y = b;
-              break;
-            }
-          }
-          if (guides.x !== undefined && guides.y !== undefined) break outer;
-        }
-        if (guides.x === undefined) {
-          const gx = Math.round(finalX / 20) * 20;
-          if (Math.abs(finalX - gx) < SNAP_T) finalX = gx;
-        }
-        if (guides.y === undefined) {
-          const gy = Math.round(finalY / 20) * 20;
-          if (Math.abs(finalY - gy) < SNAP_T) finalY = gy;
-        }
-      }
-      setSnapGuides(guides);
-      setNodes((prev) =>
-        prev.map((n) =>
-          n.id === drag.id ? { ...n, x: finalX, y: finalY } : n,
-        ),
-      );
-    }
-
-    const resize = pendingResizeSize.current;
-    if (resize) {
-      pendingResizeSize.current = null;
-      setNodes((prev) =>
-        prev.map((n) =>
-          n.id === resize.id ? { ...n, w: resize.w, h: resize.h } : n,
-        ),
-      );
-    }
-
-    const multiDelta = pendingMultiDragDelta.current;
-    if (multiDelta && multiDragging.current) {
-      pendingMultiDragDelta.current = null;
-      const { startPositions } = multiDragging.current;
-      const { dx, dy } = multiDelta;
-      setNodes((prev) =>
-        prev.map((n) => {
-          const start = startPositions.get(n.id);
-          return start ? { ...n, x: start.x + dx, y: start.y + dy } : n;
-        }),
-      );
-    }
-  }, []);
-
-  const onMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (canvasRef.current) {
-        const r = canvasRef.current.getBoundingClientRect();
-        lastMousePosRef.current = {
-          x: (e.clientX - r.left - panRef.current.x) / zoomRef.current,
-          y: (e.clientY - r.top - panRef.current.y) / zoomRef.current,
-        };
-      }
-
-      if (
-        !dragging.current &&
-        !resizing.current &&
-        !marquee.current &&
-        !multiDragging.current
-      )
-        return;
-
-      const pan = panRef.current;
-      const zoom = zoomRef.current;
-      let dirty = false;
-
-      if (dragging.current && canvasRef.current) {
-        const r = canvasRef.current.getBoundingClientRect();
-        const mx = (e.clientX - r.left - pan.x) / zoom;
-        const my = (e.clientY - r.top - pan.y) / zoom;
-        const { id, ox, oy } = dragging.current;
-        pendingDragPos.current = { id, x: mx - ox, y: my - oy };
-        dirty = true;
-      }
-
-      if (multiDragging.current && canvasRef.current) {
-        const r = canvasRef.current.getBoundingClientRect();
-        const mx = (e.clientX - r.left - pan.x) / zoom;
-        const my = (e.clientY - r.top - pan.y) / zoom;
-        pendingMultiDragDelta.current = {
-          dx: mx - multiDragging.current.startMouseX,
-          dy: my - multiDragging.current.startMouseY,
-        };
-        dirty = true;
-      }
-
-      if (marquee.current && canvasRef.current) {
-        const r = canvasRef.current.getBoundingClientRect();
-        const cx = (e.clientX - r.left - pan.x) / zoom;
-        const cy = (e.clientY - r.top - pan.y) / zoom;
-        const { startX, startY } = marquee.current;
-        const x = Math.min(startX, cx);
-        const y = Math.min(startY, cy);
-        const w = Math.abs(cx - startX);
-        const h = Math.abs(cy - startY);
-        marquee.current = { startX, startY, x, y, w, h };
-        setMarqueeRect({ x, y, w, h });
-        dirty = true;
-      }
-
-      if (resizing.current) {
-        const dx = (e.clientX - resizing.current.startX) / zoom;
-        const dy = (e.clientY - resizing.current.startY) / zoom;
-        const { id, startW, startH, constrain } = resizing.current;
-        let newW: number, newH: number;
-        if (constrain) {
-          // Circle: keep square — drive size by the larger delta
-          const d = Math.max(dx, dy);
-          newW = Math.max(80, startW + d);
-          newH = newW;
-        } else {
-          newW = Math.max(80, startW + dx);
-          newH = Math.max(50, startH + dy);
-        }
-        pendingResizeSize.current = { id, w: newW, h: newH };
-        dirty = true;
-      }
-
-      if (dirty && rafRef.current === null) {
-        rafRef.current = requestAnimationFrame(flushPending);
-      }
-    },
-    [flushPending],
-  );
-
-  const onMouseUp = useCallback(() => {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-    flushPending();
-
-    // Marquee completion: select all intersecting nodes
-    if (marquee.current) {
-      const { x, y, w, h } = marquee.current;
-      if (w > 4 || h > 4) {
-        const matchingIds: number[] = [];
-        for (const [, node] of nodeMapRef.current) {
-          if (
-            node.x < x + w &&
-            node.x + node.w > x &&
-            node.y < y + h &&
-            node.y + node.h > y
-          ) {
-            matchingIds.push(node.id);
-          }
-        }
-        setSelectedIds(new Set(matchingIds));
-      } else {
-        setSelectedIds(new Set());
-      }
-      marquee.current = null;
-      setMarqueeRect(null);
-    }
-
-    if (dragging.current || resizing.current || multiDragging.current) {
-      needsHistoryPushRef.current = true;
-    }
-    dragging.current = null;
-    resizing.current = null;
-    multiDragging.current = null;
-    pendingMultiDragDelta.current = null;
-    setSnapGuides({});
-  }, [flushPending]);
-
-  useEffect(() => {
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [onMouseMove, onMouseUp]);
-
   useEffect(() => {
     if (filterOpen) setTimeout(() => filterInputRef.current?.focus(), 50);
   }, [filterOpen]);
@@ -1774,7 +796,6 @@ export default function Canvas() {
     setFilterJumpIndex(0);
   }, [filterText, filterType]);
 
-  // ── Keyboard ──────────────────────────────────────────────────────────────────
   const arrangeBringToFront = useCallback((id: number) => {
     const newNodes = bringToFront(nodesRef.current, id);
     nodesRef.current = newNodes;
@@ -1799,140 +820,6 @@ export default function Canvas() {
     pushHistory();
     setNodes(newNodes);
   }, [pushHistory]);
-
-  // ── Force-directed layout ──────────────────────────────────────────────────
-  const computeForceLayout = useCallback(
-    (
-      sourceNodes: CanvasNode[],
-      sourceConnections: Connection[],
-    ): Array<{ id: number; newX: number; newY: number }> => {
-      const oldCx =
-        sourceNodes.reduce((s, n) => s + n.x + n.w / 2, 0) / sourceNodes.length;
-      const oldCy =
-        sourceNodes.reduce((s, n) => s + n.y + n.h / 2, 0) / sourceNodes.length;
-
-      type SimNode = { id: number; x: number; y: number; w: number; h: number };
-      const simNodes: SimNode[] = sourceNodes.map((n) => ({
-        id: n.id,
-        x: n.x + n.w / 2,
-        y: n.y + n.h / 2,
-        w: n.w,
-        h: n.h,
-      }));
-      const idToSim = new Map(simNodes.map((n) => [n.id, n]));
-
-      const simLinks = sourceConnections
-        .filter((c) => idToSim.has(c.from) && idToSim.has(c.to))
-        .map((c) => ({ source: c.from, target: c.to }));
-
-      const sim = forceSimulation<SimNode>(simNodes)
-        .force(
-          "link",
-          forceLink<SimNode, { source: number; target: number }>(simLinks)
-            .id((d) => d.id)
-            .distance(180)
-            .strength(0.5),
-        )
-        .force("charge", forceManyBody<SimNode>().strength(-150))
-        .force("center", forceCenter<SimNode>(oldCx, oldCy))
-        .force("x", forceX<SimNode>(oldCx).strength(0.05))
-        .force("y", forceY<SimNode>(oldCy).strength(0.05))
-        .force(
-          "collide",
-          forceCollide<SimNode>((d) => Math.hypot(d.w, d.h) / 2 + 20),
-        )
-        .stop();
-
-      for (let i = 0; i < 300; i++) sim.tick();
-
-      const newCxRaw = simNodes.reduce((s, n) => s + n.x, 0) / simNodes.length;
-      const newCyRaw = simNodes.reduce((s, n) => s + n.y, 0) / simNodes.length;
-      const dx = oldCx - newCxRaw;
-      const dy = oldCy - newCyRaw;
-
-      return simNodes.map((sn) => ({
-        id: sn.id,
-        newX: sn.x + dx - sn.w / 2,
-        newY: sn.y + dy - sn.h / 2,
-      }));
-    },
-    [],
-  );
-
-  const runForceLayout = useCallback(() => {
-    // Read current state from refs — avoids capturing nodes/connections as
-    // closure deps, which would cause this callback to be recreated on every
-    // drag frame and every animation frame.
-    const currentNodes = Array.from(nodeMapRef.current.values());
-    const currentConnections = connectionsRef.current;
-    if (currentNodes.length <= 1) return;
-
-    const targets = computeForceLayout(currentNodes, currentConnections);
-    const targetMap = new Map(targets.map((t) => [t.id, t]));
-
-    // Capture starting positions (current interpolated state if mid-animation)
-    const from = new Map(
-      currentNodes.map((n) => {
-        const mid = layoutFromRef.current?.get(n.id);
-        return [n.id, mid ?? { x: n.x, y: n.y }];
-      }),
-    );
-
-    // Cancel any in-flight animation
-    if (layoutRafRef.current !== null) {
-      cancelAnimationFrame(layoutRafRef.current);
-      layoutRafRef.current = null;
-    }
-    layoutFromRef.current = from;
-
-    const duration = 600;
-    const start = performance.now();
-
-    const tick = (now: number) => {
-      const t = Math.min((now - start) / duration, 1);
-      const e = easeInOutCubic(t);
-
-      if (t < 1) {
-        setNodes((prev) =>
-          prev.map((n) => {
-            const f = from.get(n.id);
-            const tgt = targetMap.get(n.id);
-            if (!f || !tgt) return n;
-            return {
-              ...n,
-              x: f.x + (tgt.newX - f.x) * e,
-              y: f.y + (tgt.newY - f.y) * e,
-            };
-          }),
-        );
-        // Track interpolated positions using from+targetMap (both stable in this
-        // closure), so a mid-animation interrupt reads the correct current position.
-        layoutFromRef.current = new Map(
-          Array.from(from.entries()).map(([id, f]) => {
-            const tgt = targetMap.get(id);
-            if (!tgt) return [id, f];
-            return [
-              id,
-              { x: f.x + (tgt.newX - f.x) * e, y: f.y + (tgt.newY - f.y) * e },
-            ];
-          }),
-        );
-        layoutRafRef.current = requestAnimationFrame(tick);
-      } else {
-        setNodes((prev) =>
-          prev.map((n) => {
-            const tgt = targetMap.get(n.id);
-            return tgt ? { ...n, x: tgt.newX, y: tgt.newY } : n;
-          }),
-        );
-        layoutRafRef.current = null;
-        layoutFromRef.current = null;
-        needsHistoryPushRef.current = true;
-      }
-    };
-
-    layoutRafRef.current = requestAnimationFrame(tick);
-  }, [computeForceLayout]);
 
   const deleteSelected = useCallback(() => {
     if (selectedIdsRef.current.size > 0) {
@@ -2003,7 +890,7 @@ export default function Canvas() {
     setPresentationOrder(newOrder);
     setSelected(newId);
     setContextMenu(null);
-  }, [pushHistory]);
+  }, [pushHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const movePresentationNodeUp = useCallback((id: number) => {
     const prev = presentationOrderRef.current;
@@ -2096,675 +983,72 @@ export default function Canvas() {
     });
   }, []);
 
-  const centerNodeForPresentation = useCallback((id: number) => {
-    const n = nodeMapRef.current.get(id);
-    if (!n || !canvasRef.current) return;
-    const r = canvasRef.current.getBoundingClientRect();
-    const toZoom = Math.min(
-      1.5,
-      Math.max(0.1, Math.min((r.width * 0.8) / n.w, (r.height * 0.8) / n.h)),
-    );
-    const toPan = {
-      x: r.width / 2 - (n.x + n.w / 2) * toZoom,
-      y: r.height / 2 - (n.y + n.h / 2) * toZoom,
-    };
-
-    // Cancel in-flight animation; start from the last interpolated position
-    // so a mid-animation interrupt never jumps to a stale state.
-    if (animRafRef.current !== null) {
-      cancelAnimationFrame(animRafRef.current);
-      animRafRef.current = null;
-    }
-    const fromPan = animCurrentRef.current?.pan ?? panRef.current;
-    const fromZoom = animCurrentRef.current?.zoom ?? zoomRef.current;
-    animCurrentRef.current = { pan: fromPan, zoom: fromZoom };
-
-    const DURATION = 600;
-    const startTime = performance.now();
-
-    function tick(now: number) {
-      const raw = Math.min((now - startTime) / DURATION, 1);
-      const t = easeInOutCubic(raw);
-      const curZoom = fromZoom + (toZoom - fromZoom) * t;
-      const curPan = {
-        x: fromPan.x + (toPan.x - fromPan.x) * t,
-        y: fromPan.y + (toPan.y - fromPan.y) * t,
-      };
-      animCurrentRef.current = { pan: curPan, zoom: curZoom };
-      setZoom(curZoom);
-      setPan(curPan);
-      if (raw < 1) {
-        animRafRef.current = requestAnimationFrame(tick);
-      } else {
-        animRafRef.current = null;
-        animCurrentRef.current = null;
-      }
-    }
-
-    animRafRef.current = requestAnimationFrame(tick);
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-
-      if (
-        (e.key === "f" || e.key === "F") &&
-        !t.isContentEditable &&
-        t.tagName !== "INPUT"
-      ) {
-        e.preventDefault();
-        if (filterOpenRef.current) {
-          setFilterOpen(false);
-          setFilterText("");
-          setFilterType("all");
-        } else {
-          setFilterOpen(true);
-        }
-        return;
-      }
-
-      if (filterOpenRef.current && filterActiveRef.current) {
-        const matched = matchedNodesSortedRef.current;
-        if (e.key === "ArrowDown" && matched.length > 0) {
-          e.preventDefault();
-          const next = (filterJumpIndexRef.current + 1) % matched.length;
-          setFilterJumpIndex(next);
-          focusNode(matched[next].id);
-          return;
-        }
-        if (e.key === "ArrowUp" && matched.length > 0) {
-          e.preventDefault();
-          const next =
-            (filterJumpIndexRef.current - 1 + matched.length) % matched.length;
-          setFilterJumpIndex(next);
-          focusNode(matched[next].id);
-          return;
-        }
-      }
-
-      if (
-        (e.key === "Delete" || e.key === "Backspace") &&
-        !t.isContentEditable &&
-        t.tagName !== "INPUT" &&
-        (selectedRef.current !== null || selectedIdsRef.current.size > 0)
-      )
-        deleteSelected();
-      if (e.key === "Escape") {
-        if (isPresentingRef.current) {
-          if (animRafRef.current !== null) {
-            cancelAnimationFrame(animRafRef.current);
-            animRafRef.current = null;
-            animCurrentRef.current = null;
-          }
-          setIsPresenting(false);
-          if (prePresentState.current) {
-            setPan(prePresentState.current.pan);
-            setZoom(prePresentState.current.zoom);
-            prePresentState.current = null;
-          }
-          return;
-        }
-        if (editingNodeIdRef.current !== null) {
-          (document.activeElement as HTMLElement)?.blur();
-        }
-        setConnectDrag(null);
-        setContextMenu(null);
-        setColorPicker(null);
-        setTextColorPicker(null);
-        if (filterOpenRef.current) {
-          setFilterOpen(false);
-          setFilterText("");
-          setFilterType("all");
-        }
-      }
-      if (isPresentingRef.current) {
-        const seq = presentActiveSeqRef.current;
-        const idx = presentationIndexRef.current;
-        if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === " ") {
-          e.preventDefault();
-          const next = Math.min(idx + 1, seq.length - 1);
-          if (next !== idx) {
-            setPresentationIndex(next);
-            centerNodeForPresentation(seq[next]);
-          }
-        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-          e.preventDefault();
-          const prev = Math.max(idx - 1, 0);
-          if (prev !== idx) {
-            setPresentationIndex(prev);
-            centerNodeForPresentation(seq[prev]);
-          }
-        }
-        return;
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault();
-        saveBoardRef.current();
-        return;
-      }
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        e.key === "z" &&
-        !t.isContentEditable &&
-        t.tagName !== "INPUT"
-      ) {
-        e.preventDefault();
-        if (e.shiftKey) {
-          redoRef.current();
-        } else {
-          undoRef.current();
-        }
-        return;
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "c" && !t.isContentEditable)
-        copySelected();
-      if ((e.metaKey || e.ctrlKey) && e.key === "v" && !t.isContentEditable)
-        pasteNode();
-      if (
-        e.key === "Tab" &&
-        !t.isContentEditable &&
-        selectedRef.current !== null
-      ) {
-        e.preventDefault();
-        const selId = selectedRef.current;
-        const n = nodeMapRef.current.get(selId);
-        if (n) {
-          const maxId = getMaxNodeId(nodeMapRef.current);
-          if (idCounterRef.current <= maxId) idCounterRef.current = maxId + 1;
-          const newId = idCounterRef.current;
-          idCounterRef.current += 1;
-          const re1 = /^Block\s+(\d+)$/;
-          let maxBlockIdx1 = 0;
-          for (const node of nodeMapRef.current.values())
-            if (node.type === "block") {
-              const m = (node.label ?? "").match(re1);
-              if (m) maxBlockIdx1 = Math.max(maxBlockIdx1, parseInt(m[1], 10));
-            }
-          const tabNode: CanvasNode = {
-            id: newId, x: n.x + n.w + 80, y: n.y, w: 200, h: 80,
-            title: "", label: `Block ${maxBlockIdx1 + 1}`, body: "",
-            type: "block", color: "#1D5C50", fontSize: 13,
-          };
-          const tabNodes = [...nodesRef.current, tabNode];
-          const tabConns = [...connectionsRef.current, { from: selId, to: newId }];
-          const tabOrder = [...presentationOrderRef.current, newId];
-          nodesRef.current = tabNodes;
-          connectionsRef.current = tabConns;
-          presentationOrderRef.current = tabOrder;
-          pushHistory();
-          setNodes(tabNodes);
-          setConnections(tabConns);
-          setPresentationOrder(tabOrder);
-          setSelected(newId);
-          editingNodeIdRef.current = newId;
-          setTimeout(() => {
-            document
-              .querySelector<HTMLElement>(
-                `[data-node-id="${newId}"] [contenteditable]`,
-              )
-              ?.focus();
-          }, 50);
-        }
-      }
-      if (
-        e.key === "Enter" &&
-        !t.isContentEditable &&
-        selectedRef.current !== null
-      ) {
-        e.preventDefault();
-        const selId = selectedRef.current;
-        const n = nodeMapRef.current.get(selId);
-        if (n) {
-          const maxId = getMaxNodeId(nodeMapRef.current);
-          if (idCounterRef.current <= maxId) idCounterRef.current = maxId + 1;
-          const newId = idCounterRef.current;
-          idCounterRef.current += 1;
-          const re2 = /^Block\s+(\d+)$/;
-          let maxBlockIdx2 = 0;
-          for (const node of nodeMapRef.current.values())
-            if (node.type === "block") {
-              const m = (node.label ?? "").match(re2);
-              if (m) maxBlockIdx2 = Math.max(maxBlockIdx2, parseInt(m[1], 10));
-            }
-          const enterNode: CanvasNode = {
-            id: newId, x: n.x, y: n.y + n.h + 40, w: 200, h: 80,
-            title: "", label: `Block ${maxBlockIdx2 + 1}`, body: "",
-            type: "block", color: "#1D5C50", fontSize: 13,
-          };
-          const enterNodes = [...nodesRef.current, enterNode];
-          const enterOrder = [...presentationOrderRef.current, newId];
-          nodesRef.current = enterNodes;
-          presentationOrderRef.current = enterOrder;
-          pushHistory();
-          setNodes(enterNodes);
-          setPresentationOrder(enterOrder);
-          setSelected(newId);
-          editingNodeIdRef.current = newId;
-          setTimeout(() => {
-            document
-              .querySelector<HTMLElement>(
-                `[data-node-id="${newId}"] [contenteditable]`,
-              )
-              ?.focus();
-          }, 50);
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [
+  // ── Keyboard ──────────────────────────────────────────────────────────────────
+  useKeyboardShortcuts({
+    filterOpenRef,
+    filterActiveRef,
+    filterJumpIndexRef,
+    matchedNodesSortedRef,
+    setFilterOpen,
+    setFilterText,
+    setFilterType,
+    setFilterJumpIndex,
+    focusNode,
+    selectedRef,
+    selectedIdsRef,
     deleteSelected,
     copySelected,
     pasteNode,
-    focusNode,
+    isPresentingRef,
+    presentationIndexRef,
+    presentActiveSeqRef,
+    prePresentStateRef,
+    animRafRef,
+    animCurrentRef,
+    setIsPresenting,
+    setPresentationIndex,
     centerNodeForPresentation,
+    setPan,
+    setZoom,
+    editingNodeIdRef,
+    setConnectDrag,
+    setContextMenu,
+    setColorPicker,
+    setTextColorPicker,
+    saveBoardRef,
+    undo,
+    redo,
     pushHistory,
-  ]);
-
-  // ── Helpers ───────────────────────────────────────────────────────────────────
-  const menuItem = (danger = false): React.CSSProperties => ({
-    padding: "9px 14px",
-    cursor: "pointer",
-    fontSize: 13.5,
-    color: danger ? "#FF6B6B" : "#FFFFFF",
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
+    nodeMapRef,
+    idCounterRef,
+    nodesRef,
+    connectionsRef,
+    presentationOrderRef,
+    setNodes,
+    setConnections,
+    setPresentationOrder,
+    setSelected,
   });
-
-  const hoverMenu = (e: React.MouseEvent, on: boolean, danger = false) => {
-    (e.currentTarget as HTMLElement).style.background = on
-      ? danger
-        ? "rgba(255,107,107,0.1)"
-        : "rgba(255,255,255,0.06)"
-      : "transparent";
-  };
 
   // ── Vector PDF export (jsPDF direct) ────────────────────────────────────────
   const exportPdfVector = useCallback(async () => {
-    if (nodes.length === 0) return;
-
-    const { jsPDF } = await import("jspdf");
-
-    const PAD = 40;
-    const minX = nodes.reduce((m, n) => Math.min(m, n.x), Infinity) - PAD;
-    const minY = nodes.reduce((m, n) => Math.min(m, n.y), Infinity) - PAD;
-    const maxX =
-      nodes.reduce((m, n) => Math.max(m, n.x + n.w), -Infinity) + PAD;
-    const maxY =
-      nodes.reduce((m, n) => Math.max(m, n.y + n.h), -Infinity) + PAD;
-    const contentW = Math.ceil(maxX - minX);
-    const contentH = Math.ceil(maxY - minY);
-
-    // Same 14000-unit safety cap as before.
-    const SAFE_MAX = 14000;
-    const exportScale =
-      Math.max(contentW, contentH) > SAFE_MAX
-        ? SAFE_MAX / Math.max(contentW, contentH)
-        : 1;
-    const pdfW = Math.round(contentW * exportScale);
-    const pdfH = Math.round(contentH * exportScale);
-
-    const doc = new jsPDF({
-      orientation: pdfW >= pdfH ? "landscape" : "portrait",
-      unit: "px",
-      format: [pdfW, pdfH],
-    });
-
-    // Translate world coordinate → PDF coordinate.
-    const px = (wx: number) => (wx - minX) * exportScale;
-    const py = (wy: number) => (wy - minY) * exportScale;
-
-    // Background fill.
-    const [bgR, bgG, bgB] = parseColorForPdf("#0C2018");
-    doc.setFillColor(bgR, bgG, bgB);
-    doc.rect(0, 0, pdfW, pdfH, "F");
-
-    // ── 1. Connection lines (drawn first so they sit behind nodes) ─────────────
-    // Geometry replicates ConnectionLine exactly: axis-dominant edge selection,
-    // cpOffset = max(40, dist*0.4), cubic bezier tangent perpendicular to edge.
-    // On-screen stroke is rgba(255,255,255,0.7) on #0C2018.
-    // Blended opaque equivalent: rgb(182,188,186) — used here since jsPDF has no alpha.
-    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-    doc.setDrawColor(182, 188, 186);
-    doc.setLineWidth(1.5);
-    doc.setLineCap("round");
-
-    for (const c of connections) {
-      const fn = nodeMap.get(c.from);
-      const tn = nodeMap.get(c.to);
-      if (!fn || !tn) continue;
-
-      const fcx = fn.x + fn.w / 2;
-      const fcy = fn.y + fn.h / 2;
-      const tcx = tn.x + tn.w / 2;
-      const tcy = tn.y + tn.h / 2;
-      const dx = tcx - fcx;
-      const dy = tcy - fcy;
-
-      let x1: number, y1: number, x2: number, y2: number, cpOffset: number;
-
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        const dist = Math.abs(dx);
-        cpOffset = Math.max(40, dist * 0.4);
-        if (dx >= 0) {
-          x1 = fn.x + fn.w;
-          y1 = fcy;
-          x2 = tn.x;
-          y2 = tcy;
-        } else {
-          x1 = fn.x;
-          y1 = fcy;
-          x2 = tn.x + tn.w;
-          y2 = tcy;
-        }
-      } else {
-        const dist = Math.abs(dy);
-        cpOffset = Math.max(40, dist * 0.4);
-        if (dy >= 0) {
-          x1 = fcx;
-          y1 = fn.y + fn.h;
-          x2 = tcx;
-          y2 = tn.y;
-        } else {
-          x1 = fcx;
-          y1 = fn.y;
-          x2 = tcx;
-          y2 = tn.y + tn.h;
-        }
-      }
-
-      let c1x: number, c1y: number, c2x: number, c2y: number;
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        const sign = dx >= 0 ? 1 : -1;
-        c1x = x1 + sign * cpOffset;
-        c1y = y1;
-        c2x = x2 - sign * cpOffset;
-        c2y = y2;
-      } else {
-        const sign = dy >= 0 ? 1 : -1;
-        c1x = x1;
-        c1y = y1 + sign * cpOffset;
-        c2x = x2;
-        c2y = y2 - sign * cpOffset;
-      }
-
-      doc.moveTo(px(x1), py(y1));
-      doc.curveTo(px(c1x), py(c1y), px(c2x), py(c2y), px(x2), py(y2));
-      doc.stroke();
-    }
-
-    // ── 2. All shape nodes (drawn over connection lines) ────────────────────────
-    // "text" nodes have no filled background on-screen, so we skip them.
-    // All other types get a filled shape so connection line endpoints are visible.
-    // Image nodes: n.imageUrl is already a data URL in React state (loaded from
-    // IndexedDB at hydration time) — no async fetch needed. addImage() is
-    // synchronous for data URLs, so all images are embedded before doc.save().
-    for (const n of nodes) {
-      if (n.type === "text") continue;
-      const [r, g, b] = parseColorForPdf(n.color || "#1D5C50");
-      doc.setFillColor(r, g, b);
-      const nx = px(n.x),
-        ny = py(n.y);
-      const nw = n.w * exportScale,
-        nh = n.h * exportScale;
-
-      if (n.type === "image") {
-        let embedded = false;
-        if (n.imageUrl) {
-          try {
-            const fmtMatch = n.imageUrl.match(/^data:image\/([a-z0-9]+);/i);
-            const rawFmt = fmtMatch ? fmtMatch[1].toUpperCase() : "JPEG";
-            const fmt = rawFmt === "JPG" ? "JPEG" : rawFmt;
-            doc.addImage(n.imageUrl, fmt, nx, ny, nw, nh);
-            embedded = true;
-          } catch {
-            // Unsupported format or corrupt data — fall through to rectangle
-          }
-        }
-        if (!embedded) doc.rect(nx, ny, nw, nh, "F");
-      } else if (n.type === "circle" || n.type === "oval") {
-        doc.ellipse(nx + nw / 2, ny + nh / 2, nw / 2, nh / 2, "F");
-      } else if (n.type === "diamond") {
-        const cx = nx + nw / 2,
-          cy = ny + nh / 2;
-        doc.moveTo(cx, ny);
-        doc.lineTo(nx + nw, cy);
-        doc.lineTo(cx, ny + nh);
-        doc.lineTo(nx, cy);
-        doc.fill();
-      } else if (n.type === "rounded") {
-        const cr = Math.min(12 * exportScale, nw / 4, nh / 4);
-        doc.roundedRect(nx, ny, nw, nh, cr, cr, "F");
-      } else {
-        // block, textfile — solid rectangle
-        doc.rect(nx, ny, nw, nh, "F");
-      }
-    }
-
-    // ── 3. Text labels (drawn last so they sit above shapes) ─────────────────
-    // Padding values mirror NodeView's CSS exactly.
-    // Font sizes: CSS px × 0.75 = pt (jsPDF always takes pt for setFontSize).
-    // Line heights: 1.2× for title (no explicit lineHeight on screen),
-    //               1.55× for body (matches on-screen lineHeight: 1.55).
-    // Wrapping: splitTextToSize uses the current font size for char-width
-    //           measurement, so setFontSize must be called before it.
-    for (const n of nodes) {
-      if (n.type === "image") continue;
-      try {
-        const [fr, fg, fb] = parseColorForPdf(n.color || "#1D5C50");
-        const isDark = (0.299 * fr + 0.587 * fg + 0.114 * fb) / 255 < 0.45;
-        const nx = px(n.x),
-          ny = py(n.y);
-        const nw = n.w * exportScale,
-          nh = n.h * exportScale;
-        // text nodes have no fill — composite against canvas background
-        const bgR = n.type === "text" ? PDF_BG_RGB[0] : fr;
-        const bgG = n.type === "text" ? PDF_BG_RGB[1] : fg;
-        const bgB = n.type === "text" ? PDF_BG_RGB[2] : fb;
-
-        const fs = n.fontSize ?? 13;
-        const sTitleFs = fs * exportScale; // title font size, px
-        const sBodyFs = Math.max(11, fs - 2) * exportScale; // body font size, px
-        const titleFsPt = sTitleFs * 0.75;
-        const bodyFsPt = sBodyFs * 0.75;
-        const titleLineH = sTitleFs * 1.2;
-        const bodyLineH = sBodyFs * 1.55;
-        const fStyle: string =
-          n.bold && n.italic
-            ? "bolditalic"
-            : n.bold
-              ? "bold"
-              : n.italic
-                ? "italic"
-                : "normal";
-
-        // Title color
-        const [tcR, tcG, tcB] = parseColorForPdf(
-          n.textColor ?? (isDark ? "#FFFFFF" : "#111111"),
-        );
-
-        // Body color — matches NodeView: n.textColor+"bb" (≈73% alpha) or rgba(255,255,255,0.82)
-        const AB = 0xbb / 0xff; // 73.3%
-        let bR: number, bG: number, bB: number;
-        if (n.textColor) {
-          const [tR, tG, tB] = parseColorForPdf(n.textColor);
-          bR = Math.round(AB * tR + (1 - AB) * bgR);
-          bG = Math.round(AB * tG + (1 - AB) * bgG);
-          bB = Math.round(AB * tB + (1 - AB) * bgB);
-        } else if (isDark) {
-          bR = Math.round(0.82 * 255 + 0.18 * bgR);
-          bG = Math.round(0.82 * 255 + 0.18 * bgG);
-          bB = Math.round(0.82 * 255 + 0.18 * bgB);
-        } else {
-          bR = bG = bB = 136; // #888
-        }
-
-        const title = (n.title ?? "").trim();
-        const body = (n.body ?? "").trim();
-
-        if (n.type === "text") {
-          if (!title) continue;
-          const [cr, cg, cb] = parseColorForPdf(n.textColor ?? "#FFFFFF");
-          doc.setFont("helvetica", fStyle);
-          doc.setFontSize(titleFsPt);
-          doc.setTextColor(cr, cg, cb);
-          const maxW = Math.max(10, nw - 24 * exportScale);
-          const lines: string[] = doc.splitTextToSize(title, maxW);
-          const totalH = lines.length * titleLineH;
-          const startY = ny + nh / 2 - totalH / 2;
-          lines.forEach((line: string, i: number) =>
-            doc.text(line, nx + nw / 2, startY + i * titleLineH, {
-              baseline: "top",
-              align: "center",
-            }),
-          );
-        } else if (n.type === "textfile") {
-          const label = (n.textFileName ?? n.title ?? "").trim();
-          if (!label) continue;
-          // rgba(255,255,255,0.82) over node fill
-          const lfR = Math.round(0.82 * 255 + 0.18 * fr);
-          const lfG = Math.round(0.82 * 255 + 0.18 * fg);
-          const lfB = Math.round(0.82 * 255 + 0.18 * fb);
-          const padH = 12 * exportScale;
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(titleFsPt);
-          doc.setTextColor(lfR, lfG, lfB);
-          const maxW = Math.max(10, nw - 2 * padH);
-          const lines: string[] = doc.splitTextToSize(label, maxW);
-          const startY = ny + nh / 2 - titleLineH / 2;
-          doc.text(lines[0], nx + padH, startY, { baseline: "top" });
-        } else if (n.type === "diamond") {
-          const padH = 28 * exportScale;
-          const maxW = Math.max(10, nw - 2 * padH);
-          doc.setFont("helvetica", fStyle);
-          doc.setFontSize(titleFsPt);
-          const titleLines: string[] = title
-            ? doc.splitTextToSize(title, maxW)
-            : [];
-          doc.setFontSize(bodyFsPt);
-          const bodyLines: string[] = body
-            ? doc.splitTextToSize(body, maxW)
-            : [];
-          const totalH =
-            titleLines.length * titleLineH +
-            (bodyLines.length > 0
-              ? 3 * exportScale + bodyLines.length * bodyLineH
-              : 0);
-          let curY = ny + (nh - totalH) / 2;
-          if (titleLines.length > 0) {
-            doc.setFont("helvetica", fStyle);
-            doc.setFontSize(titleFsPt);
-            doc.setTextColor(tcR, tcG, tcB);
-            titleLines.forEach((line: string) => {
-              doc.text(line, nx + nw / 2, curY, {
-                baseline: "top",
-                align: "center",
-              });
-              curY += titleLineH;
-            });
-          }
-          if (bodyLines.length > 0) {
-            curY += 3 * exportScale;
-            doc.setFont("helvetica", fStyle);
-            doc.setFontSize(bodyFsPt);
-            doc.setTextColor(bR, bG, bB);
-            bodyLines.forEach((line: string) => {
-              doc.text(line, nx + nw / 2, curY, {
-                baseline: "top",
-                align: "center",
-              });
-              curY += bodyLineH;
-            });
-          }
-        } else if (n.type === "circle" || n.type === "oval") {
-          const padH = 16 * exportScale;
-          const maxW = Math.max(10, nw - 2 * padH);
-          doc.setFont("helvetica", fStyle);
-          doc.setFontSize(titleFsPt);
-          const titleLines: string[] = title
-            ? doc.splitTextToSize(title, maxW)
-            : [];
-          doc.setFontSize(bodyFsPt);
-          const bodyLines: string[] = body
-            ? doc.splitTextToSize(body, maxW)
-            : [];
-          const totalH =
-            titleLines.length * titleLineH +
-            (bodyLines.length > 0
-              ? 5 * exportScale + bodyLines.length * bodyLineH
-              : 0);
-          let curY = ny + (nh - totalH) / 2;
-          if (titleLines.length > 0) {
-            doc.setFont("helvetica", fStyle);
-            doc.setFontSize(titleFsPt);
-            doc.setTextColor(tcR, tcG, tcB);
-            titleLines.forEach((line: string) => {
-              doc.text(line, nx + nw / 2, curY, {
-                baseline: "top",
-                align: "center",
-              });
-              curY += titleLineH;
-            });
-          }
-          if (bodyLines.length > 0) {
-            curY += 5 * exportScale;
-            doc.setFont("helvetica", fStyle);
-            doc.setFontSize(bodyFsPt);
-            doc.setTextColor(bR, bG, bB);
-            bodyLines.forEach((line: string) => {
-              doc.text(line, nx + nw / 2, curY, {
-                baseline: "top",
-                align: "center",
-              });
-              curY += bodyLineH;
-            });
-          }
-        } else {
-          // block, rounded — top-left aligned
-          const padH = 18 * exportScale;
-          const padTop = 14 * exportScale;
-          const maxW = Math.max(10, nw - 2 * padH);
-          doc.setFont("helvetica", fStyle);
-          doc.setFontSize(titleFsPt);
-          const titleLines: string[] = title
-            ? doc.splitTextToSize(title, maxW)
-            : [];
-          doc.setFontSize(bodyFsPt);
-          const bodyLines: string[] = body
-            ? doc.splitTextToSize(body, maxW)
-            : [];
-          let curY = ny + padTop;
-          if (titleLines.length > 0) {
-            doc.setFont("helvetica", fStyle);
-            doc.setFontSize(titleFsPt);
-            doc.setTextColor(tcR, tcG, tcB);
-            titleLines.forEach((line: string) => {
-              doc.text(line, nx + padH, curY, { baseline: "top" });
-              curY += titleLineH;
-            });
-          }
-          if (bodyLines.length > 0) {
-            curY += 5 * exportScale;
-            doc.setFont("helvetica", fStyle);
-            doc.setFontSize(bodyFsPt);
-            doc.setTextColor(bR, bG, bB);
-            bodyLines.forEach((line: string) => {
-              doc.text(line, nx + padH, curY, { baseline: "top" });
-              curY += bodyLineH;
-            });
-          }
-        }
-      } catch {
-        // Never crash the export over one node's text
-      }
-    }
-
-    const safeName =
-      boardName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "board";
-    doc.save(`${safeName}-vector.pdf`);
+    await exportBoardPdf(nodes, connections, boardName);
   }, [nodes, connections, boardName]);
+
+  const startPresentation = () => {
+    if (presentActiveSeq.length === 0) return;
+    prePresentStateRef.current = {
+      pan: panRef.current,
+      zoom: zoomRef.current,
+    };
+    setPresentationIndex(0);
+    setIsPresenting(true);
+    setActivePanel(null);
+    setContextMenu(null);
+    setColorPicker(null);
+    setTextColorPicker(null);
+    centerNodeForPresentation(presentActiveSeq[0]);
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const panelOpen = activePanel !== null;
@@ -2825,1523 +1109,68 @@ export default function Canvas() {
         </defs>
       </svg>
 
-      {/* ── Sidebar Strip (always visible, 52px) ── */}
-      <div
-        style={{
-          position: "fixed",
-          top: 12,
-          left: 12,
-          height: "calc(100vh - 24px)",
-          width: 52,
-          background:
-            "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          borderRadius: 16,
-          boxShadow:
-            "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
-          zIndex: 151,
-          display: isPresenting ? "none" : "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          padding: "14px 0",
-          fontFamily:
-            "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-        }}
-      >
-        {/* Logo mark — decorative, not clickable */}
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 22 22"
-          fill="none"
-          style={{ flexShrink: 0, display: "block" }}
-        >
-          <rect
-            x="0.5"
-            y="0.5"
-            width="21"
-            height="21"
-            rx="5"
-            stroke="rgba(241,178,74,0.3)"
-            strokeWidth="1"
-          />
-          <rect
-            x="4"
-            y="4"
-            width="14"
-            height="14"
-            rx="3"
-            fill="rgba(241,178,74,0.12)"
-          />
-          <rect
-            x="7"
-            y="7"
-            width="8"
-            height="8"
-            rx="2"
-            fill="rgba(241,178,74,0.45)"
-          />
-        </svg>
+      <SidebarStrip
+        isPresenting={isPresenting}
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+      />
 
-        {/* gap */}
-        <div style={{ height: 20 }} />
+      <SidebarPanel
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+        isPresenting={isPresenting}
+        boardName={boardName}
+        setBoardName={setBoardName}
+        editingBoardName={editingBoardName}
+        setEditingBoardName={setEditingBoardName}
+        nodes={nodes}
+        selected={selected}
+        editingSidebarNodeId={editingSidebarNodeId}
+        setEditingSidebarNodeId={setEditingSidebarNodeId}
+        focusNode={focusNode}
+        updateNodeLabel={updateNodeLabel}
+        presentationOrder={presentationOrder}
+        nodeMap={nodeMap}
+        presentActiveSeqLength={presentActiveSeq.length}
+        toggleExcludeFromPresentation={toggleExcludeFromPresentation}
+        movePresentationNodeUp={movePresentationNodeUp}
+        movePresentationNodeDown={movePresentationNodeDown}
+        onPresent={startPresentation}
+        saveBoard={saveBoard}
+        onLoadBoardClick={() => denkraumFileInputRef.current?.click()}
+      />
 
-        {/* Nav buttons */}
-        {(
-          [
-            {
-              section: "board" as const,
-              title: "Board",
-              icon: (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="3" y1="9" x2="21" y2="9" />
-                </svg>
-              ),
-            },
-            {
-              section: "nodes" as const,
-              title: "Nodes",
-              icon: (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="6" cy="6" r="2.5" />
-                  <circle cx="18" cy="18" r="2.5" />
-                  <line x1="8" y1="8" x2="16" y2="16" />
-                </svg>
-              ),
-            },
-            {
-              section: "presentation" as const,
-              title: "Presentation",
-              icon: (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polygon points="5,3 19,12 5,21" />
-                </svg>
-              ),
-            },
-            {
-              section: "saveload" as const,
-              title: "Save / Load",
-              icon: (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-              ),
-            },
-            {
-              section: "shortcuts" as const,
-              title: "Shortcuts",
-              icon: (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="2" y="6" width="20" height="12" rx="2" />
-                  <line x1="6" y1="10" x2="6.01" y2="10" />
-                  <line x1="10" y1="10" x2="10.01" y2="10" />
-                  <line x1="14" y1="10" x2="14.01" y2="10" />
-                  <line x1="8" y1="14" x2="16" y2="14" />
-                </svg>
-              ),
-            },
-          ] as {
-            section:
-              | "board"
-              | "nodes"
-              | "presentation"
-              | "saveload"
-              | "shortcuts";
-            title: string;
-            icon: React.ReactNode;
-          }[]
-        ).map(({ section, title, icon }) => {
-          const isActive = activePanel === section;
-          return (
-            <button
-              key={section}
-              title={title}
-              onClick={() =>
-                setActivePanel((prev) => (prev === section ? null : section))
-              }
-              style={{
-                position: "relative",
-                width: 36,
-                height: 36,
-                borderRadius: 9,
-                marginBottom: 6,
-                border: "none",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: isActive ? "#F1B24A" : "rgba(255,255,255,0.75)",
-                background: isActive ? "rgba(241,178,74,0.12)" : "transparent",
-                flexShrink: 0,
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  (e.currentTarget as HTMLElement).style.color =
-                    "rgba(255,255,255,0.95)";
-                  (e.currentTarget as HTMLElement).style.background =
-                    "rgba(255,255,255,0.06)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  (e.currentTarget as HTMLElement).style.color =
-                    "rgba(255,255,255,0.75)";
-                  (e.currentTarget as HTMLElement).style.background =
-                    "transparent";
-                }
-              }}
-            >
-              {isActive && (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: -8,
-                    top: 6,
-                    width: 2.5,
-                    height: 24,
-                    background: "#F1B24A",
-                    borderRadius: "0 2px 2px 0",
-                  }}
-                />
-              )}
-              {icon}
-            </button>
-          );
-        })}
-
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
-
-        {/* Avatar */}
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: "50%",
-            background: "rgba(255,255,255,0.06)",
-            border: "0.5px solid rgba(255,255,255,0.1)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-            fontWeight: 600,
-            color: "rgba(255,255,255,0.4)",
-            flexShrink: 0,
-          }}
-        >
-          A
-        </div>
-      </div>
-
-      {/* ── Sidebar Panel (220px, shown when panel open) ── */}
-      <div
-        style={{
-          position: "fixed",
-          top: 12,
-          left: 76,
-          height: "calc(100vh - 24px)",
-          width: 220,
-          background:
-            "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
-          backdropFilter: "blur(24px)",
-          WebkitBackdropFilter: "blur(24px)",
-          borderRadius: 16,
-          boxShadow:
-            "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
-          zIndex: 149,
-          display: panelOpen && !isPresenting ? "flex" : "none",
-          flexDirection: "column",
-          overflow: "hidden",
-          fontFamily:
-            "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-        }}
-      >
-        {/* ── Panel Header (dynamic title) ── */}
-        <div
-          style={{
-            height: 52,
-            flexShrink: 0,
-            background: "rgba(0,0,0,0.15)",
-            borderBottom: "0.5px solid rgba(255,255,255,0.05)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 14px 0 16px",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "1.4px",
-              color: "#FFFFFF",
-            }}
-          >
-            {activePanel === "board" && "BOARD"}
-            {activePanel === "nodes" && "NODES"}
-            {activePanel === "presentation" && "PRESENT"}
-            {activePanel === "saveload" && "BOARD FILES"}
-            {activePanel === "shortcuts" && "SHORTCUTS"}
-          </span>
-          <button
-            onClick={() => setActivePanel(null)}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: "rgba(255,255,255,0.7)",
-              fontSize: 13,
-              cursor: "pointer",
-              padding: "4px 6px",
-              lineHeight: 1,
-              borderRadius: 5,
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.8)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.7)";
-            }}
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Icon gradient defs — always in DOM for SidebarNodeItem icons */}
-        <svg
-          width="0"
-          height="0"
-          style={{ position: "absolute", pointerEvents: "none" }}
-        >
-          <defs>
-            {(
-              [
-                "iconGradBlock",
-                "iconGradRounded",
-                "iconGradCircle",
-                "iconGradOval",
-                "iconGradDiamond",
-                "iconGradText",
-                "iconGradImage",
-                "iconGradTextfile",
-              ] as string[]
-            ).map((id) => (
-              <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#265048" />
-                <stop offset="100%" stopColor="#143F38" />
-              </linearGradient>
-            ))}
-          </defs>
-        </svg>
-
-        {/* ── BOARD section ── */}
-        {activePanel === "board" && (
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              overflowX: "hidden",
-              paddingTop: 12,
-            }}
-          >
-            {/* Board row */}
-            <div
-              onDoubleClick={() => setEditingBoardName(true)}
-              style={{
-                position: "relative",
-                height: 40,
-                display: "flex",
-                alignItems: "center",
-                cursor: "text",
-                background:
-                  "linear-gradient(to right, rgba(241,178,74,0.07), transparent)",
-                justifyContent: "flex-start",
-              }}
-            >
-              {/* Left accent bar */}
-              <div
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  top: 0,
-                  width: 2.5,
-                  height: 40,
-                  background: "#F1B24A",
-                  borderRadius: "0 1px 1px 0",
-                }}
-              />
-
-              {/* Board icon */}
-              <div
-                style={{
-                  paddingLeft: 20,
-                  flexShrink: 0,
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 14 14"
-                  fill="none"
-                  style={{ display: "block" }}
-                >
-                  <rect
-                    x="0.7"
-                    y="0.7"
-                    width="12.6"
-                    height="12.6"
-                    rx="2"
-                    stroke="rgba(255,255,255,0.6)"
-                    strokeWidth="1.6"
-                  />
-                  <rect
-                    x="0.7"
-                    y="0.7"
-                    width="12.6"
-                    height="3.5"
-                    rx="2"
-                    fill="rgba(255,255,255,0.10)"
-                  />
-                </svg>
-              </div>
-
-              {editingBoardName ? (
-                <input
-                  autoFocus
-                  defaultValue={boardName}
-                  maxLength={60}
-                  onFocus={(e) => e.target.select()}
-                  onClick={(e) => e.stopPropagation()}
-                  onBlur={(e) => {
-                    const val = e.target.value.trim() || "Untitled Board";
-                    setBoardName(val);
-                    setEditingBoardName(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const val =
-                        (e.target as HTMLInputElement).value.trim() ||
-                        "Untitled Board";
-                      setBoardName(val);
-                      setEditingBoardName(false);
-                    }
-                    if (e.key === "Escape") setEditingBoardName(false);
-                    e.stopPropagation();
-                  }}
-                  style={{
-                    flex: 1,
-                    marginLeft: 10,
-                    marginRight: 12,
-                    fontSize: 12.5,
-                    fontFamily: "inherit",
-                    background: "rgba(255,255,255,0.07)",
-                    border: "none",
-                    outline: "1px solid rgba(241,178,74,0.4)",
-                    borderRadius: 5,
-                    padding: "1px 5px",
-                    color: "#FFFFFF",
-                    minWidth: 0,
-                  }}
-                />
-              ) : (
-                <>
-                  <span
-                    style={{
-                      flex: 1,
-                      marginLeft: 10,
-                      fontSize: 12.5,
-                      fontWeight: 500,
-                      color: "#FFFFFF",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      minWidth: 0,
-                    }}
-                  >
-                    {boardName}
-                  </span>
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    style={{ marginRight: 20, flexShrink: 0 }}
-                  >
-                    <circle cx="8" cy="8" r="6" fill="rgba(241,178,74,0.12)" />
-                    <circle cx="8" cy="8" r="3.5" fill="#F1B24A" />
-                  </svg>
-                </>
-              )}
-            </div>
-
-            {/* Info line */}
-            <div
-              style={{
-                fontSize: 10,
-                color: "rgba(255,255,255,0.75)",
-                padding: "12px 16px",
-              }}
-            >
-              Canvas · {nodes.length} nodes
-            </div>
-          </div>
-        )}
-
-        {/* ── NODES section ── */}
-        {activePanel === "nodes" && (
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              overflowX: "hidden",
-              paddingTop: 12,
-            }}
-          >
-            {nodes.length === 0 ? (
-              <div
-                style={{
-                  padding: "6px 20px",
-                  fontSize: 12,
-                  color: "rgba(255,255,255,0.4)",
-                }}
-              >
-                No nodes yet
-              </div>
-            ) : (
-              nodes.map((n) => (
-                <SidebarNodeItem
-                  key={n.id}
-                  id={n.id}
-                  type={n.type}
-                  label={
-                    (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() ||
-                    "Untitled"
-                  }
-                  defaultLabelValue={n.label ?? n.title}
-                  isActive={selected === n.id}
-                  isEditingSidebar={editingSidebarNodeId === n.id}
-                  focusNode={focusNode}
-                  updateNodeLabel={updateNodeLabel}
-                  setEditingSidebarNodeId={setEditingSidebarNodeId}
-                />
-              ))
-            )}
-          </div>
-        )}
-
-        {/* ── PRESENTATION section ── */}
-        {activePanel === "presentation" && (
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              overflowX: "hidden",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <div style={{ flex: 1, overflowY: "auto", paddingTop: 8 }}>
-              {presentationOrder.length === 0 ? (
-                <div
-                  style={{
-                    padding: "6px 20px",
-                    fontSize: 12,
-                    color: "rgba(255,255,255,0.4)",
-                  }}
-                >
-                  No nodes yet
-                </div>
-              ) : (
-                (() => {
-                  let activePos = 0;
-                  return presentationOrder.map((id, idx) => {
-                    const n = nodeMap.get(id);
-                    if (!n) return null;
-                    const excluded = !!n.excludeFromPresentation;
-                    if (!excluded) activePos += 1;
-                    const seqNum = excluded ? "–" : String(activePos);
-                    const label =
-                      (n.label ?? n.title).replace(/<[^>]*>/g, "").trim() ||
-                      "Untitled";
-                    const isFirst = idx === 0;
-                    const isLast = idx === presentationOrder.length - 1;
-                    return (
-                      <div
-                        key={id}
-                        style={{
-                          height: 36,
-                          display: "flex",
-                          alignItems: "center",
-                          padding: "0 8px 0 16px",
-                          gap: 8,
-                          opacity: excluded ? 0.45 : 1,
-                        }}
-                      >
-                        {/* Sequence number */}
-                        <span
-                          style={{
-                            fontSize: 10.5,
-                            color: excluded
-                              ? "rgba(255,255,255,0.4)"
-                              : "rgba(255,255,255,0.3)",
-                            flexShrink: 0,
-                            width: 16,
-                            textAlign: "right",
-                            fontVariantNumeric: "tabular-nums",
-                          }}
-                        >
-                          {seqNum}
-                        </span>
-
-                        {/* Label */}
-                        <span
-                          style={{
-                            flex: 1,
-                            fontSize: 12.5,
-                            color: excluded
-                              ? "rgba(255,255,255,0.5)"
-                              : "rgba(255,255,255,0.8)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            minWidth: 0,
-                            textDecoration: excluded ? "line-through" : "none",
-                          }}
-                        >
-                          {label}
-                        </span>
-
-                        {/* Exclude / include toggle */}
-                        <button
-                          onClick={() =>
-                            toggleExcludeFromPresentation(id, !excluded)
-                          }
-                          title={
-                            excluded
-                              ? "Include in presentation"
-                              : "Exclude from presentation"
-                          }
-                          style={{
-                            width: 22,
-                            height: 22,
-                            border: "none",
-                            borderRadius: 5,
-                            background: "transparent",
-                            color: excluded
-                              ? "rgba(255,255,255,0.4)"
-                              : "rgba(157,200,141,0.7)",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: 0,
-                            flexShrink: 0,
-                          }}
-                          onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLElement).style.background =
-                              "rgba(255,255,255,0.06)";
-                            (e.currentTarget as HTMLElement).style.color =
-                              excluded ? "rgba(255,255,255,0.75)" : "#9DC88D";
-                          }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLElement).style.background =
-                              "transparent";
-                            (e.currentTarget as HTMLElement).style.color =
-                              excluded
-                                ? "rgba(255,255,255,0.4)"
-                                : "rgba(157,200,141,0.7)";
-                          }}
-                        >
-                          {excluded ? (
-                            /* eye-off: slash through eye */
-                            <svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                              <line x1="1" y1="1" x2="23" y2="23" />
-                            </svg>
-                          ) : (
-                            /* eye: visible */
-                            <svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </svg>
-                          )}
-                        </button>
-
-                        {/* Up/Down buttons */}
-                        <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-                          <button
-                            onClick={() => movePresentationNodeUp(id)}
-                            disabled={isFirst}
-                            title="Move up"
-                            style={{
-                              width: 22,
-                              height: 22,
-                              border: "none",
-                              borderRadius: 5,
-                              background: "transparent",
-                              color: isFirst
-                                ? "rgba(255,255,255,0.15)"
-                                : "rgba(255,255,255,0.55)",
-                              cursor: isFirst ? "default" : "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              padding: 0,
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!isFirst)
-                                (
-                                  e.currentTarget as HTMLElement
-                                ).style.background = "rgba(255,255,255,0.06)";
-                            }}
-                            onMouseLeave={(e) => {
-                              (
-                                e.currentTarget as HTMLElement
-                              ).style.background = "transparent";
-                            }}
-                          >
-                            <svg
-                              width="10"
-                              height="10"
-                              viewBox="0 0 10 10"
-                              fill="none"
-                            >
-                              <path
-                                d="M2 7L5 3L8 7"
-                                stroke="currentColor"
-                                strokeWidth="1.6"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => movePresentationNodeDown(id)}
-                            disabled={isLast}
-                            title="Move down"
-                            style={{
-                              width: 22,
-                              height: 22,
-                              border: "none",
-                              borderRadius: 5,
-                              background: "transparent",
-                              color: isLast
-                                ? "rgba(255,255,255,0.15)"
-                                : "rgba(255,255,255,0.55)",
-                              cursor: isLast ? "default" : "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              padding: 0,
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!isLast)
-                                (
-                                  e.currentTarget as HTMLElement
-                                ).style.background = "rgba(255,255,255,0.06)";
-                            }}
-                            onMouseLeave={(e) => {
-                              (
-                                e.currentTarget as HTMLElement
-                              ).style.background = "transparent";
-                            }}
-                          >
-                            <svg
-                              width="10"
-                              height="10"
-                              viewBox="0 0 10 10"
-                              fill="none"
-                            >
-                              <path
-                                d="M2 3L5 7L8 3"
-                                stroke="currentColor"
-                                strokeWidth="1.6"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  });
-                })()
-              )}
-            </div>
-
-            {/* Present button */}
-            <div
-              style={{
-                padding: "12px 14px",
-                flexShrink: 0,
-                borderTop: "0.5px solid rgba(255,255,255,0.06)",
-              }}
-            >
-              <button
-                disabled={presentActiveSeq.length === 0}
-                onClick={() => {
-                  if (presentActiveSeq.length === 0) return;
-                  prePresentState.current = {
-                    pan: panRef.current,
-                    zoom: zoomRef.current,
-                  };
-                  setPresentationIndex(0);
-                  setIsPresenting(true);
-                  setActivePanel(null);
-                  setContextMenu(null);
-                  setColorPicker(null);
-                  setTextColorPicker(null);
-                  centerNodeForPresentation(presentActiveSeq[0]);
-                }}
-                style={{
-                  width: "100%",
-                  height: 38,
-                  borderRadius: 10,
-                  border: "none",
-                  background:
-                    presentActiveSeq.length === 0
-                      ? "rgba(241,178,74,0.35)"
-                      : "#F1B24A",
-                  color: "#0C2018",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  fontFamily: "inherit",
-                  cursor: presentActiveSeq.length === 0 ? "default" : "pointer",
-                  letterSpacing: "-0.1px",
-                  transition: "opacity 0.15s",
-                }}
-                onMouseEnter={(e) => {
-                  if (presentActiveSeq.length > 0)
-                    (e.currentTarget as HTMLElement).style.opacity = "0.88";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.opacity = "1";
-                }}
-              >
-                Present
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── SAVELOAD section ── */}
-        {activePanel === "saveload" && (
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              overflowX: "hidden",
-              padding: "8px 0",
-            }}
-          >
-            {/* Save row */}
-            <button
-              title="Save board"
-              onClick={() => saveBoard()}
-              style={{
-                height: 44,
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                justifyContent: "flex-start",
-                paddingLeft: 16,
-                paddingRight: 16,
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.background =
-                  "rgba(255,255,255,0.03)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.background =
-                  "transparent";
-              }}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-                style={{ flexShrink: 0, color: "rgba(255,255,255,0.75)" }}
-              >
-                <path
-                  d="M2 12h10M7 2v7M4 6l3 3 3-3"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span
-                style={{
-                  flex: 1,
-                  textAlign: "left",
-                  fontSize: 12.5,
-                  color: "rgba(255,255,255,0.85)",
-                }}
-              >
-                Save board
-              </span>
-              <kbd
-                style={{
-                  fontSize: 10.5,
-                  color: "rgba(255,255,255,0.55)",
-                  background: "rgba(255,255,255,0.04)",
-                  border: "0.5px solid rgba(255,255,255,0.07)",
-                  borderRadius: 5,
-                  padding: "2px 7px",
-                  fontFamily: "inherit",
-                  flexShrink: 0,
-                }}
-              >
-                ⌘S
-              </kbd>
-            </button>
-
-            {/* Load row */}
-            <button
-              title="Load board"
-              onClick={() => denkraumFileInputRef.current?.click()}
-              style={{
-                height: 44,
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                justifyContent: "flex-start",
-                paddingLeft: 16,
-                paddingRight: 16,
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.background =
-                  "rgba(255,255,255,0.03)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.background =
-                  "transparent";
-              }}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-                style={{ flexShrink: 0, color: "rgba(255,255,255,0.6)" }}
-              >
-                <path
-                  d="M2 12h10M7 9V2M4 5l3-3 3 3"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span
-                style={{
-                  flex: 1,
-                  textAlign: "left",
-                  fontSize: 12.5,
-                  color: "rgba(255,255,255,0.55)",
-                }}
-              >
-                Load board
-              </span>
-            </button>
-          </div>
-        )}
-
-        {/* ── SHORTCUTS section ── */}
-        {activePanel === "shortcuts" && (
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              overflowX: "hidden",
-              paddingTop: 12,
-            }}
-          >
-            {(
-              [
-                { kbd: "⌫  Delete", desc: "Delete selected" },
-                { kbd: "⌘ C", desc: "Copy node" },
-                { kbd: "⌘ V", desc: "Paste node" },
-                { kbd: "⌘ S", desc: "Save board" },
-                { kbd: "Tab", desc: "Add child node" },
-                { kbd: "Enter", desc: "Add sibling node" },
-                { kbd: "Double-click", desc: "Edit node text" },
-                { kbd: "F", desc: "Toggle filter" },
-                { kbd: "↓ / ↑", desc: "Cycle filter results" },
-                { kbd: "Esc", desc: "Cancel / close" },
-                { kbd: "⌃ Scroll", desc: "Zoom in / out" },
-                { kbd: "Right-click", desc: "Insert shape" },
-                { kbd: "Click dot →", desc: "Connect nodes" },
-                { kbd: "→ / Space", desc: "Next slide" },
-                { kbd: "←", desc: "Prev slide" },
-              ] as { kbd: string; desc: string }[]
-            ).map(({ kbd, desc }) => (
-              <div
-                key={kbd}
-                style={{
-                  height: 28,
-                  display: "flex",
-                  alignItems: "center",
-                  padding: "0 16px",
-                  gap: 10,
-                }}
-              >
-                <kbd
-                  style={{
-                    fontSize: 10.5,
-                    color: "rgba(255,255,255,0.7)",
-                    background: "rgba(255,255,255,0.04)",
-                    border: "0.5px solid rgba(255,255,255,0.07)",
-                    borderRadius: 5,
-                    padding: "2px 7px",
-                    fontFamily: "inherit",
-                    flexShrink: 0,
-                  }}
-                >
-                  {kbd}
-                </kbd>
-                <span
-                  style={{
-                    fontSize: 11.5,
-                    color: "rgba(255,255,255,0.4)",
-                  }}
-                >
-                  {desc}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Export Toolbar ── */}
-      {/* Center within the space to the right of the sidebar so it never
-          overlaps the strip or panel on narrow viewports.
-          Left boundary: strip(left:12 + w:52) + gap:12 = 76 (strip only)
-                         panel(left:76 + w:220) + gap:12 = 308 (panel open)
-          Center = 50% + leftBoundary/2  (geometric midpoint of remaining space) */}
-      <div
-        style={{
-          position: "fixed",
-          top: 20,
-          left: panelOpen ? "calc(50% + 154px)" : "calc(50% + 38px)",
-          transform: "translateX(-50%)",
-          maxWidth: panelOpen ? "calc(100vw - 320px)" : "calc(100vw - 88px)",
-          overflow: "hidden",
-          background:
-            "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.92)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          border: "0.5px solid rgba(255,255,255,0.08)",
-          borderRadius: 16,
-          padding: "6px 10px",
-          display: isPresenting ? "none" : "flex",
-          gap: 8,
-          alignItems: "center",
-          boxShadow:
-            "0 2px 24px rgba(0,0,0,0.3), inset 0 1px 0 0 rgba(255,255,255,0.12)",
-          zIndex: 201,
-        }}
-      >
-        {/* ── Shape insert buttons ── */}
-        {(
-          [
-            { type: "block" as NodeType, label: "Block" },
-            { type: "rounded" as NodeType, label: "Area" },
-            { type: "circle" as NodeType, label: "Circle" },
-            { type: "oval" as NodeType, label: "Oval" },
-            { type: "diamond" as NodeType, label: "Diamond" },
-            { type: "text" as NodeType, label: "Text" },
-          ] as { type: NodeType; label: string }[]
-        ).map(({ type, label }) => (
-          <ShapeButton
-            key={type}
-            label={label}
-            isActive={activeShapeType === type}
-            onClick={() => {
-              if (!canvasRef.current) return;
-              const cx =
-                (canvasRef.current.clientWidth / 2 - panRef.current.x) /
-                zoomRef.current;
-              const cy =
-                (canvasRef.current.clientHeight / 2 - panRef.current.y) /
-                zoomRef.current;
-              setActiveShapeType(type);
-              addNode(cx, cy, type);
-            }}
-          >
-            {(stroke, active) => renderShapeIcon(type, stroke, active)}
-          </ShapeButton>
-        ))}
-
-        {/* Image insert button */}
-        <ShapeButton
-          label="Insert Image"
-          isActive={false}
-          onClick={() => {
-            if (!canvasRef.current) return;
-            const cx =
-              (canvasRef.current.clientWidth / 2 - panRef.current.x) /
-              zoomRef.current;
-            const cy =
-              (canvasRef.current.clientHeight / 2 - panRef.current.y) /
-              zoomRef.current;
-            handleImageInsert(cx, cy);
-          }}
-        >
-          {(stroke, active) => renderShapeIcon("image", stroke, active)}
-        </ShapeButton>
-
-        {/* Text file insert button */}
-        <ShapeButton
-          label="Insert Text File"
-          isActive={false}
-          onClick={() => {
-            if (!canvasRef.current) return;
-            const cx =
-              (canvasRef.current.clientWidth / 2 - panRef.current.x) /
-              zoomRef.current;
-            const cy =
-              (canvasRef.current.clientHeight / 2 - panRef.current.y) /
-              zoomRef.current;
-            handleTextFileInsert(cx, cy);
-          }}
-        >
-          {(stroke, active) => renderShapeIcon("textfile", stroke, active)}
-        </ShapeButton>
-
-        {/* Divider */}
-        <div
-          style={{
-            width: "0.5px",
-            height: 16,
-            background: "rgba(255,255,255,0.1)",
-            margin: "0 4px",
-            flexShrink: 0,
-          }}
-        />
-
-        <button
-          onClick={exportPdfVector}
-          disabled={nodes.length === 0}
-          style={{
-            padding: "6px 13px",
-            borderRadius: 8,
-            border: "none",
-            fontSize: 12.5,
-            fontFamily: "inherit",
-            cursor: nodes.length === 0 ? "default" : "pointer",
-            background: "transparent",
-            color:
-              nodes.length === 0
-                ? "rgba(255,255,255,0.4)"
-                : "rgba(255,255,255,0.85)",
-            transition: "color 0.15s",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            letterSpacing: "-0.1px",
-          }}
-          onMouseEnter={(e) => {
-            if (nodes.length > 0)
-              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
-          }}
-          onMouseLeave={(e) => {
-            if (nodes.length > 0)
-              (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.85)";
-          }}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          Export PDF
-        </button>
-
-        {/* Divider */}
-        <div
-          style={{
-            width: "0.5px",
-            height: 16,
-            background: "rgba(255,255,255,0.1)",
-            margin: "0 4px",
-            flexShrink: 0,
-          }}
-        />
-
-        {/* Auto-arrange layout button */}
-        <button
-          title="Auto-arrange layout"
-          onClick={runForceLayout}
-          disabled={nodes.length <= 1}
-          style={{
-            width: 28,
-            height: 28,
-            border: "none",
-            background: "transparent",
-            color:
-              nodes.length <= 1
-                ? "rgba(255,255,255,0.25)"
-                : "rgba(255,255,255,0.85)",
-            cursor: nodes.length <= 1 ? "default" : "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 7,
-            padding: 0,
-            transition: "color 0.12s, background 0.12s",
-          }}
-          onMouseEnter={(e) => {
-            if (nodes.length > 1) {
-              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
-              (e.currentTarget as HTMLElement).style.background =
-                "rgba(255,255,255,0.07)";
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (nodes.length > 1) {
-              (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.85)";
-              (e.currentTarget as HTMLElement).style.background = "transparent";
-            }
-          }}
-        >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="5" cy="5" r="2" />
-            <circle cx="19" cy="5" r="2" />
-            <circle cx="12" cy="19" r="2" />
-            <line x1="5" y1="7" x2="12" y2="17" />
-            <line x1="19" y1="7" x2="12" y2="17" />
-          </svg>
-        </button>
-
-        {/* Divider */}
-        <div
-          style={{
-            width: "0.5px",
-            height: 16,
-            background: "rgba(255,255,255,0.1)",
-            margin: "0 4px",
-            flexShrink: 0,
-          }}
-        />
-
-        {/* Filter button */}
-        <button
-          title="Filter nodes (F)"
-          onClick={() => setFilterOpen((o) => !o)}
-          style={{
-            width: 28,
-            height: 28,
-            border: "none",
-            background: filterOpen ? `${ACCENT}22` : "transparent",
-            color: filterOpen ? ACCENT : "rgba(255,255,255,0.85)",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 7,
-            padding: 0,
-            transition: "color 0.12s, background 0.12s",
-          }}
-          onMouseEnter={(e) => {
-            if (!filterOpen) {
-              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
-              (e.currentTarget as HTMLElement).style.background =
-                "rgba(255,255,255,0.07)";
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!filterOpen) {
-              (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.85)";
-              (e.currentTarget as HTMLElement).style.background = "transparent";
-            }
-          }}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </button>
-      </div>
+      <CanvasToolbar
+        panelOpen={panelOpen}
+        isPresenting={isPresenting}
+        canvasRef={canvasRef}
+        panRef={panRef}
+        zoomRef={zoomRef}
+        activeShapeType={activeShapeType}
+        setActiveShapeType={setActiveShapeType}
+        addNode={addNode}
+        handleImageInsert={handleImageInsert}
+        handleTextFileInsert={handleTextFileInsert}
+        exportPdfVector={exportPdfVector}
+        runForceLayout={runForceLayout}
+        nodeCount={nodes.length}
+        filterOpen={filterOpen}
+        setFilterOpen={setFilterOpen}
+      />
 
       {/* ── Filter Bar ── */}
       {filterOpen && (
-        <div
-          style={{
-            position: "fixed",
-            top: 68,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background:
-              "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.95)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            border: "0.5px solid rgba(255,255,255,0.1)",
-            borderRadius: 14,
-            padding: "8px 12px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 7,
-            boxShadow:
-              "0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
-            zIndex: 202,
-            minWidth: 420,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Search row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="rgba(255,255,255,0.7)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ flexShrink: 0 }}
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              ref={filterInputRef}
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              placeholder="Suchen…"
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setFilterOpen(false);
-                  setFilterText("");
-                  setFilterType("all");
-                }
-                e.stopPropagation();
-              }}
-              style={{
-                flex: 1,
-                background: "transparent",
-                border: "none",
-                outline: "none",
-                color: "#FFFFFF",
-                fontSize: 13,
-                fontFamily: "inherit",
-                caretColor: ACCENT,
-              }}
-            />
-            <span
-              style={{
-                fontSize: 11,
-                color: "rgba(255,255,255,0.7)",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-              }}
-            >
-              {filterActive
-                ? `${matchedNodeIds.size} Treffer`
-                : `${nodes.length} Nodes`}
-            </span>
-            <button
-              onClick={() => {
-                setFilterOpen(false);
-                setFilterText("");
-                setFilterType("all");
-              }}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: "rgba(255,255,255,0.7)",
-                cursor: "pointer",
-                fontSize: 14,
-                lineHeight: 1,
-                padding: 2,
-                borderRadius: 4,
-                flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              onMouseEnter={(e) =>
-                ((e.currentTarget as HTMLElement).style.color =
-                  "rgba(255,255,255,0.85)")
-              }
-              onMouseLeave={(e) =>
-                ((e.currentTarget as HTMLElement).style.color =
-                  "rgba(255,255,255,0.7)")
-              }
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Type buttons */}
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {(
-              [
-                { value: "all", label: "Alle" },
-                { value: "block", label: "Block" },
-                { value: "rounded", label: "Area" },
-                { value: "circle", label: "Circle" },
-                { value: "oval", label: "Oval" },
-                { value: "diamond", label: "Diamond" },
-                { value: "text", label: "Text" },
-                { value: "image", label: "Image" },
-                { value: "textfile", label: "File" },
-              ] as { value: NodeType | "all"; label: string }[]
-            ).map(({ value, label }) => {
-              const active = filterType === value;
-              return (
-                <button
-                  key={value}
-                  onClick={() => setFilterType(value)}
-                  style={{
-                    padding: "3px 9px",
-                    borderRadius: 6,
-                    border: active
-                      ? `1px solid ${ACCENT}66`
-                      : "1px solid rgba(255,255,255,0.07)",
-                    background: active ? `${ACCENT}22` : "transparent",
-                    color: active ? ACCENT : "rgba(255,255,255,0.7)",
-                    fontSize: 11.5,
-                    fontFamily: "inherit",
-                    cursor: "pointer",
-                    transition: "all 0.1s",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!active) {
-                      (e.currentTarget as HTMLElement).style.color =
-                        "rgba(255,255,255,0.85)";
-                      (e.currentTarget as HTMLElement).style.borderColor =
-                        "rgba(255,255,255,0.15)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!active) {
-                      (e.currentTarget as HTMLElement).style.color =
-                        "rgba(255,255,255,0.7)";
-                      (e.currentTarget as HTMLElement).style.borderColor =
-                        "rgba(255,255,255,0.07)";
-                    }
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <FilterBar
+          filterInputRef={filterInputRef}
+          filterText={filterText}
+          setFilterText={setFilterText}
+          filterType={filterType}
+          setFilterType={setFilterType}
+          setFilterOpen={setFilterOpen}
+          filterActive={filterActive}
+          matchCount={matchedNodeIds.size}
+          nodeCount={nodes.length}
+        />
       )}
 
       {/* ── Canvas ── */}
@@ -4521,682 +1350,38 @@ export default function Canvas() {
         (() => {
           const n = nodeMap.get(contextMenu.id);
           if (!n) return null;
-          const canColor = n.type !== "text" && n.type !== "image";
           return (
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                position: "fixed",
-                left: contextMenu.x,
-                top: contextMenu.y,
-                background:
-                  "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
-                backdropFilter: "blur(24px)",
-                border: "0.5px solid rgba(255,255,255,0.08)",
-                borderRadius: 14,
-                boxShadow:
-                  "0 8px 40px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
-                zIndex: 300,
-                minWidth: 240,
-                padding: "6px 0",
-              }}
-            >
-              {/* ── Copy ── */}
-              <div
-                onClick={() => {
-                  copySelected();
-                  setContextMenu(null);
-                }}
-                onMouseEnter={(e) => hoverMenu(e, true)}
-                onMouseLeave={(e) => hoverMenu(e, false)}
-                style={menuItem()}
-              >
-                <span style={{ width: 22, textAlign: "center", fontSize: 14 }}>
-                  ⎘
-                </span>
-                Copy
-              </div>
-              <div
-                style={{
-                  height: "0.5px",
-                  background: "rgba(255,255,255,0.10)",
-                  margin: "2px 0",
-                }}
-              />
-              {/* ── Text formatting ── */}
-              <div style={{ padding: "8px 14px 10px" }}>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "rgba(255,255,255,0.5)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                    marginBottom: 9,
-                  }}
-                >
-                  Text
-                </div>
-                {/* Font size slider */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 7,
-                    marginBottom: 8,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 10,
-                      color: "rgba(255,255,255,0.7)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    A
-                  </span>
-                  <input
-                    type="range"
-                    className="fmt-slider"
-                    min={8}
-                    max={72}
-                    value={n.fontSize ?? 13}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onChange={(e) => updateFontSize(n.id, +e.target.value)}
-                    onPointerUp={() => pushHistory()}
-                    style={{ flex: 1, cursor: "pointer", minWidth: 0 }}
-                  />
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: "rgba(255,255,255,0.85)",
-                      minWidth: 20,
-                      textAlign: "right",
-                      fontVariantNumeric: "tabular-nums",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {n.fontSize ?? 13}
-                  </span>
-                </div>
-                {/* B / I / U */}
-                <div style={{ display: "flex", gap: 5 }}>
-                  {(
-                    [
-                      { field: "bold", label: "B", style: { fontWeight: 700 } },
-                      {
-                        field: "italic",
-                        label: "I",
-                        style: { fontStyle: "italic" },
-                      },
-                      {
-                        field: "underline",
-                        label: "U",
-                        style: { textDecoration: "underline" },
-                      },
-                    ] as {
-                      field: "bold" | "italic" | "underline";
-                      label: string;
-                      style: React.CSSProperties;
-                    }[]
-                  ).map(({ field, label, style }) => {
-                    const active = !!n[field];
-                    return (
-                      <button
-                        key={field}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={() => updateNodeFormat(n.id, field, !active)}
-                        style={{
-                          flex: 1,
-                          height: 28,
-                          border: active
-                            ? "1px solid rgba(255,255,255,0.25)"
-                            : "1px solid rgba(255,255,255,0.08)",
-                          borderRadius: 7,
-                          background: active
-                            ? "rgba(255,255,255,0.12)"
-                            : "transparent",
-                          color: active ? "#FFFFFF" : "rgba(255,255,255,0.7)",
-                          cursor: "pointer",
-                          fontSize: 12.5,
-                          fontFamily: "inherit",
-                          transition: "all 0.1s",
-                          ...style,
-                        }}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* Text Color */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    marginTop: 8,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 8,
-                      background: n.textColor ?? "#FFFFFF",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: "rgba(255,255,255,0.7)",
-                      fontFamily: "monospace",
-                      flex: 1,
-                    }}
-                  >
-                    {n.textColor ?? "#FFFFFF"}
-                  </span>
-                  <div
-                    onClick={() =>
-                      openTextColorPicker(
-                        contextMenu.id,
-                        n.textColor ?? "#FFFFFF",
-                        contextMenu.x,
-                        contextMenu.y,
-                      )
-                    }
-                    style={{
-                      padding: "5px 10px",
-                      borderRadius: 8,
-                      background: "rgba(255,255,255,0.07)",
-                      border: "0.5px solid rgba(255,255,255,0.08)",
-                      cursor: "pointer",
-                      fontSize: 12,
-                      color: "rgba(255,255,255,0.85)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 5,
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.background =
-                        "rgba(255,255,255,0.12)")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.background =
-                        "rgba(255,255,255,0.07)")
-                    }
-                  >
-                    ···
-                  </div>
-                </div>
-              </div>
-
-              {canColor && (
-                <>
-                  <div
-                    style={{
-                      height: "0.5px",
-                      background: "rgba(255,255,255,0.10)",
-                      margin: "2px 0",
-                    }}
-                  />
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "rgba(255,255,255,0.5)",
-                      padding: "6px 14px 4px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    Color
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "6px 14px 10px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 8,
-                        background: n.color,
-                        border: "1px solid rgba(255,255,255,0.1)",
-                        flexShrink: 0,
-                      }}
-                    />
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: "rgba(255,255,255,0.7)",
-                        fontFamily: "monospace",
-                        flex: 1,
-                      }}
-                    >
-                      {n.color}
-                    </span>
-                    <div
-                      onClick={() =>
-                        openColorPicker(
-                          contextMenu.id,
-                          n.color,
-                          contextMenu.x,
-                          contextMenu.y,
-                        )
-                      }
-                      style={{
-                        padding: "5px 10px",
-                        borderRadius: 8,
-                        background: "rgba(255,255,255,0.07)",
-                        border: "0.5px solid rgba(255,255,255,0.08)",
-                        cursor: "pointer",
-                        fontSize: 12,
-                        color: "rgba(255,255,255,0.85)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 5,
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background =
-                          "rgba(255,255,255,0.12)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background =
-                          "rgba(255,255,255,0.07)")
-                      }
-                    >
-                      ···
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <div
-                style={{
-                  height: "0.5px",
-                  background: "rgba(255,255,255,0.10)",
-                  margin: "2px 0",
-                }}
-              />
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "rgba(255,255,255,0.55)",
-                  padding: "6px 14px 4px",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px",
-                }}
-              >
-                Arrange
-              </div>
-              {(
-                [
-                  {
-                    label: "Bring to Front",
-                    icon: "⤒",
-                    action: () => arrangeBringToFront(contextMenu.id),
-                  },
-                  {
-                    label: "Bring Forward",
-                    icon: "↑",
-                    action: () => arrangeBringForward(contextMenu.id),
-                  },
-                  {
-                    label: "Send Backward",
-                    icon: "↓",
-                    action: () => arrangeSendBackward(contextMenu.id),
-                  },
-                  {
-                    label: "Send to Back",
-                    icon: "⤓",
-                    action: () => arrangeSendToBack(contextMenu.id),
-                  },
-                ] as const
-              ).map(({ label, icon, action }) => (
-                <div
-                  key={label}
-                  onClick={() => {
-                    action();
-                    setContextMenu(null);
-                  }}
-                  onMouseEnter={(e) => hoverMenu(e, true)}
-                  onMouseLeave={(e) => hoverMenu(e, false)}
-                  style={menuItem()}
-                >
-                  <span
-                    style={{
-                      width: 22,
-                      textAlign: "center",
-                      fontSize: 14,
-                      fontFamily: "monospace",
-                    }}
-                  >
-                    {icon}
-                  </span>
-                  {label}
-                </div>
-              ))}
-
-              <div
-                style={{
-                  height: "0.5px",
-                  background: "rgba(255,255,255,0.10)",
-                  margin: "2px 0",
-                }}
-              />
-              {/* ── Exclude / Include from presentation ── */}
-              <div
-                onClick={() => {
-                  toggleExcludeFromPresentation(
-                    contextMenu.id,
-                    !n.excludeFromPresentation,
-                  );
-                  setContextMenu(null);
-                }}
-                onMouseEnter={(e) => hoverMenu(e, true)}
-                onMouseLeave={(e) => hoverMenu(e, false)}
-                style={menuItem()}
-              >
-                <span style={{ width: 22, textAlign: "center", fontSize: 13 }}>
-                  {n.excludeFromPresentation ? "▷" : "⊘"}
-                </span>
-                {n.excludeFromPresentation
-                  ? "Include in presentation"
-                  : "Exclude from presentation"}
-              </div>
-              <div
-                style={{
-                  height: "0.5px",
-                  background: "rgba(255,255,255,0.10)",
-                  margin: "2px 0",
-                }}
-              />
-              <div
-                onClick={() => {
-                  deleteSelected();
-                  setContextMenu(null);
-                }}
-                onMouseEnter={(e) => hoverMenu(e, true, true)}
-                onMouseLeave={(e) => hoverMenu(e, false, true)}
-                style={menuItem(true)}
-              >
-                <span style={{ width: 22, textAlign: "center", fontSize: 14 }}>
-                  ✕
-                </span>
-                Delete
-              </div>
-            </div>
+            <NodeContextMenu
+              menu={contextMenu}
+              node={n}
+              copySelected={copySelected}
+              updateFontSize={updateFontSize}
+              pushHistory={pushHistory}
+              updateNodeFormat={updateNodeFormat}
+              openColorPicker={openColorPicker}
+              openTextColorPicker={openTextColorPicker}
+              arrangeBringToFront={arrangeBringToFront}
+              arrangeBringForward={arrangeBringForward}
+              arrangeSendBackward={arrangeSendBackward}
+              arrangeSendToBack={arrangeSendToBack}
+              toggleExcludeFromPresentation={toggleExcludeFromPresentation}
+              deleteSelected={deleteSelected}
+              onClose={() => setContextMenu(null)}
+            />
           );
         })()}
 
       {/* ── Canvas Context Menu ── */}
       {contextMenu?.kind === "canvas" && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            position: "fixed",
-            left: contextMenu.x,
-            top: contextMenu.y,
-            background:
-              "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
-            backdropFilter: "blur(24px)",
-            border: "0.5px solid rgba(255,255,255,0.08)",
-            borderRadius: 14,
-            boxShadow:
-              "0 8px 40px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
-            zIndex: 300,
-            minWidth: 220,
-            padding: "6px 0",
-          }}
-        >
-          <div
-            onClick={() => {
-              if (!copiedNode) return;
-              pasteNode(contextMenu.cx, contextMenu.cy);
-            }}
-            onMouseEnter={(e) => hoverMenu(e, true)}
-            onMouseLeave={(e) => hoverMenu(e, false)}
-            style={{
-              ...menuItem(),
-              opacity: copiedNode ? 1 : 0.35,
-              cursor: copiedNode ? "pointer" : "default",
-            }}
-          >
-            <span style={{ width: 22, textAlign: "center", fontSize: 14 }}>
-              ⎘
-            </span>
-            Paste
-          </div>
-          <div
-            style={{
-              height: "0.5px",
-              background: "rgba(255,255,255,0.10)",
-              margin: "2px 0",
-            }}
-          />
-          <div
-            style={{
-              fontSize: 11,
-              color: "rgba(255,255,255,0.55)",
-              padding: "6px 14px 4px",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-            }}
-          >
-            Insert
-          </div>
-          {(
-            [
-              {
-                type: "block" as const,
-                label: "Block",
-                icon: (
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <rect
-                      x="1"
-                      y="1"
-                      width="11"
-                      height="11"
-                      rx="2"
-                      stroke="currentColor"
-                      strokeWidth="1.3"
-                    />
-                  </svg>
-                ),
-              },
-              {
-                type: "rounded" as const,
-                label: "Area",
-                icon: (
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <rect
-                      x="1"
-                      y="1"
-                      width="11"
-                      height="11"
-                      rx="5"
-                      stroke="currentColor"
-                      strokeWidth="1.3"
-                    />
-                  </svg>
-                ),
-              },
-              {
-                type: "circle" as const,
-                label: "Circle",
-                icon: (
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <circle
-                      cx="6.5"
-                      cy="6.5"
-                      r="5.5"
-                      stroke="currentColor"
-                      strokeWidth="1.3"
-                    />
-                  </svg>
-                ),
-              },
-              {
-                type: "oval" as const,
-                label: "Oval",
-                icon: (
-                  <svg width="13" height="9" viewBox="0 0 13 9" fill="none">
-                    <ellipse
-                      cx="6.5"
-                      cy="4.5"
-                      rx="5.5"
-                      ry="3.5"
-                      stroke="currentColor"
-                      strokeWidth="1.3"
-                    />
-                  </svg>
-                ),
-              },
-              {
-                type: "diamond" as const,
-                label: "Diamond",
-                icon: (
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <polygon
-                      points="6.5,1 12,6.5 6.5,12 1,6.5"
-                      stroke="currentColor"
-                      strokeWidth="1.3"
-                      fill="none"
-                    />
-                  </svg>
-                ),
-              },
-              {
-                type: "text" as const,
-                label: "Free Text",
-                icon: (
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <text
-                      x="1"
-                      y="11"
-                      fontSize="11"
-                      fill="currentColor"
-                      fontFamily="serif"
-                      fontWeight="bold"
-                    >
-                      T
-                    </text>
-                  </svg>
-                ),
-              },
-            ] as const
-          ).map(({ type, label, icon }) => (
-            <div
-              key={type}
-              onClick={() => {
-                addNode(contextMenu.cx, contextMenu.cy, type);
-                setContextMenu(null);
-              }}
-              onMouseEnter={(e) => hoverMenu(e, true)}
-              onMouseLeave={(e) => hoverMenu(e, false)}
-              style={menuItem()}
-            >
-              <span
-                style={{
-                  width: 22,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "rgba(255,255,255,0.75)",
-                }}
-              >
-                {icon}
-              </span>
-              {label}
-            </div>
-          ))}
-          <div
-            style={{
-              height: "0.5px",
-              background: "rgba(255,255,255,0.10)",
-              margin: "2px 0",
-            }}
-          />
-          <div
-            onClick={() => handleImageInsert(contextMenu.cx, contextMenu.cy)}
-            onMouseEnter={(e) => hoverMenu(e, true)}
-            onMouseLeave={(e) => hoverMenu(e, false)}
-            style={menuItem()}
-          >
-            <span
-              style={{
-                width: 22,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <rect
-                  x="1"
-                  y="1"
-                  width="11"
-                  height="11"
-                  rx="2"
-                  stroke="rgba(255,255,255,0.75)"
-                  strokeWidth="1.3"
-                />
-                <circle
-                  cx="4.5"
-                  cy="4.5"
-                  r="1.2"
-                  fill="rgba(255,255,255,0.75)"
-                />
-                <path
-                  d="M1 9l3-3 2.5 2.5L9 6l3 4"
-                  stroke="rgba(255,255,255,0.75)"
-                  strokeWidth="1.1"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-            Image
-          </div>
-          <div
-            onClick={() => {
-              setContextMenu(null);
-              handleTextFileInsert(contextMenu.cx, contextMenu.cy);
-            }}
-            onMouseEnter={(e) => hoverMenu(e, true)}
-            onMouseLeave={(e) => hoverMenu(e, false)}
-            style={menuItem()}
-          >
-            <span
-              style={{
-                width: 22,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <svg width="11" height="13" viewBox="0 0 11 13" fill="none">
-                <path
-                  d="M2 1h5l3 3v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"
-                  stroke="rgba(255,255,255,0.75)"
-                  strokeWidth="1.2"
-                />
-                <path
-                  d="M7 1v3h3"
-                  stroke="rgba(255,255,255,0.75)"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </span>
-            Text File
-          </div>
-        </div>
+        <CanvasContextMenu
+          menu={contextMenu}
+          hasCopiedNode={!!copiedNode}
+          pasteNode={pasteNode}
+          addNode={addNode}
+          handleImageInsert={handleImageInsert}
+          handleTextFileInsert={handleTextFileInsert}
+          onClose={() => setContextMenu(null)}
+        />
       )}
 
       {/* ── Color Picker ── */}
@@ -5235,87 +1420,12 @@ export default function Canvas() {
           );
         })()}
 
-      {/* ── Zoom controls ── */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: 24,
-          right: 24,
-          background: "rgba(22,64,56,0.92)",
-          backdropFilter: "blur(12px)",
-          border: "0.5px solid rgba(255,255,255,0.08)",
-          borderRadius: 12,
-          padding: "6px 10px",
-          display: isPresenting ? "none" : "flex",
-          gap: 8,
-          alignItems: "center",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
-          zIndex: 100,
-        }}
-      >
-        <button
-          onClick={() =>
-            setZoom((z) => Math.max(MIN_ZOOM, parseFloat((z - 0.1).toFixed(2))))
-          }
-          style={{
-            border: "none",
-            background: "none",
-            fontSize: 18,
-            cursor: "pointer",
-            color: "rgba(255,255,255,0.85)",
-            lineHeight: 1,
-          }}
-        >
-          −
-        </button>
-        <span
-          style={{
-            fontSize: 11,
-            color: "rgba(255,255,255,0.7)",
-            minWidth: 38,
-            textAlign: "center",
-          }}
-        >
-          {Math.round(zoom * 100)}%
-        </span>
-        <button
-          onClick={() =>
-            setZoom((z) => Math.min(MAX_ZOOM, parseFloat((z + 0.1).toFixed(2))))
-          }
-          style={{
-            border: "none",
-            background: "none",
-            fontSize: 18,
-            cursor: "pointer",
-            color: "rgba(255,255,255,0.85)",
-            lineHeight: 1,
-          }}
-        >
-          +
-        </button>
-        <div
-          style={{
-            width: "0.5px",
-            height: 16,
-            background: "rgba(255,255,255,0.1)",
-          }}
-        />
-        <button
-          onClick={() => {
-            setZoom(1);
-            setPan({ x: 0, y: 0 });
-          }}
-          style={{
-            border: "none",
-            background: "none",
-            fontSize: 11,
-            cursor: "pointer",
-            color: "rgba(255,255,255,0.7)",
-          }}
-        >
-          Reset
-        </button>
-      </div>
+      <ZoomControls
+        zoom={zoom}
+        setZoom={setZoom}
+        setPan={setPan}
+        isPresenting={isPresenting}
+      />
 
       {/* ── Hint ── */}
       <div
@@ -5342,167 +1452,14 @@ export default function Canvas() {
           : "Right-click → Shapes & Images · Click dot → select target to connect · Pinch / Ctrl+Scroll = Zoom"}
       </div>
 
-      {/* ── Presentation viewport frame ── */}
-      {isPresenting && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            pointerEvents: "none",
-            zIndex: 249,
-            boxShadow:
-              "inset 0 0 0 2px rgba(241,178,74,0.38), inset 0 0 28px rgba(157,200,141,0.07)",
-            borderRadius: 0,
-          }}
-        />
-      )}
+      <PresentationOverlays
+        isPresenting={isPresenting}
+        showPresentOverlay={showPresentOverlay}
+        presentationIndex={presentationIndex}
+        presentActiveCount={presentActiveSeq.length}
+      />
 
-      {/* ── Presentation entry overlay ── */}
-      {showPresentOverlay && (
-        <div
-          className="present-overlay"
-          style={{
-            position: "fixed",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            background: "linear-gradient(160deg, #265048 0%, #143F38 100%)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            border: "0.5px solid rgba(157,200,141,0.18)",
-            borderRadius: 18,
-            boxShadow:
-              "0 8px 40px rgba(0,0,0,0.45), 0 2px 10px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.08)",
-            padding: "18px 32px",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 6,
-            zIndex: 350,
-            userSelect: "none",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 15,
-              fontWeight: 600,
-              color: "#FFFFFF",
-              letterSpacing: "-0.2px",
-              fontFamily:
-                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-            }}
-          >
-            Presentation mode
-          </span>
-          <span
-            style={{
-              fontSize: 12,
-              color: "rgba(255,255,255,0.5)",
-              fontFamily:
-                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-            }}
-          >
-            ← → navigate &nbsp;·&nbsp;{" "}
-            <span style={{ color: "#F1B24A" }}>Esc</span> to exit
-          </span>
-        </div>
-      )}
-
-      {/* ── Presentation HUD ── */}
-      {isPresenting && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 28,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(12,32,24,0.82)",
-            backdropFilter: "blur(12px)",
-            border: "0.5px solid rgba(255,255,255,0.1)",
-            borderRadius: 10,
-            padding: "7px 18px",
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-            fontSize: 11.5,
-            color: "rgba(255,255,255,0.55)",
-            zIndex: 300,
-            pointerEvents: "none",
-            userSelect: "none",
-          }}
-        >
-          <span style={{ color: "#F1B24A", fontWeight: 600 }}>
-            {presentationIndex + 1} / {presentActiveSeq.length}
-          </span>
-          <span>← → navigate · Esc exit</span>
-        </div>
-      )}
-
-      {/* ── Toast ── */}
-      {toast && (
-        <div
-          className="toast"
-          style={{
-            position: "fixed",
-            bottom: 28,
-            left: 80,
-            background:
-              toast.variant === "success"
-                ? "rgba(30,40,30,0.97)"
-                : "rgba(40,22,22,0.97)",
-            border:
-              toast.variant === "success"
-                ? "0.5px solid rgba(100,200,100,0.2)"
-                : "0.5px solid rgba(255,100,100,0.2)",
-            borderRadius: 10,
-            padding: "8px 14px",
-            fontSize: 12.5,
-            color: toast.variant === "success" ? "#86EFAC" : "#FCA5A5",
-            boxShadow: "0 2px 16px rgba(0,0,0,0.4)",
-            zIndex: 500,
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            pointerEvents: "none",
-          }}
-        >
-          {toast.variant === "success" ? (
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-              <circle
-                cx="6.5"
-                cy="6.5"
-                r="6"
-                stroke="#86EFAC"
-                strokeWidth="1.2"
-              />
-              <path
-                d="M3.5 6.5l2 2 4-4"
-                stroke="#86EFAC"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          ) : (
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-              <circle
-                cx="6.5"
-                cy="6.5"
-                r="6"
-                stroke="#FCA5A5"
-                strokeWidth="1.2"
-              />
-              <path
-                d="M6.5 4v3.5M6.5 9.2v.3"
-                stroke="#FCA5A5"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-              />
-            </svg>
-          )}
-          {toast.msg}
-        </div>
-      )}
+      <Toast toast={toast} />
 
       {/* ── Mobile fallback ── */}
       <div className="mobile-fallback">
