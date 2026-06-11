@@ -20,6 +20,7 @@ import {
 } from "./lib/canvas-helpers";
 import { sanitizeLoadedNode } from "./lib/dnkrm-file";
 import { exportBoardPdf } from "./lib/pdf-export";
+import { exportBoardMarkdown } from "./lib/md-export";
 import { useUndoRedo } from "./hooks/useUndoRedo";
 import { useBoardPersistence } from "./hooks/useBoardPersistence";
 import { useCanvasInteraction } from "./hooks/useCanvasInteraction";
@@ -1035,6 +1036,11 @@ export default function Canvas() {
     await exportBoardPdf(nodes, connections, boardName);
   }, [nodes, connections, boardName]);
 
+  // ── Markdown export ─────────────────────────────────────────────────────────
+  const exportMarkdown = useCallback(() => {
+    exportBoardMarkdown(nodes, connections, presentationOrder, boardName);
+  }, [nodes, connections, presentationOrder, boardName]);
+
   const startPresentation = () => {
     if (presentActiveSeq.length === 0) return;
     prePresentStateRef.current = {
@@ -1152,6 +1158,7 @@ export default function Canvas() {
         handleImageInsert={handleImageInsert}
         handleTextFileInsert={handleTextFileInsert}
         exportPdfVector={exportPdfVector}
+        exportMarkdown={exportMarkdown}
         runForceLayout={runForceLayout}
         nodeCount={nodes.length}
         filterOpen={filterOpen}
