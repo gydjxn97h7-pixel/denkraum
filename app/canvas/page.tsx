@@ -207,6 +207,7 @@ export default function Canvas() {
       zoomRef,
       nodeMapRef,
       needsHistoryPushRef,
+      pushHistory,
       setPan,
       setZoom,
       setNodes,

@@ -9,6 +9,7 @@ interface CanvasInteractionArgs {
   zoomRef: React.RefObject<number>;
   nodeMapRef: React.RefObject<Map<number, CanvasNode>>;
   needsHistoryPushRef: React.RefObject<boolean>;
+  pushHistory: () => void;
   setPan: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
   setZoom: React.Dispatch<React.SetStateAction<number>>;
   setNodes: React.Dispatch<React.SetStateAction<CanvasNode[]>>;
@@ -29,6 +30,7 @@ export function useCanvasInteraction({
   zoomRef,
   nodeMapRef,
   needsHistoryPushRef,
+  pushHistory,
   setPan,
   setZoom,
   setNodes,
@@ -59,6 +61,11 @@ export function useCanvasInteraction({
     startPositions: Map<number, { x: number; y: number }>;
   } | null>(null);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+  // True once the current interaction has produced an actual move/resize.
+  // A plain click on a node also arms draggingRef, and pushing history for
+  // those zero-movement "drags" creates duplicate snapshots (e.g. the
+  // double-click that enters text editing), breaking single-step undo.
+  const interactionMovedRef = useRef(false);
 
   // Pending values accumulated during a mousemove burst; applied once per frame
   const rafRef = useRef<number | null>(null);
@@ -101,8 +108,9 @@ export function useCanvasInteraction({
   // ── Global mouse move + up ────────────────────────────────────────────────────
 
   // Apply all pending updates in a single React render (called from rAF or mouseup)
-  const flushPending = useCallback(() => {
+  const flushPending = useCallback((): boolean => {
     rafRef.current = null;
+    let mutatedNodes = false;
 
     const panDelta = pendingPanDelta.current;
     if (panDelta.x !== 0 || panDelta.y !== 0) {
@@ -114,6 +122,7 @@ export function useCanvasInteraction({
     const drag = pendingDragPos.current;
     if (drag) {
       pendingDragPos.current = null;
+      mutatedNodes = true;
       const SNAP_T = 8;
       let finalX = drag.x;
       let finalY = drag.y;
@@ -174,6 +183,7 @@ export function useCanvasInteraction({
     const resize = pendingResizeSize.current;
     if (resize) {
       pendingResizeSize.current = null;
+      mutatedNodes = true;
       setNodes((prev) =>
         prev.map((n) =>
           n.id === resize.id ? { ...n, w: resize.w, h: resize.h } : n,
@@ -184,6 +194,7 @@ export function useCanvasInteraction({
     const multiDelta = pendingMultiDragDelta.current;
     if (multiDelta && multiDraggingRef.current) {
       pendingMultiDragDelta.current = null;
+      mutatedNodes = true;
       const { startPositions } = multiDraggingRef.current;
       const { dx, dy } = multiDelta;
       setNodes((prev) =>
@@ -193,6 +204,7 @@ export function useCanvasInteraction({
         }),
       );
     }
+    return mutatedNodes;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -270,6 +282,14 @@ export function useCanvasInteraction({
         dirty = true;
       }
 
+      if (
+        draggingRef.current ||
+        resizingRef.current ||
+        multiDraggingRef.current
+      ) {
+        interactionMovedRef.current = true;
+      }
+
       if (dirty && rafRef.current === null) {
         rafRef.current = requestAnimationFrame(flushPending);
       }
@@ -283,7 +303,12 @@ export function useCanvasInteraction({
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
-    flushPending();
+    const wasInteracting = !!(
+      draggingRef.current ||
+      resizingRef.current ||
+      multiDraggingRef.current
+    );
+    const flushedNodeChange = flushPending();
 
     // Marquee completion: select all intersecting nodes
     if (marqueeRef.current) {
@@ -308,16 +333,26 @@ export function useCanvasInteraction({
       setMarqueeRect(null);
     }
 
-    if (draggingRef.current || resizingRef.current || multiDraggingRef.current) {
-      needsHistoryPushRef.current = true;
+    if (wasInteracting && interactionMovedRef.current) {
+      if (flushedNodeChange) {
+        // Final position commits after this handler — let the nodes effect
+        // take the snapshot once React has applied it.
+        needsHistoryPushRef.current = true;
+      } else {
+        // Everything already flushed in an earlier frame; nodesRef is
+        // current, snapshot now (the flag would strand with no further
+        // nodes change and corrupt the next commit with a duplicate push).
+        pushHistory();
+      }
     }
+    interactionMovedRef.current = false;
     draggingRef.current = null;
     resizingRef.current = null;
     multiDraggingRef.current = null;
     pendingMultiDragDelta.current = null;
     setSnapGuides({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flushPending]);
+  }, [flushPending, pushHistory]);
 
   useEffect(() => {
     window.addEventListener("mousemove", onMouseMove);
