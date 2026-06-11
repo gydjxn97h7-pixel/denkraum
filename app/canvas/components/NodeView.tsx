@@ -4,6 +4,43 @@ import { ACCENT } from "../lib/canvas-types";
 import type { CanvasNode, ConnectDrag } from "../lib/canvas-types";
 import { parseColor } from "../lib/color-helpers";
 
+// Serializes a contenteditable's DOM back to plain text with exactly one "\n"
+// per visual line. Chrome wraps each Enter-created line in a <div> (an empty
+// line becomes <div><br></div>); reading that back via innerText under
+// white-space: pre-wrap counts both the block boundary and the <br>, so every
+// edit round trip would gain blank lines.
+function editablePlainText(root: HTMLElement): string {
+  const blockLines = (el: Node): string[] => {
+    const out: string[] = [];
+    let cur = "";
+    for (const child of Array.from(el.childNodes)) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const tag = (child as HTMLElement).tagName;
+        if (tag === "BR") {
+          out.push(cur);
+          cur = "";
+          continue;
+        }
+        if (tag === "DIV" || tag === "P") {
+          if (cur !== "") {
+            out.push(cur);
+            cur = "";
+          }
+          out.push(...blockLines(child));
+          continue;
+        }
+      }
+      cur += child.textContent ?? "";
+    }
+    // Close the final line. When it is empty and lines were already emitted,
+    // the trailing <br> was just the browser's placeholder for the line that
+    // produced it — not an extra break.
+    if (cur !== "" || out.length === 0) out.push(cur);
+    return out;
+  };
+  return blockLines(root).join("\n");
+}
+
 interface NodeViewProps {
   n: CanvasNode;
   selected: number | null;
@@ -59,6 +96,17 @@ export const NodeView = React.memo(function NodeView({
   const fs = n.fontSize ?? 13;
 
   const [isEditing, setIsEditing] = useState(false);
+
+  // Paste as plain text — node text is plain state, so pasted HTML would only
+  // be flattened lossily at blur time anyway.
+  const onEditablePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    document.execCommand(
+      "insertText",
+      false,
+      e.clipboardData.getData("text/plain"),
+    );
+  };
 
   useEffect(() => {
     if (!isText && editingNodeIdRef.current === n.id) setIsEditing(true);
@@ -251,6 +299,7 @@ export const NodeView = React.memo(function NodeView({
               suppressContentEditableWarning
               data-placeholder="Diamond"
               onMouseDown={(e) => e.stopPropagation()}
+              onPaste={onEditablePaste}
               onFocus={() => {
                 editingNodeIdRef.current = n.id;
               }}
@@ -258,7 +307,7 @@ export const NodeView = React.memo(function NodeView({
                 updateNodeField(
                   n.id,
                   "title",
-                  (e.target as HTMLElement).innerText,
+                  editablePlainText(e.target as HTMLElement),
                 );
                 editingNodeIdRef.current = null;
                 setIsEditing(false);
@@ -273,6 +322,7 @@ export const NodeView = React.memo(function NodeView({
                 textAlign: "center",
                 letterSpacing: "-0.2px",
                 width: "100%",
+                whiteSpace: "pre-wrap",
                 overflowWrap: "break-word",
                 wordBreak: "break-word",
                 overflow: "hidden",
@@ -289,6 +339,7 @@ export const NodeView = React.memo(function NodeView({
                 contentEditable={isEditing}
                 suppressContentEditableWarning
                 onMouseDown={(e) => e.stopPropagation()}
+                onPaste={onEditablePaste}
                 onFocus={() => {
                   editingNodeIdRef.current = n.id;
                 }}
@@ -296,7 +347,7 @@ export const NodeView = React.memo(function NodeView({
                   updateNodeField(
                     n.id,
                     "body",
-                    (e.target as HTMLElement).innerText,
+                    editablePlainText(e.target as HTMLElement),
                   );
                   editingNodeIdRef.current = null;
                   setIsEditing(false);
@@ -315,6 +366,7 @@ export const NodeView = React.memo(function NodeView({
                   textAlign: "center",
                   marginTop: 3,
                   width: "100%",
+                  whiteSpace: "pre-wrap",
                   overflowWrap: "break-word",
                   wordBreak: "break-word",
                   overflow: "hidden",
@@ -447,6 +499,7 @@ export const NodeView = React.memo(function NodeView({
                     : "Block"
             }
             onMouseDown={(e) => e.stopPropagation()}
+            onPaste={onEditablePaste}
             onFocus={() => {
               editingNodeIdRef.current = n.id;
             }}
@@ -454,7 +507,7 @@ export const NodeView = React.memo(function NodeView({
               updateNodeField(
                 n.id,
                 "title",
-                (e.target as HTMLElement).innerText,
+                editablePlainText(e.target as HTMLElement),
               );
               editingNodeIdRef.current = null;
               setIsEditing(false);
@@ -471,6 +524,7 @@ export const NodeView = React.memo(function NodeView({
               zIndex: 1,
               background: "transparent",
               minWidth: 40,
+              whiteSpace: "pre-wrap",
               overflowWrap: "break-word",
               wordBreak: "break-word",
               overflow: "hidden",
@@ -486,6 +540,7 @@ export const NodeView = React.memo(function NodeView({
             contentEditable={isEditing}
             suppressContentEditableWarning
             onMouseDown={(e) => e.stopPropagation()}
+            onPaste={onEditablePaste}
             onFocus={() => {
               editingNodeIdRef.current = n.id;
             }}
@@ -493,7 +548,7 @@ export const NodeView = React.memo(function NodeView({
               updateNodeField(
                 n.id,
                 "body",
-                (e.target as HTMLElement).innerText,
+                editablePlainText(e.target as HTMLElement),
               );
               editingNodeIdRef.current = null;
               setIsEditing(false);
@@ -516,6 +571,7 @@ export const NodeView = React.memo(function NodeView({
               background: "transparent",
               width: "100%",
               textAlign: isCircle ? "center" : "left",
+              whiteSpace: "pre-wrap",
               overflowWrap: "break-word",
               wordBreak: "break-word",
               overflow: "hidden",
@@ -536,6 +592,7 @@ export const NodeView = React.memo(function NodeView({
           contentEditable
           suppressContentEditableWarning
           onMouseDown={(e) => e.stopPropagation()}
+          onPaste={onEditablePaste}
           onFocus={() => {
             editingNodeIdRef.current = n.id;
           }}
@@ -543,7 +600,7 @@ export const NodeView = React.memo(function NodeView({
             updateNodeField(
               n.id,
               "title",
-              (e.target as HTMLElement).innerText,
+              editablePlainText(e.target as HTMLElement),
             );
             editingNodeIdRef.current = null;
           }}
@@ -561,6 +618,7 @@ export const NodeView = React.memo(function NodeView({
             letterSpacing: "-0.2px",
             background: "transparent",
             width: "100%",
+            whiteSpace: "pre-wrap",
             overflowWrap: "break-word",
             wordBreak: "break-word",
             overflow: "visible",

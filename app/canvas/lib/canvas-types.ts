@@ -10,6 +10,20 @@ export type NodeType =
   | "image"
   | "textfile";
 
+// Inline rich text: a field is a list of lines, each line a list of styled
+// runs. Marks are additive overrides on top of the node's base style
+// (n.bold / n.italic / n.underline / n.fontSize). Plain-string mirrors in
+// `title` / `body` are kept in sync at every commit so search, sidebar
+// labels, and older .dnkrm readers keep working on plain text.
+export type TextRun = {
+  t: string;
+  b?: true;
+  i?: true;
+  u?: true;
+  fs?: number; // CSS px, overrides the node's base fontSize for this run
+};
+export type RichText = TextRun[][];
+
 export type CanvasNode = {
   id: number;
   x: number;
@@ -30,6 +44,10 @@ export type CanvasNode = {
   textFileName?: string;
   label?: string;
   excludeFromPresentation?: boolean;
+  // Present only when the field carries inline formatting; `title` / `body`
+  // always hold the derived plain text.
+  titleRich?: RichText;
+  bodyRich?: RichText;
 };
 
 export type Connection = { from: number; to: number };

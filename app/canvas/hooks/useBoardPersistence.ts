@@ -13,6 +13,7 @@ import type {
   AssetRecord,
 } from "../lib/canvas-types";
 import { stripHtml } from "../lib/color-helpers";
+import { richHasMarks, richToPlain, sanitizeRichText } from "../lib/rich-text";
 import { setAsset, deleteAsset, getAllAssets } from "../lib/idb";
 
 interface BoardPersistenceArgs {
@@ -79,15 +80,27 @@ export function useBoardPersistence({
         if (rawNodes) {
           let loadedNodes: CanvasNode[] = (
             JSON.parse(rawNodes) as CanvasNode[]
-          ).map((n) => ({
-            ...n,
-            title: stripHtml(n.title),
-            body: stripHtml(n.body),
-            ...(n.label != null && { label: stripHtml(n.label) }),
-            ...(n.textFileName != null && {
-              textFileName: stripHtml(n.textFileName),
-            }),
-          }));
+          ).map((n) => {
+            // Rich fields are structurally validated and become the source of
+            // truth for the plain mirrors; without them, mirrors get the
+            // legacy stripHtml treatment.
+            const titleRich = sanitizeRichText(n.titleRich);
+            const bodyRich = sanitizeRichText(n.bodyRich);
+            const node: CanvasNode = {
+              ...n,
+              title: titleRich ? richToPlain(titleRich) : stripHtml(n.title),
+              body: bodyRich ? richToPlain(bodyRich) : stripHtml(n.body),
+              ...(n.label != null && { label: stripHtml(n.label) }),
+              ...(n.textFileName != null && {
+                textFileName: stripHtml(n.textFileName),
+              }),
+            };
+            if (titleRich && richHasMarks(titleRich)) node.titleRich = titleRich;
+            else delete node.titleRich;
+            if (bodyRich && richHasMarks(bodyRich)) node.bodyRich = bodyRich;
+            else delete node.bodyRich;
+            return node;
+          });
           const maxId = loadedNodes.reduce((m, n) => Math.max(m, n.id), -1);
           if (maxId >= idCounterRef.current) idCounterRef.current = maxId + 1;
 

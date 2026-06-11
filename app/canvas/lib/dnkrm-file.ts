@@ -1,4 +1,5 @@
 import type { CanvasNode, NodeType } from "./canvas-types";
+import { richHasMarks, richToPlain, sanitizeRichText } from "./rich-text";
 
 // ── .dnkrm file validation ────────────────────────────────────────────────────
 
@@ -22,6 +23,11 @@ export function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
   if (typeof n.w !== "number" || !Number.isFinite(n.w) || n.w < 1) return null;
   if (typeof n.h !== "number" || !Number.isFinite(n.h) || n.h < 1) return null;
   if (typeof n.type !== "string" || !VALID_NODE_TYPES.has(n.type)) return null;
+  // Rich fields: structurally validated; the plain mirror is re-derived from
+  // the runs rather than trusted from the file. Unmarked runs collapse back
+  // to plain-only storage.
+  const titleRich = sanitizeRichText(n.titleRich);
+  const bodyRich = sanitizeRichText(n.bodyRich);
   return {
     id: Math.trunc(n.id as number),
     x: n.x as number,
@@ -29,8 +35,18 @@ export function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
     w: Math.max(10, n.w as number),
     h: Math.max(10, n.h as number),
     type: n.type as NodeType,
-    title: typeof n.title === "string" ? n.title : "",
-    body: typeof n.body === "string" ? n.body : "",
+    title: titleRich
+      ? richToPlain(titleRich)
+      : typeof n.title === "string"
+        ? n.title
+        : "",
+    body: bodyRich
+      ? richToPlain(bodyRich)
+      : typeof n.body === "string"
+        ? n.body
+        : "",
+    ...(titleRich && richHasMarks(titleRich) && { titleRich }),
+    ...(bodyRich && richHasMarks(bodyRich) && { bodyRich }),
     color: typeof n.color === "string" ? n.color : "#1D5C50",
     ...(typeof n.fontSize === "number" &&
       Number.isFinite(n.fontSize) && { fontSize: n.fontSize as number }),
