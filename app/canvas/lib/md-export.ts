@@ -1,4 +1,4 @@
-import type { CanvasNode, Connection } from "./canvas-types";
+import type { CanvasNode, Connection, TextRun } from "./canvas-types";
 
 // ── Markdown export ───────────────────────────────────────────────────────────
 // Interprets the directed connection graph as an outline: nodes with no
@@ -10,6 +10,41 @@ import type { CanvasNode, Connection } from "./canvas-types";
 // falling back to the sidebar label.
 function nodeText(n: CanvasNode): string {
   return (n.title ?? "").trim() || (n.label ?? "").trim() || "Untitled";
+}
+
+// Maps one line of styled runs to inline Markdown. Bold → **…**, italic →
+// *…*, underline → <u>…</u> (Markdown has no underline; inline HTML is the
+// convention). Font sizes have no Markdown equivalent and are dropped.
+// Titles stay plain — outline bullets already wrap them in **, and nested
+// markers would break the emphasis.
+function lineToMd(line: TextRun[]): string {
+  // Group consecutive runs that differ only in font size so markers don't
+  // butt against each other (`**a****b**` would not render as bold).
+  const groups: { b: boolean; i: boolean; u: boolean; t: string }[] = [];
+  for (const r of line) {
+    const prev = groups[groups.length - 1];
+    if (prev && prev.b === !!r.b && prev.i === !!r.i && prev.u === !!r.u) {
+      prev.t += r.t;
+    } else {
+      groups.push({ b: !!r.b, i: !!r.i, u: !!r.u, t: r.t });
+    }
+  }
+  return groups
+    .map((g) => {
+      if (!g.b && !g.i && !g.u) return g.t;
+      // Emphasis markers don't tolerate adjacent whitespace — keep it outside.
+      const m = g.t.match(/^(\s*)([\s\S]*?)(\s*)$/);
+      const lead = m?.[1] ?? "";
+      const core = m?.[2] ?? g.t;
+      const trail = m?.[3] ?? "";
+      if (core === "") return g.t;
+      let t = core;
+      if (g.u) t = `<u>${t}</u>`;
+      if (g.i) t = `*${t}*`;
+      if (g.b) t = `**${t}**`;
+      return lead + t + trail;
+    })
+    .join("");
 }
 
 // Non-text payloads can't be embedded in Markdown — annotate them instead.
@@ -65,9 +100,10 @@ export function buildBoardMarkdown(
       return;
     }
     visited.add(id);
-    const body = (n.body ?? "").trim();
-    const bodyLines = body
-      .split("\n")
+    const bodyLines = (n.bodyRich
+      ? n.bodyRich.map(lineToMd)
+      : (n.body ?? "").trim().split("\n")
+    )
       .map((l) => l.trim())
       .filter((l) => l !== "");
     let bullet = `${indent}- **${nodeText(n)}**${nodeAnnotation(n)}`;
