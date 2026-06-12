@@ -1,6 +1,5 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ACCENT } from "../lib/canvas-types";
 import type { CanvasNode, RichText } from "../lib/canvas-types";
 import {
   MAX_DOC_CHARS,
@@ -16,10 +15,20 @@ interface DocEditorPanelProps {
   onClose: () => void;
 }
 
-// Right-side document editor. Content is a contenteditable backed by the
-// same runs model as node fields (FormatBar works inside it via the
-// data-doc-editor attribute). Save commits to board state; closing also
-// saves, so there is no data-loss path — discarding is one Cmd+Z away.
+// A4 portrait: 210mm × 297mm.
+const A4_RATIO = 297 / 210;
+
+// Vertical chrome around the page, used to derive the panel width from the
+// viewport height so the white sheet keeps an exact A4 aspect:
+// 24 panel insets + 52 header + 50 footer + 48 desk padding.
+const VERTICAL_CHROME = 174;
+const DESK_PAD = 24;
+
+// Right-side document editor: dark DNKRM chrome around a white A4 page.
+// Content is a contenteditable backed by the same runs model as node fields
+// (FormatBar works inside it via the data-doc-editor attribute). Save commits
+// to board state; closing also saves, so there is no data-loss path —
+// discarding is one Cmd+Z away.
 export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [title, setTitle] = useState(
@@ -91,7 +100,9 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
         top: 12,
         right: 12,
         bottom: 12,
-        width: 420,
+        // Width follows from viewport height so the sheet is exactly A4.
+        width: `calc((100vh - ${VERTICAL_CHROME}px) / ${A4_RATIO} + ${DESK_PAD * 2}px)`,
+        minWidth: 400,
         maxWidth: "calc(100vw - 100px)",
         background:
           "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
@@ -122,17 +133,34 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
           gap: 10,
         }}
       >
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "1.4px",
-            color: "#FFFFFF",
-            flexShrink: 0,
-          }}
-        >
-          DOCUMENT
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="rgba(241,178,74,0.75)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ flexShrink: 0 }}
+          >
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "1.4px",
+              color: "#FFFFFF",
+            }}
+          >
+            DOCUMENT
+          </span>
+        </div>
         <button
           onClick={saveAndClose}
           title="Save and close (Esc)"
@@ -159,61 +187,92 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
         </button>
       </div>
 
-      {/* ── Title ── */}
-      <div style={{ padding: "14px 16px 10px", flexShrink: 0 }}>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Untitled document"
-          maxLength={120}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") contentRef.current?.focus();
-            if (e.key !== "Escape") e.stopPropagation();
+      {/* ── Desk: dark surface the white sheet floats on ── */}
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          padding: DESK_PAD,
+          background:
+            "radial-gradient(120% 90% at 50% 0%, rgba(157,200,141,0.05) 0%, rgba(0,0,0,0) 55%), rgba(8,22,17,0.55)",
+          display: "flex",
+          alignItems: "stretch",
+          justifyContent: "center",
+        }}
+      >
+        {/* ── A4 page ── */}
+        <div
+          onClick={(e) => {
+            // Clicking the sheet's margins drops the caret into the text.
+            if (e.target === e.currentTarget) contentRef.current?.focus();
           }}
           style={{
             width: "100%",
-            boxSizing: "border-box",
-            fontSize: 16,
-            fontWeight: 600,
-            fontFamily: "inherit",
-            background: "transparent",
-            border: "none",
-            outline: "none",
-            borderBottom: "0.5px solid rgba(255,255,255,0.1)",
-            padding: "2px 0 8px",
-            color: "#FFFFFF",
-            letterSpacing: "-0.2px",
-            caretColor: ACCENT,
+            height: "100%",
+            background: "#FDFCF9",
+            borderRadius: 4,
+            boxShadow:
+              "0 18px 50px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.3), 0 0 0 0.5px rgba(255,255,255,0.06)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            cursor: "text",
           }}
-        />
+        >
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Untitled document"
+            maxLength={120}
+            className="doc-title-input"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") contentRef.current?.focus();
+              if (e.key !== "Escape") e.stopPropagation();
+            }}
+            style={{
+              flexShrink: 0,
+              margin: "40px 48px 0",
+              fontSize: 24,
+              fontWeight: 700,
+              fontFamily: "inherit",
+              background: "transparent",
+              border: "none",
+              outline: "none",
+              padding: "0 0 12px",
+              borderBottom: "1px solid rgba(20,40,33,0.08)",
+              color: "#14201B",
+              letterSpacing: "-0.4px",
+              caretColor: "#B97F1F",
+            }}
+          />
+          <div
+            ref={contentRef}
+            data-doc-editor="true"
+            contentEditable
+            suppressContentEditableWarning
+            onInput={refreshCount}
+            onPaste={onPaste}
+            className="doc-page-scroll"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              padding: "18px 48px 48px",
+              overflowY: "auto",
+              overflowX: "hidden",
+              outline: "none",
+              fontSize: 14,
+              lineHeight: 1.7,
+              color: "#243029",
+              whiteSpace: "pre-wrap",
+              overflowWrap: "break-word",
+              wordBreak: "break-word",
+              userSelect: "text",
+              caretColor: "#B97F1F",
+              cursor: "text",
+            }}
+          />
+        </div>
       </div>
-
-      {/* ── Content ── */}
-      <div
-        ref={contentRef}
-        data-doc-editor="true"
-        contentEditable
-        suppressContentEditableWarning
-        onInput={refreshCount}
-        onPaste={onPaste}
-        style={{
-          flex: 1,
-          margin: "0 4px 0 0",
-          padding: "6px 16px 16px",
-          overflowY: "auto",
-          overflowX: "hidden",
-          outline: "none",
-          fontSize: 13.5,
-          lineHeight: 1.65,
-          color: "rgba(255,255,255,0.88)",
-          whiteSpace: "pre-wrap",
-          overflowWrap: "break-word",
-          wordBreak: "break-word",
-          userSelect: "text",
-          caretColor: ACCENT,
-          cursor: "text",
-        }}
-      />
 
       {/* ── Footer: counter + save ── */}
       <div
