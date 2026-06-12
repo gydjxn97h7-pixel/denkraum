@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CanvasNode, RichText } from "../lib/canvas-types";
+import { TrafficDot } from "./ColorPickerWindow";
 import {
   MAX_DOC_CHARS,
   editableRichText,
@@ -35,6 +36,9 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
     () => node?.title.trim() || node?.textFileName || "",
   );
   const [charCount, setCharCount] = useState(0);
+  // Window mode — always opens standard; minimize keeps the editor mounted
+  // so unsaved text survives, fullscreen turns the panel into a focus view.
+  const [mode, setMode] = useState<"standard" | "min" | "full">("standard");
 
   useEffect(() => {
     const el = contentRef.current;
@@ -97,12 +101,20 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
       }}
       style={{
         position: "fixed",
-        top: 12,
+        top: mode === "min" ? "auto" : 12,
         right: 12,
-        bottom: 12,
+        // Minimized pill docks above the zoom controls so they stay usable.
+        bottom: mode === "min" ? 68 : 12,
+        left: mode === "full" ? 12 : "auto",
+        height: mode === "min" ? 44 : undefined,
         // Width follows from viewport height so the sheet is exactly A4.
-        width: `calc((100vh - ${VERTICAL_CHROME}px) / ${A4_RATIO} + ${DESK_PAD * 2}px)`,
-        minWidth: 400,
+        width:
+          mode === "full"
+            ? "auto"
+            : mode === "min"
+              ? 300
+              : `calc((100vh - ${VERTICAL_CHROME}px) / ${A4_RATIO} + ${DESK_PAD * 2}px)`,
+        minWidth: mode === "min" ? 0 : 400,
         maxWidth: "calc(100vw - 100px)",
         background:
           "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
@@ -121,19 +133,48 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
     >
       {/* ── Header ── */}
       <div
+        onClick={() => {
+          if (mode === "min") setMode("standard");
+        }}
         style={{
-          height: 52,
+          height: mode === "min" ? 44 : 52,
           flexShrink: 0,
           background: "rgba(0,0,0,0.15)",
-          borderBottom: "0.5px solid rgba(255,255,255,0.05)",
+          borderBottom:
+            mode === "min" ? "none" : "0.5px solid rgba(255,255,255,0.05)",
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 14px 0 16px",
-          gap: 10,
+          padding: "0 16px",
+          gap: 12,
+          cursor: mode === "min" ? "pointer" : "default",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+        {/* Traffic lights */}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{ display: "flex", gap: 7, alignItems: "center", flexShrink: 0 }}
+        >
+          <TrafficDot color="#ff5f57" title="Save and close" onClick={saveAndClose} />
+          <TrafficDot
+            color="#febc2e"
+            title={mode === "min" ? "Restore" : "Minimize"}
+            onClick={() => setMode(mode === "min" ? "standard" : "min")}
+          />
+          <TrafficDot
+            color="#28c840"
+            title={mode === "full" ? "Exit fullscreen" : "Fullscreen"}
+            onClick={() => setMode(mode === "full" ? "standard" : "full")}
+          />
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 9,
+            minWidth: 0,
+            flex: 1,
+          }}
+        >
           <svg
             width="13"
             height="13"
@@ -150,41 +191,33 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
             <line x1="16" y1="13" x2="8" y2="13" />
             <line x1="16" y1="17" x2="8" y2="17" />
           </svg>
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "1.4px",
-              color: "#FFFFFF",
-            }}
-          >
-            DOCUMENT
-          </span>
+          {mode === "min" ? (
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: "rgba(255,255,255,0.75)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                letterSpacing: "-0.1px",
+              }}
+            >
+              {title.trim() || "Untitled document"}
+            </span>
+          ) : (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: "1.4px",
+                color: "#FFFFFF",
+              }}
+            >
+              DOCUMENT
+            </span>
+          )}
         </div>
-        <button
-          onClick={saveAndClose}
-          title="Save and close (Esc)"
-          style={{
-            border: "none",
-            background: "transparent",
-            color: "rgba(255,255,255,0.7)",
-            fontSize: 13,
-            cursor: "pointer",
-            padding: "4px 6px",
-            lineHeight: 1,
-            borderRadius: 5,
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.color =
-              "rgba(255,255,255,0.9)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.color =
-              "rgba(255,255,255,0.7)";
-          }}
-        >
-          ✕
-        </button>
       </div>
 
       {/* ── Desk: dark surface the white sheet floats on ── */}
@@ -192,10 +225,10 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
         style={{
           flex: 1,
           minHeight: 0,
+          display: mode === "min" ? "none" : "flex",
           padding: DESK_PAD,
           background:
             "radial-gradient(120% 90% at 50% 0%, rgba(157,200,141,0.05) 0%, rgba(0,0,0,0) 55%), rgba(8,22,17,0.55)",
-          display: "flex",
           alignItems: "stretch",
           justifyContent: "center",
         }}
@@ -207,7 +240,10 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
             if (e.target === e.currentTarget) contentRef.current?.focus();
           }}
           style={{
-            width: "100%",
+            width:
+              mode === "full"
+                ? `calc((100vh - ${VERTICAL_CHROME}px) / ${A4_RATIO})`
+                : "100%",
             height: "100%",
             background: "#FDFCF9",
             borderRadius: 4,
@@ -280,7 +316,7 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
           flexShrink: 0,
           borderTop: "0.5px solid rgba(255,255,255,0.06)",
           padding: "10px 14px",
-          display: "flex",
+          display: mode === "min" ? "none" : "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: 10,
