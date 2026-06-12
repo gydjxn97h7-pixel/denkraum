@@ -1,9 +1,12 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  applyColorToSelection,
   applyFontSizeToSelection,
   FONT_SIZE_LADDER,
 } from "../lib/rich-text";
+import { rgbToHex } from "../lib/color-helpers";
+import { ColorPickerWindow } from "./ColorPickerWindow";
 
 type BarState = {
   x: number;
@@ -12,7 +15,25 @@ type BarState = {
   italic: boolean;
   underline: boolean;
   fontSize: number;
+  // Color controls only show inside the document editor — canvas node fields
+  // commit on blur, which would tear down the selection under an open picker.
+  inDoc: boolean;
+  textColor: string;
 };
+
+type PickerState = {
+  prop: "color" | "backgroundColor";
+  x: number;
+  y: number;
+  color: string;
+};
+
+function computedHex(el: Element | null, prop: "color"): string {
+  if (!el) return "#243029";
+  const v = getComputedStyle(el)[prop];
+  const m = v.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  return m ? rgbToHex(+m[1], +m[2], +m[3]) : "#243029";
+}
 
 // Floating inline-formatting bar. Fully self-contained: tracks the document
 // selection and shows itself above any non-collapsed selection inside a
@@ -20,6 +41,10 @@ type BarState = {
 // editable keeps focus and selection while formatting is applied.
 export function FormatBar() {
   const [bar, setBar] = useState<BarState | null>(null);
+  const [picker, setPicker] = useState<PickerState | null>(null);
+  // The picker steals focus and collapses the visual selection — keep the
+  // Range so every color change can be applied to the original text.
+  const savedRangeRef = useRef<Range | null>(null);
 
   const refresh = useCallback(() => {
     const sel = window.getSelection();
@@ -63,6 +88,8 @@ export function FormatBar() {
       italic: document.queryCommandState("italic"),
       underline: document.queryCommandState("underline"),
       fontSize: Math.round(fsPx),
+      inDoc: !!anchorEl?.closest("[data-doc-editor]"),
+      textColor: computedHex(focusEl, "color"),
     });
   }, []);
 
@@ -84,7 +111,32 @@ export function FormatBar() {
     };
   }, [refresh]);
 
-  if (!bar) return null;
+  if (!bar && !picker) return null;
+
+  const openPicker = (prop: "color" | "backgroundColor") => {
+    if (!bar) return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+    setPicker({
+      prop,
+      x: bar.x - 130,
+      y: bar.y + 28,
+      color: prop === "color" ? bar.textColor : "#F1B24A",
+    });
+  };
+
+  const applyPickedColor = (color: string) => {
+    const range = savedRangeRef.current;
+    if (!range) return;
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    applyColorToSelection(picker!.prop, color);
+    if (sel.rangeCount > 0) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+    setPicker((p) => (p ? { ...p, color } : p));
+  };
 
   const exec = (cmd: "bold" | "italic" | "underline") => {
     document.execCommand(cmd);
@@ -92,6 +144,7 @@ export function FormatBar() {
   };
 
   const stepSize = (dir: 1 | -1) => {
+    if (!bar) return;
     const cur = bar.fontSize;
     const next =
       dir === 1
@@ -119,6 +172,8 @@ export function FormatBar() {
   });
 
   return (
+    <>
+      {bar && (
     <div
       onMouseDown={(e) => e.preventDefault()}
       style={{
@@ -201,6 +256,68 @@ export function FormatBar() {
       >
         A+
       </button>
+
+      {bar.inDoc && (
+        <>
+          <div
+            style={{
+              width: "0.5px",
+              height: 14,
+              background: "rgba(255,255,255,0.12)",
+              margin: "0 4px",
+              flexShrink: 0,
+            }}
+          />
+          <button
+            title="Text color"
+            onClick={() => openPicker("color")}
+            style={{ ...toggleStyle(false), flexDirection: "column", gap: 1 }}
+          >
+            <span style={{ fontSize: 11, lineHeight: 1 }}>A</span>
+            <span
+              style={{
+                width: 12,
+                height: 3,
+                borderRadius: 1.5,
+                background: bar.textColor,
+                border: "0.5px solid rgba(255,255,255,0.25)",
+              }}
+            />
+          </button>
+          <button
+            title="Highlight color"
+            onClick={() => openPicker("backgroundColor")}
+            style={toggleStyle(false)}
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 11l-6 6v3h9l3-3" />
+              <path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+            </svg>
+          </button>
+        </>
+      )}
     </div>
+      )}
+
+      {picker && (
+        <ColorPickerWindow
+          picker={{ nodeId: -1, x: picker.x, y: picker.y, color: picker.color }}
+          onColorChange={(_, color) => applyPickedColor(color)}
+          onClose={() => {
+            setPicker(null);
+            savedRangeRef.current = null;
+          }}
+        />
+      )}
+    </>
   );
 }
