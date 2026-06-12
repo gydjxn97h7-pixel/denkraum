@@ -225,8 +225,17 @@ export async function exportBoardPdf(
     italic: boolean;
     underline: boolean;
     fsPx: number;
+    c?: string; // run text color (#rrggbb), overrides the field color
+    bg?: string; // run highlight color (#rrggbb)
   };
-  type LaidLine = { segs: LaidSeg[]; width: number; height: number; ascent: number };
+  type LaidLine = {
+    segs: LaidSeg[];
+    width: number;
+    height: number;
+    ascent: number;
+    // Standalone image line (documents) — drawn instead of segs.
+    img?: { src: string; w: number; h: number };
+  };
 
   const fontStyleFor = (bold: boolean, italic: boolean): string =>
     bold && italic ? "bolditalic" : bold ? "bold" : italic ? "italic" : "normal";
@@ -255,6 +264,26 @@ export async function exportBoardPdf(
     };
     const laid: LaidLine[] = [];
     for (const srcLine of rich) {
+      // Standalone image line — sized from the data URL, capped to the field.
+      const imgRun = srcLine.find((r) => r.img);
+      if (imgRun?.img) {
+        try {
+          const props = doc.getImageProperties(imgRun.img);
+          const natW = props.width * exportScale;
+          const w = Math.min(natW, maxW);
+          const h = (props.height / props.width) * w;
+          laid.push({
+            segs: [],
+            width: w,
+            height: h + 6 * exportScale,
+            ascent: 0,
+            img: { src: imgRun.img, w, h },
+          });
+        } catch {
+          // Unsupported format — skip the image, keep the rest of the doc
+        }
+        continue;
+      }
       const toks: Tok[] = [];
       for (const run of srcLine) {
         const bold = !!run.b || base.bold;
@@ -269,6 +298,8 @@ export async function exportBoardPdf(
             italic,
             underline,
             fsPx,
+            c: run.c,
+            bg: run.bg,
             w: measure(piece, bold, italic, fsPx),
             ws: /^\s+$/.test(piece),
           });
@@ -301,7 +332,9 @@ export async function exportBoardPdf(
             prev.bold === t.bold &&
             prev.italic === t.italic &&
             prev.underline === t.underline &&
-            prev.fsPx === t.fsPx
+            prev.fsPx === t.fsPx &&
+            prev.c === t.c &&
+            prev.bg === t.bg
           ) {
             prev.t += t.t;
             prev.w += t.w;
@@ -313,6 +346,8 @@ export async function exportBoardPdf(
               italic: t.italic,
               underline: t.underline,
               fsPx: t.fsPx,
+              c: t.c,
+              bg: t.bg,
             });
           }
         }
@@ -383,13 +418,36 @@ export async function exportBoardPdf(
     let y = yTop;
     for (const line of laid) {
       let x = centerX !== null ? centerX - line.width / 2 : xLeft;
+      if (line.img) {
+        try {
+          const fmtMatch = line.img.src.match(/^data:image\/([a-z0-9]+);/i);
+          const rawFmt = fmtMatch ? fmtMatch[1].toUpperCase() : "JPEG";
+          const fmt = rawFmt === "JPG" ? "JPEG" : rawFmt;
+          doc.addImage(line.img.src, fmt, x, y, line.img.w, line.img.h);
+        } catch {
+          // corrupt data — leave the gap
+        }
+        y += line.height;
+        continue;
+      }
       const yBase = y + line.ascent;
+      // Highlight rects first so all text sits above them.
+      for (const seg of line.segs) {
+        if (seg.bg) {
+          const [hr, hg, hb] = parseColorForPdf(seg.bg);
+          doc.setFillColor(hr, hg, hb);
+          doc.rect(x, y, seg.w, line.height, "F");
+        }
+        x += seg.w;
+      }
+      x = centerX !== null ? centerX - line.width / 2 : xLeft;
       for (const seg of line.segs) {
         setSegFont(seg.bold, seg.italic, seg.fsPx);
-        doc.setTextColor(color[0], color[1], color[2]);
+        const [tr, tg, tb] = seg.c ? parseColorForPdf(seg.c) : color;
+        doc.setTextColor(tr, tg, tb);
         doc.text(seg.t, x, yBase);
         if (seg.underline) {
-          doc.setDrawColor(color[0], color[1], color[2]);
+          doc.setDrawColor(tr, tg, tb);
           doc.setLineWidth(Math.max(0.4, seg.fsPx * exportScale * 0.05));
           const uy = yBase + seg.fsPx * exportScale * 0.1;
           doc.line(x, uy, x + seg.w, uy);

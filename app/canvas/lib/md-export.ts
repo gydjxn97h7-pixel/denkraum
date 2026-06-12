@@ -18,6 +18,9 @@ function nodeText(n: CanvasNode): string {
 // Titles stay plain — outline bullets already wrap them in **, and nested
 // markers would break the emphasis.
 function lineToMd(line: TextRun[]): string {
+  // Image runs occupy their own line and have no Markdown equivalent worth
+  // inlining (data URLs) — emit a placeholder. Run colors are dropped.
+  if (line.some((r) => r.img)) return "*(image)*";
   // Group consecutive runs that differ only in font size so markers don't
   // butt against each other (`**a****b**` would not render as bold).
   const groups: { b: boolean; i: boolean; u: boolean; t: string }[] = [];
