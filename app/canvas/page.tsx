@@ -12,7 +12,7 @@ import type {
   PanelSection,
   RichText,
 } from "./lib/canvas-types";
-import { richToPlain, richHasMarks } from "./lib/rich-text";
+import { richToPlain, richHasMarks, MAX_DOC_CHARS } from "./lib/rich-text";
 import {
   bringToFront,
   bringForward,
@@ -30,7 +30,6 @@ import { useForceLayout } from "./hooks/useForceLayout";
 import { usePresentation } from "./hooks/usePresentation";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { ColorPickerWindow } from "./components/ColorPickerWindow";
-import { TextFileViewerWindow } from "./components/TextFileViewerWindow";
 import { NodeView } from "./components/NodeView";
 import { ConnectionLine } from "./components/ConnectionLine";
 import { SidebarStrip } from "./components/SidebarStrip";
@@ -43,6 +42,7 @@ import { ZoomControls } from "./components/ZoomControls";
 import { PresentationOverlays } from "./components/PresentationOverlays";
 import { Toast } from "./components/Toast";
 import { FormatBar } from "./components/FormatBar";
+import { DocEditorPanel } from "./components/DocEditorPanel";
 
 // ── Main Canvas ───────────────────────────────────────────────────────────────
 export default function Canvas() {
@@ -59,11 +59,13 @@ export default function Canvas() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [activePanel, setActivePanel] = useState<PanelSection | null>(null);
-  const [textFileViewer, setTextFileViewer] = useState<{
-    nodeId: number;
-    fileName: string;
-    content: string;
-  } | null>(null);
+  // Document editor panel: nodeId null = new, not-yet-saved document.
+  const [docEditor, setDocEditor] = useState<{ nodeId: number | null } | null>(
+    null,
+  );
+  // Bumped on every open so the panel remounts (and re-reads the node) per
+  // session, but not when a first save assigns the new node's id.
+  const docEditorSeqRef = useRef(0);
   const [copiedNode, setCopiedNode] = useState<CanvasNode | null>(null);
   const [snapGuides, setSnapGuides] = useState<{ x?: number; y?: number }>({});
   const [editingSidebarNodeId, setEditingSidebarNodeId] = useState<
@@ -200,7 +202,14 @@ export default function Canvas() {
   });
 
   // ── Wheel zoom/pan + global mouse pipeline (drag / resize / marquee) ─────────
-  const { draggingRef, resizingRef, marqueeRef, multiDraggingRef, lastMousePosRef } =
+  const {
+    draggingRef,
+    resizingRef,
+    marqueeRef,
+    multiDraggingRef,
+    lastMousePosRef,
+    lastInteractionMovedRef,
+  } =
     useCanvasInteraction({
       canvasRef,
       panRef,
@@ -526,8 +535,15 @@ export default function Canvas() {
       const fileName = file.name;
       const reader = new FileReader();
       reader.onload = (ev) => {
-        const textFileContent = ev.target?.result as string;
-        if (textFileContent == null) return;
+        const rawContent = ev.target?.result as string;
+        if (rawContent == null) return;
+        const textFileContent = rawContent.slice(0, MAX_DOC_CHARS);
+        if (rawContent.length > MAX_DOC_CHARS) {
+          setToast({
+            msg: `File truncated to ${MAX_DOC_CHARS.toLocaleString("en-US")} characters`,
+            variant: "error",
+          });
+        }
         const w = 200;
         const h = 60;
         const maxExistingId = getMaxNodeId(nodeMapRef.current);
@@ -1058,6 +1074,87 @@ export default function Canvas() {
     exportBoardMarkdown(nodes, connections, presentationOrder, boardName);
   }, [nodes, connections, presentationOrder, boardName]);
 
+  // ── Document editor ─────────────────────────────────────────────────────────
+  const openDocument = useCallback((nodeId: number) => {
+    // A click also fires at the tail end of a node drag — only open for
+    // stationary clicks.
+    if (lastInteractionMovedRef.current) return;
+    docEditorSeqRef.current += 1;
+    setDocEditor({ nodeId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openNewDocument = useCallback(() => {
+    docEditorSeqRef.current += 1;
+    setDocEditor({ nodeId: null });
+  }, []);
+
+  // Commits the panel's content to board state. For a new document the node
+  // is created centered in the viewport on first save.
+  const saveDocument = (title: string, rich: RichText) => {
+    if (!docEditor) return;
+    const plain = richToPlain(rich);
+    const keepRich = richHasMarks(rich) ? rich : undefined;
+    const cleanTitle = title.trim();
+    if (docEditor.nodeId === null) {
+      if (cleanTitle === "" && plain.trim() === "") return; // nothing to save
+      const r = canvasRef.current?.getBoundingClientRect();
+      const cx = r ? (r.width / 2 - panRef.current.x) / zoomRef.current : 0;
+      const cy = r ? (r.height / 2 - panRef.current.y) / zoomRef.current : 0;
+      const maxExistingId = getMaxNodeId(nodeMapRef.current);
+      if (idCounterRef.current <= maxExistingId)
+        idCounterRef.current = maxExistingId + 1;
+      const newId = idCounterRef.current;
+      idCounterRef.current += 1;
+      const w = 240;
+      const h = 140;
+      const docNode: CanvasNode = {
+        id: newId, x: cx - w / 2, y: cy - h / 2, w, h,
+        title: cleanTitle, label: cleanTitle || "Document", body: "",
+        type: "textfile", color: "#1D5C50", fontSize: 13,
+        textFileContent: plain,
+        ...(keepRich && { docRich: keepRich }),
+      };
+      const newNodes = [...nodesRef.current, docNode];
+      const newOrder = [...presentationOrderRef.current, newId];
+      nodesRef.current = newNodes;
+      presentationOrderRef.current = newOrder;
+      pushHistory();
+      setNodes(newNodes);
+      setPresentationOrder(newOrder);
+      setSelected(newId);
+      setDocEditor({ nodeId: newId });
+      setToast({ msg: "Document saved", variant: "success" });
+      return;
+    }
+    const id = docEditor.nodeId;
+    const old = nodesRef.current.find((n) => n.id === id);
+    if (!old) return;
+    const changed =
+      old.title !== cleanTitle ||
+      (old.textFileContent ?? "") !== plain ||
+      JSON.stringify(old.docRich) !== JSON.stringify(keepRich);
+    if (!changed) return;
+    const newNodes = nodesRef.current.map((n) => {
+      if (n.id !== id) return n;
+      const next = { ...n, title: cleanTitle, textFileContent: plain };
+      if (keepRich) next.docRich = keepRich;
+      else delete next.docRich;
+      return next;
+    });
+    nodesRef.current = newNodes;
+    pushHistory();
+    setNodes(newNodes);
+    setToast({ msg: "Document saved", variant: "success" });
+  };
+
+  // Close the panel when its node disappears (deleted, undone, board loaded).
+  useEffect(() => {
+    if (docEditor?.nodeId != null && !nodeMap.has(docEditor.nodeId)) {
+      setDocEditor(null);
+    }
+  }, [nodeMap, docEditor]);
+
   const startPresentation = () => {
     if (presentActiveSeq.length === 0) return;
     prePresentStateRef.current = {
@@ -1067,6 +1164,7 @@ export default function Canvas() {
     setPresentationIndex(0);
     setIsPresenting(true);
     setActivePanel(null);
+    setDocEditor(null);
     setContextMenu(null);
     setColorPicker(null);
     setTextColorPicker(null);
@@ -1174,6 +1272,7 @@ export default function Canvas() {
         addNode={addNode}
         handleImageInsert={handleImageInsert}
         handleTextFileInsert={handleTextFileInsert}
+        onNewDocument={openNewDocument}
         exportPdfVector={exportPdfVector}
         exportMarkdown={exportMarkdown}
         runForceLayout={runForceLayout}
@@ -1325,7 +1424,7 @@ export default function Canvas() {
               onNodeMouseDown={onNodeMouseDown}
               onNodeContextMenu={onNodeContextMenu}
               onNodeClick={onNodeClick}
-              setTextFileViewer={setTextFileViewer}
+              onOpenDocument={openDocument}
               setHoveredId={setHoveredId}
               commitNodeText={commitNodeText}
               startNodeDrag={startNodeDrag}
@@ -1426,23 +1525,19 @@ export default function Canvas() {
         />
       )}
 
-      {/* ── Text File Viewer ── */}
-      {textFileViewer &&
-        (() => {
-          const tn = nodeMap.get(textFileViewer.nodeId);
-          const spawnX = tn
-            ? tn.x * zoom + pan.x + 20
-            : window.innerWidth / 2 - 240;
-          const spawnY = tn
-            ? tn.y * zoom + pan.y - 40
-            : window.innerHeight / 2 - 170;
-          return (
-            <TextFileViewerWindow
-              viewer={{ ...textFileViewer, x: spawnX, y: spawnY }}
-              onClose={() => setTextFileViewer(null)}
-            />
-          );
-        })()}
+      {/* ── Document Editor ── */}
+      {docEditor && !isPresenting && (
+        <DocEditorPanel
+          key={docEditorSeqRef.current}
+          node={
+            docEditor.nodeId !== null
+              ? (nodeMap.get(docEditor.nodeId) ?? null)
+              : null
+          }
+          onSave={saveDocument}
+          onClose={() => setDocEditor(null)}
+        />
+      )}
 
       <ZoomControls
         zoom={zoom}

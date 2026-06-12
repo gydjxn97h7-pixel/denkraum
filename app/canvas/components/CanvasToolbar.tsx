@@ -14,6 +14,7 @@ interface CanvasToolbarProps {
   addNode: (cx: number, cy: number, type: NodeType) => void;
   handleImageInsert: (cx: number, cy: number) => void;
   handleTextFileInsert: (cx: number, cy: number) => void;
+  onNewDocument: () => void;
   exportPdfVector: () => void;
   exportMarkdown: () => void;
   runForceLayout: () => void;
@@ -39,6 +40,7 @@ export function CanvasToolbar({
   addNode,
   handleImageInsert,
   handleTextFileInsert,
+  onNewDocument,
   exportPdfVector,
   exportMarkdown,
   runForceLayout,
@@ -135,6 +137,32 @@ export function CanvasToolbar({
         }}
       >
         {(stroke, active) => renderShapeIcon("textfile", stroke, active)}
+      </ShapeButton>
+
+      {/* New document button — opens the editor panel */}
+      <ShapeButton label="New Document" isActive={false} onClick={onNewDocument}>
+        {(stroke) => (
+          <svg width="20" height="20" viewBox="0 0 20 20">
+            <path
+              d="M3 1 L13 1 L19 7 L19 19 L3 19 Z"
+              fill="url(#gShapeN)"
+              stroke={stroke}
+              strokeWidth="2"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M13 1 L13 7 L19 7"
+              fill="none"
+              stroke={stroke}
+              strokeWidth="2"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M7 14.5 L12.5 9 L14.5 11 L9 16.5 L6.5 17 Z"
+              fill="rgba(255,255,255,0.65)"
+            />
+          </svg>
+        )}
       </ShapeButton>
 
       {/* Divider */}

@@ -15,9 +15,7 @@ interface NodeViewProps {
   onNodeMouseDown: (e: React.MouseEvent, id: number) => void;
   onNodeContextMenu: (e: React.MouseEvent, id: number) => void;
   onNodeClick: (e: React.MouseEvent, id: number) => void;
-  setTextFileViewer: (
-    v: { nodeId: number; fileName: string; content: string } | null,
-  ) => void;
+  onOpenDocument: (nodeId: number) => void;
   setHoveredId: React.Dispatch<React.SetStateAction<number | null>>;
   commitNodeText: (id: number, field: "title" | "body", rich: RichText) => void;
   startNodeDrag: (e: React.MouseEvent, id: number) => void;
@@ -38,7 +36,7 @@ export const NodeView = React.memo(function NodeView({
   onNodeMouseDown,
   onNodeContextMenu,
   onNodeClick,
-  setTextFileViewer,
+  onOpenDocument,
   setHoveredId,
   commitNodeText,
   startNodeDrag,
@@ -114,11 +112,7 @@ export const NodeView = React.memo(function NodeView({
         onNodeClick(e, n.id);
         if (!wasConnecting && isTextFile) {
           e.stopPropagation();
-          setTextFileViewer({
-            nodeId: n.id,
-            fileName: n.textFileName ?? n.title,
-            content: n.textFileContent ?? "",
-          });
+          onOpenDocument(n.id);
         }
       }}
       onDoubleClick={(e) => {

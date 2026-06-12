@@ -31,7 +31,10 @@ export function FormatBar() {
     const anchorEl =
       anchor instanceof Element ? anchor : (anchor?.parentElement ?? null);
     const editable = anchorEl?.closest('[contenteditable="true"]');
-    if (!editable || !anchorEl?.closest("[data-node-id]")) {
+    if (
+      !editable ||
+      !anchorEl?.closest("[data-node-id], [data-doc-editor]")
+    ) {
       setBar(null);
       return;
     }

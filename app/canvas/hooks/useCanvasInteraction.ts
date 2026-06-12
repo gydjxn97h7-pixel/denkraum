@@ -66,6 +66,11 @@ export function useCanvasInteraction({
   // those zero-movement "drags" creates duplicate snapshots (e.g. the
   // double-click that enters text editing), breaking single-step undo.
   const interactionMovedRef = useRef(false);
+  // Sticky variant of the above for click handlers: window mouseup (which
+  // resets interactionMovedRef) runs before the element's click event, so
+  // click-triggered actions (e.g. opening the document editor) read this to
+  // tell a real click from the tail end of a drag.
+  const lastInteractionMovedRef = useRef(false);
 
   // Pending values accumulated during a mousemove burst; applied once per frame
   const rafRef = useRef<number | null>(null);
@@ -333,6 +338,7 @@ export function useCanvasInteraction({
       setMarqueeRect(null);
     }
 
+    lastInteractionMovedRef.current = interactionMovedRef.current;
     if (wasInteracting && interactionMovedRef.current) {
       if (flushedNodeChange) {
         // Final position commits after this handler — let the nodes effect
@@ -363,5 +369,12 @@ export function useCanvasInteraction({
     };
   }, [onMouseMove, onMouseUp]);
 
-  return { draggingRef, resizingRef, marqueeRef, multiDraggingRef, lastMousePosRef };
+  return {
+    draggingRef,
+    resizingRef,
+    marqueeRef,
+    multiDraggingRef,
+    lastMousePosRef,
+    lastInteractionMovedRef,
+  };
 }
