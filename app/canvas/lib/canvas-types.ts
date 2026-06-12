@@ -21,6 +21,11 @@ export type TextRun = {
   i?: true;
   u?: true;
   fs?: number; // CSS px, overrides the node's base fontSize for this run
+  c?: string; // text color, #rrggbb
+  bg?: string; // highlight color, #rrggbb
+  // Inline image (data URL). Image runs carry no text and always occupy a
+  // line of their own — insertion and parsing both enforce this.
+  img?: string;
 };
 export type RichText = TextRun[][];
 

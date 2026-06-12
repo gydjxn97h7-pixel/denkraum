@@ -1,4 +1,5 @@
 import type { RichText, TextRun } from "./canvas-types";
+import { rgbToHex } from "./color-helpers";
 
 // ── Rich text model helpers ───────────────────────────────────────────────────
 // RichText is the source of truth for formatted fields; the node's plain
@@ -16,6 +17,21 @@ export const MAX_RUN_FONT_SIZE = 72;
 // blocked insertions), never by truncating silently.
 export const MAX_DOC_CHARS = 50_000;
 
+// Per-image budget for inline document images (data-URL length, ≈1.5MB of
+// binary). Images live in docRich, which is IndexedDB-persisted like the
+// existing image-node assets.
+export const MAX_DOC_IMAGE_CHARS = 2_000_000;
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+// Inline styles read back as rgb(...) even when set as hex — normalize.
+function cssColorToHex(v: string): string | undefined {
+  if (HEX_COLOR.test(v)) return v;
+  const m = v.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (m) return rgbToHex(+m[1], +m[2], +m[3]);
+  return undefined;
+}
+
 export function richToPlain(rich: RichText): string {
   return rich.map((line) => line.map((r) => r.t).join("")).join("\n");
 }
@@ -26,7 +42,10 @@ export function plainToRich(plain: string): RichText {
 
 export function richHasMarks(rich: RichText): boolean {
   return rich.some((line) =>
-    line.some((r) => r.b || r.i || r.u || r.fs !== undefined),
+    line.some(
+      (r) =>
+        r.b || r.i || r.u || r.fs !== undefined || r.c || r.bg || r.img,
+    ),
   );
 }
 
@@ -35,14 +54,21 @@ export function richHasMarks(rich: RichText): boolean {
 function normalizeLine(line: TextRun[]): TextRun[] {
   const out: TextRun[] = [];
   for (const run of line) {
+    if (run.img) {
+      out.push({ ...run });
+      continue;
+    }
     if (run.t === "") continue;
     const prev = out[out.length - 1];
     if (
       prev &&
+      !prev.img &&
       !prev.b === !run.b &&
       !prev.i === !run.i &&
       !prev.u === !run.u &&
-      prev.fs === run.fs
+      prev.fs === run.fs &&
+      prev.c === run.c &&
+      prev.bg === run.bg
     ) {
       prev.t += run.t;
     } else {
@@ -70,7 +96,23 @@ export function setEditableContent(
   rich.forEach((line, li) => {
     if (li > 0) el.appendChild(document.createTextNode("\n"));
     for (const run of line) {
-      if (!run.b && !run.i && !run.u && run.fs === undefined) {
+      if (run.img) {
+        const img = document.createElement("img");
+        img.src = run.img;
+        img.draggable = false;
+        img.style.maxWidth = "100%";
+        img.style.borderRadius = "3px";
+        el.appendChild(img);
+        continue;
+      }
+      if (
+        !run.b &&
+        !run.i &&
+        !run.u &&
+        run.fs === undefined &&
+        run.c === undefined &&
+        run.bg === undefined
+      ) {
         el.appendChild(document.createTextNode(run.t));
         continue;
       }
@@ -79,13 +121,22 @@ export function setEditableContent(
       if (run.i) span.style.fontStyle = "italic";
       if (run.u) span.style.textDecoration = "underline";
       if (run.fs !== undefined) span.style.fontSize = `${run.fs}px`;
+      if (run.c !== undefined) span.style.color = run.c;
+      if (run.bg !== undefined) span.style.backgroundColor = run.bg;
       span.textContent = run.t;
       el.appendChild(span);
     }
   });
 }
 
-type MarkCtx = { b: boolean; i: boolean; u: boolean; fs?: number };
+type MarkCtx = {
+  b: boolean;
+  i: boolean;
+  u: boolean;
+  fs?: number;
+  c?: string;
+  bg?: string;
+};
 
 // Marks are additive overrides on the node's base style, so only positive
 // signals (tags, explicit styles) set them — "font-weight: normal" spans the
@@ -113,6 +164,18 @@ function ctxFromElement(el: HTMLElement, ctx: MarkCtx): MarkCtx {
         Math.max(MIN_RUN_FONT_SIZE, Math.round(parseFloat(m[1]))),
       );
     }
+    if (st.color) {
+      const hex = cssColorToHex(st.color);
+      if (hex) next.c = hex;
+    }
+    if (
+      st.backgroundColor &&
+      st.backgroundColor !== "transparent" &&
+      !/^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0\s*\)$/.test(st.backgroundColor)
+    ) {
+      const hex = cssColorToHex(st.backgroundColor);
+      if (hex) next.bg = hex;
+    }
   }
   return next;
 }
@@ -123,6 +186,8 @@ function makeRun(t: string, ctx: MarkCtx): TextRun {
   if (ctx.i) run.i = true;
   if (ctx.u) run.u = true;
   if (ctx.fs !== undefined) run.fs = ctx.fs;
+  if (ctx.c !== undefined) run.c = ctx.c;
+  if (ctx.bg !== undefined) run.bg = ctx.bg;
   return run;
 }
 
@@ -161,6 +226,19 @@ export function editableRichText(root: HTMLElement): RichText {
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       const el = node as HTMLElement;
       const tag = el.tagName;
+      if (tag === "IMG") {
+        // Images occupy a line of their own; only bounded data URLs survive.
+        const src = el.getAttribute("src") ?? "";
+        if (
+          src.startsWith("data:image/") &&
+          src.length <= MAX_DOC_IMAGE_CHARS
+        ) {
+          if (cur.length > 0) endLine();
+          out.push([{ t: "", img: src }]);
+          trailingNewline = false;
+        }
+        return;
+      }
       if (tag === "BR") {
         endLine();
         trailingNewline = false;
@@ -211,6 +289,30 @@ export function applyFontSizeToSelection(px: number): void {
   sel.addRange(r);
 }
 
+// Wraps the current selection in a colored span (text or highlight) —
+// same range surgery as applyFontSizeToSelection, clearing nested overrides
+// of the same property so the new value wins.
+export function applyColorToSelection(
+  prop: "color" | "backgroundColor",
+  value: string,
+): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  const frag = range.extractContents();
+  frag.querySelectorAll("span").forEach((sp) => {
+    if (sp.style[prop]) sp.style[prop] = "";
+  });
+  const span = document.createElement("span");
+  span.style[prop] = value;
+  span.appendChild(frag);
+  range.insertNode(span);
+  const r = document.createRange();
+  r.selectNodeContents(span);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
 // Structural validation for untrusted payloads (localStorage, .dnkrm files) —
 // same philosophy as sanitizeLoadedNode: accept only known fields with the
 // right types, clamp numbers, reject anything malformed.
@@ -224,6 +326,12 @@ export function sanitizeRichText(raw: unknown): RichText | null {
       if (!rawRun || typeof rawRun !== "object") return null;
       const r = rawRun as Record<string, unknown>;
       if (typeof r.t !== "string") return null;
+      if (typeof r.img === "string") {
+        if (r.img.startsWith("data:image/") && r.img.length <= MAX_DOC_IMAGE_CHARS) {
+          line.push({ t: "", img: r.img });
+        }
+        continue;
+      }
       if (r.t === "") continue;
       const run: TextRun = { t: r.t };
       if (r.b === true) run.b = true;
@@ -235,6 +343,8 @@ export function sanitizeRichText(raw: unknown): RichText | null {
           Math.max(MIN_RUN_FONT_SIZE, Math.round(r.fs)),
         );
       }
+      if (typeof r.c === "string" && HEX_COLOR.test(r.c)) run.c = r.c;
+      if (typeof r.bg === "string" && HEX_COLOR.test(r.bg)) run.bg = r.bg;
       line.push(run);
     }
     lines.push(line);
