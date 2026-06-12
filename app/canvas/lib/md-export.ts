@@ -48,10 +48,12 @@ function lineToMd(line: TextRun[]): string {
 }
 
 // Non-text payloads can't be embedded in Markdown — annotate them instead.
+// Documents export their full content (see renderSubtree), so the annotation
+// only marks what kind of node the text came from.
 function nodeAnnotation(n: CanvasNode): string {
   if (n.type === "image") return " *(image)*";
   if (n.type === "textfile")
-    return n.textFileName ? ` *(file: ${n.textFileName})*` : " *(file)*";
+    return n.textFileName ? ` *(file: ${n.textFileName})*` : " *(document)*";
   return "";
 }
 
@@ -100,12 +102,16 @@ export function buildBoardMarkdown(
       return;
     }
     visited.add(id);
-    const bodyLines = (n.bodyRich
-      ? n.bodyRich.map(lineToMd)
-      : (n.body ?? "").trim().split("\n")
-    )
-      .map((l) => l.trim())
-      .filter((l) => l !== "");
+    // Documents contribute their full content; other nodes their body field.
+    const rawLines =
+      n.type === "textfile"
+        ? n.docRich
+          ? n.docRich.map(lineToMd)
+          : (n.textFileContent ?? "").trim().split("\n")
+        : n.bodyRich
+          ? n.bodyRich.map(lineToMd)
+          : (n.body ?? "").trim().split("\n");
+    const bodyLines = rawLines.map((l) => l.trim()).filter((l) => l !== "");
     let bullet = `${indent}- **${nodeText(n)}**${nodeAnnotation(n)}`;
     if (bodyLines.length === 1) bullet += ` — ${bodyLines[0]}`;
     lines.push(bullet);

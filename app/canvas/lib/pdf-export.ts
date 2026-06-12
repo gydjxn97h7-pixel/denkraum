@@ -458,22 +458,48 @@ export async function exportBoardPdf(
         const startY = ny + nh / 2 - fieldHeight(laid) / 2;
         drawField(laid, 0, nx + nw / 2, startY, [cr, cg, cb]);
       } else if (n.type === "textfile") {
-        const label = (n.textFileName ?? n.title ?? "").trim();
-        if (!label) continue;
-        // rgba(255,255,255,0.82) over node fill
-        const lfR = Math.round(0.82 * 255 + 0.18 * fr);
-        const lfG = Math.round(0.82 * 255 + 0.18 * fg);
-        const lfB = Math.round(0.82 * 255 + 0.18 * fb);
-        const padH = 12 * exportScale;
-        const titleFsPt = fs * exportScale * 0.75;
-        const titleLineH = fs * exportScale * 1.2;
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(titleFsPt);
-        doc.setTextColor(lfR, lfG, lfB);
+        // Document node: title plus the FULL document content via the
+        // run-aware layout (the canvas shows only a preview, but the export
+        // is the document's faithful rendering). Long documents extend below
+        // the node rect — resize the node to bound them visually.
+        const docTitle =
+          (n.title ?? "").trim() || (n.textFileName ?? "").trim();
+        const content = (n.textFileContent ?? "").trim();
+        const docSrc: RichText | null =
+          n.docRich ?? (content ? plainToRich(content) : null);
+        if (!docTitle && !docSrc) continue;
+        const padH = 14 * exportScale;
+        const padTop = 12 * exportScale;
         const maxW = Math.max(10, nw - 2 * padH);
-        const lines: string[] = doc.splitTextToSize(label, maxW);
-        const startY = ny + nh / 2 - titleLineH / 2;
-        doc.text(lines[0], nx + padH, startY, { baseline: "top" });
+        // Canvas colors: title rgba(255,255,255,0.9), content
+        // rgba(255,255,255,0.55) — composited over the node fill.
+        const dtR = Math.round(0.9 * 255 + 0.1 * fr);
+        const dtG = Math.round(0.9 * 255 + 0.1 * fg);
+        const dtB = Math.round(0.9 * 255 + 0.1 * fb);
+        const dcR = Math.round(0.55 * 255 + 0.45 * fr);
+        const dcG = Math.round(0.55 * 255 + 0.45 * fg);
+        const dcB = Math.round(0.55 * 255 + 0.45 * fb);
+        let curY = ny + padTop;
+        if (docTitle) {
+          const titleLaid = layoutField(plainToRich(docTitle), maxW, fs, 1.2, {
+            bold: true,
+            italic: false,
+            underline: false,
+          });
+          drawField(titleLaid, nx + padH, null, curY, [dtR, dtG, dtB]);
+          curY += fieldHeight(titleLaid);
+        }
+        if (docSrc) {
+          curY += 6 * exportScale;
+          const contentLaid = layoutField(
+            docSrc,
+            maxW,
+            Math.max(10, fs - 3),
+            1.5,
+            base,
+          );
+          drawField(contentLaid, nx + padH, null, curY, [dcR, dcG, dcB]);
+        }
       } else {
         // diamond / circle / oval — centered; block / rounded — top-left
         const centered =
