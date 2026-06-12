@@ -115,7 +115,9 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
               ? 300
               : `calc((100vh - ${VERTICAL_CHROME}px) / ${A4_RATIO} + ${DESK_PAD * 2}px)`,
         minWidth: mode === "min" ? 0 : 400,
-        maxWidth: "calc(100vw - 100px)",
+        // In fullscreen the panel is anchored on both edges — a max-width
+        // would override the right anchor and shift the whole panel left.
+        maxWidth: mode === "full" ? undefined : "calc(100vw - 100px)",
         background:
           "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
         backdropFilter: "blur(24px)",
