@@ -1,7 +1,12 @@
 "use client";
 import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import "./canvas.css";
-import { ACCENT, LS_BOARD_NAME, DEFAULT_NODES, DEFAULT_CONNECTIONS } from "./lib/canvas-types";
+import {
+  ACCENT,
+  LS_BOARD_NAME,
+  DEFAULT_NODES,
+  DEFAULT_CONNECTIONS,
+} from "./lib/canvas-types";
 import type {
   NodeType,
   CanvasNode,
@@ -154,7 +159,14 @@ export default function Canvas() {
     animRafRef,
     animCurrentRef,
     centerNodeForPresentation,
-  } = usePresentation({ canvasRef, nodeMapRef, panRef, zoomRef, setPan, setZoom });
+  } = usePresentation({
+    canvasRef,
+    nodeMapRef,
+    panRef,
+    zoomRef,
+    setPan,
+    setZoom,
+  });
 
   // Nodes whose excludeFromPresentation is truthy are skipped from navigation
   const presentActiveSeq = useMemo(
@@ -210,21 +222,20 @@ export default function Canvas() {
     multiDraggingRef,
     lastMousePosRef,
     lastInteractionMovedRef,
-  } =
-    useCanvasInteraction({
-      canvasRef,
-      panRef,
-      zoomRef,
-      nodeMapRef,
-      needsHistoryPushRef,
-      pushHistory,
-      setPan,
-      setZoom,
-      setNodes,
-      setSnapGuides,
-      setMarqueeRect,
-      setSelectedIds,
-    });
+  } = useCanvasInteraction({
+    canvasRef,
+    panRef,
+    zoomRef,
+    nodeMapRef,
+    needsHistoryPushRef,
+    pushHistory,
+    setPan,
+    setZoom,
+    setNodes,
+    setSnapGuides,
+    setMarqueeRect,
+    setSelectedIds,
+  });
 
   // ── Force-directed layout ──────────────────────────────────────────────────
   const runForceLayout = useForceLayout({
@@ -382,91 +393,94 @@ export default function Canvas() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const addNode = useCallback((cx: number, cy: number, type: NodeType) => {
-    const isText = type === "text";
-    const isCircle = type === "circle";
-    const isOval = type === "oval";
-    const isDiamond = type === "diamond";
-    const w = isText
-      ? 160
-      : isCircle
-        ? 100
-        : isOval
-          ? 160
-          : isDiamond
-            ? 130
-            : 200;
-    const h = isText
-      ? 40
-      : isCircle
-        ? 100
-        : isOval
+  const addNode = useCallback(
+    (cx: number, cy: number, type: NodeType) => {
+      const isText = type === "text";
+      const isCircle = type === "circle";
+      const isOval = type === "oval";
+      const isDiamond = type === "diamond";
+      const w = isText
+        ? 160
+        : isCircle
           ? 100
-          : isDiamond
+          : isOval
+            ? 160
+            : isDiamond
+              ? 130
+              : 200;
+      const h = isText
+        ? 40
+        : isCircle
+          ? 100
+          : isOval
             ? 100
-            : 80;
-    const maxExistingId = getMaxNodeId(nodeMapRef.current);
-    if (idCounterRef.current <= maxExistingId)
-      idCounterRef.current = maxExistingId + 1;
-    const newId = idCounterRef.current;
-    idCounterRef.current += 1;
+            : isDiamond
+              ? 100
+              : 80;
+      const maxExistingId = getMaxNodeId(nodeMapRef.current);
+      if (idCounterRef.current <= maxExistingId)
+        idCounterRef.current = maxExistingId + 1;
+      const newId = idCounterRef.current;
+      idCounterRef.current += 1;
 
-    const TYPE_LABEL: Partial<Record<NodeType, string>> = {
-      block: "Block",
-      rounded: "Area",
-      circle: "Circle",
-      oval: "Oval",
-      diamond: "Diamond",
-      text: "Text",
-      image: "Image",
-    };
-    const baseLabel = TYPE_LABEL[type];
-    let autoLabel = "";
-    if (baseLabel) {
-      const re = new RegExp(`^${baseLabel}\\s+(\\d+)$`);
-      let maxIdx = 0;
-      for (const node of nodeMapRef.current.values()) {
-        if (node.type === type) {
-          const m = (node.label ?? "").match(re);
-          if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
+      const TYPE_LABEL: Partial<Record<NodeType, string>> = {
+        block: "Block",
+        rounded: "Area",
+        circle: "Circle",
+        oval: "Oval",
+        diamond: "Diamond",
+        text: "Text",
+        image: "Image",
+      };
+      const baseLabel = TYPE_LABEL[type];
+      let autoLabel = "";
+      if (baseLabel) {
+        const re = new RegExp(`^${baseLabel}\\s+(\\d+)$`);
+        let maxIdx = 0;
+        for (const node of nodeMapRef.current.values()) {
+          if (node.type === type) {
+            const m = (node.label ?? "").match(re);
+            if (m) maxIdx = Math.max(maxIdx, parseInt(m[1], 10));
+          }
         }
+        autoLabel = `${baseLabel} ${maxIdx + 1}`;
       }
-      autoLabel = `${baseLabel} ${maxIdx + 1}`;
-    }
 
-    const newNode: CanvasNode = {
-      id: newId,
-      x: cx - w / 2,
-      y: cy - h / 2,
-      w,
-      h,
-      title: "",
-      label: autoLabel,
-      body: "",
-      type,
-      color: isText ? "transparent" : "#1D5C50",
-      fontSize: isText ? 15 : 13,
-    };
-    const newNodes = [...nodesRef.current, newNode];
-    const newOrder = [...presentationOrderRef.current, newId];
-    nodesRef.current = newNodes;
-    presentationOrderRef.current = newOrder;
-    pushHistory();
-    setNodes(newNodes);
-    setPresentationOrder(newOrder);
-    setSelected(newId);
-    setContextMenu(null);
-    setTimeout(() => setActiveShapeType(null), 600);
-    if (isText) {
-      editingNodeIdRef.current = newId;
-      setTimeout(() => {
-        const el = document.querySelector<HTMLElement>(
-          `[data-node-id="${newId}"] [contenteditable]`,
-        );
-        el?.focus();
-      }, 50);
-    }
-  }, [pushHistory]);
+      const newNode: CanvasNode = {
+        id: newId,
+        x: cx - w / 2,
+        y: cy - h / 2,
+        w,
+        h,
+        title: "",
+        label: autoLabel,
+        body: "",
+        type,
+        color: isText ? "transparent" : "#1D5C50",
+        fontSize: isText ? 15 : 13,
+      };
+      const newNodes = [...nodesRef.current, newNode];
+      const newOrder = [...presentationOrderRef.current, newId];
+      nodesRef.current = newNodes;
+      presentationOrderRef.current = newOrder;
+      pushHistory();
+      setNodes(newNodes);
+      setPresentationOrder(newOrder);
+      setSelected(newId);
+      setContextMenu(null);
+      setTimeout(() => setActiveShapeType(null), 600);
+      if (isText) {
+        editingNodeIdRef.current = newId;
+        setTimeout(() => {
+          const el = document.querySelector<HTMLElement>(
+            `[data-node-id="${newId}"] [contenteditable]`,
+          );
+          el?.focus();
+        }, 50);
+      }
+    },
+    [pushHistory],
+  );
 
   const handleImageInsert = useCallback((cx: number, cy: number) => {
     pendingImagePos.current = { cx, cy };
@@ -502,9 +516,17 @@ export default function Canvas() {
             }
           }
           const imgNode: CanvasNode = {
-            id: newId, x: pos.cx - w / 2, y: pos.cy - h / 2, w, h,
-            title: "", label: `Image ${maxIdx + 1}`, body: "",
-            type: "image", color: "#1D5C50", imageUrl,
+            id: newId,
+            x: pos.cx - w / 2,
+            y: pos.cy - h / 2,
+            w,
+            h,
+            title: "",
+            label: `Image ${maxIdx + 1}`,
+            body: "",
+            type: "image",
+            color: "#1D5C50",
+            imageUrl,
           };
           const newNodes = [...nodesRef.current, imgNode];
           const newOrder = [...presentationOrderRef.current, newId];
@@ -553,10 +575,19 @@ export default function Canvas() {
         const newId = idCounterRef.current;
         idCounterRef.current += 1;
         const tfNode: CanvasNode = {
-          id: newId, x: pos.cx - w / 2, y: pos.cy - h / 2, w, h,
-          title: "", label: fileName, body: "",
-          type: "textfile", color: "#1D5C50", fontSize: 13,
-          textFileContent, textFileName: fileName,
+          id: newId,
+          x: pos.cx - w / 2,
+          y: pos.cy - h / 2,
+          w,
+          h,
+          title: "",
+          label: fileName,
+          body: "",
+          type: "textfile",
+          color: "#1D5C50",
+          fontSize: 13,
+          textFileContent,
+          textFileName: fileName,
         };
         const newNodes = [...nodesRef.current, tfNode];
         const newOrder = [...presentationOrderRef.current, newId];
@@ -778,37 +809,43 @@ export default function Canvas() {
   const onConnHoverLeave = useCallback((key: string) => {
     setHoveredConnKey((k) => (k === key ? null : k));
   }, []);
-  const onConnDelete = useCallback((from: number, to: number) => {
-    const newConns = connectionsRef.current.filter(
-      (x) => !(x.from === from && x.to === to),
-    );
-    connectionsRef.current = newConns;
-    pushHistory();
-    setConnections(newConns);
-  }, [pushHistory]);
+  const onConnDelete = useCallback(
+    (from: number, to: number) => {
+      const newConns = connectionsRef.current.filter(
+        (x) => !(x.from === from && x.to === to),
+      );
+      connectionsRef.current = newConns;
+      pushHistory();
+      setConnections(newConns);
+    },
+    [pushHistory],
+  );
 
   // Finalizes a pending connection on click (fires after mouseup, so
   // connectDragRef is guaranteed to hold the latest state).
-  const onNodeClick = useCallback((e: React.MouseEvent, id: number) => {
-    const cd = connectDragRef.current;
-    if (!cd) return;
-    e.stopPropagation();
-    if (id !== cd.fromId) {
-      const dup = connectionsRef.current.some(
-        (c) => c.from === cd.fromId && c.to === id,
-      );
-      if (!dup) {
-        const newConns = [
-          ...connectionsRef.current,
-          { from: cd.fromId, to: id },
-        ];
-        connectionsRef.current = newConns;
-        pushHistory();
-        setConnections(newConns);
+  const onNodeClick = useCallback(
+    (e: React.MouseEvent, id: number) => {
+      const cd = connectDragRef.current;
+      if (!cd) return;
+      e.stopPropagation();
+      if (id !== cd.fromId) {
+        const dup = connectionsRef.current.some(
+          (c) => c.from === cd.fromId && c.to === id,
+        );
+        if (!dup) {
+          const newConns = [
+            ...connectionsRef.current,
+            { from: cd.fromId, to: id },
+          ];
+          connectionsRef.current = newConns;
+          pushHistory();
+          setConnections(newConns);
+        }
       }
-    }
-    setConnectDrag(null);
-  }, [pushHistory]);
+      setConnectDrag(null);
+    },
+    [pushHistory],
+  );
 
   useEffect(() => {
     if (filterOpen) setTimeout(() => filterInputRef.current?.focus(), 50);
@@ -818,30 +855,42 @@ export default function Canvas() {
     setFilterJumpIndex(0);
   }, [filterText, filterType]);
 
-  const arrangeBringToFront = useCallback((id: number) => {
-    const newNodes = bringToFront(nodesRef.current, id);
-    nodesRef.current = newNodes;
-    pushHistory();
-    setNodes(newNodes);
-  }, [pushHistory]);
-  const arrangeBringForward = useCallback((id: number) => {
-    const newNodes = bringForward(nodesRef.current, id);
-    nodesRef.current = newNodes;
-    pushHistory();
-    setNodes(newNodes);
-  }, [pushHistory]);
-  const arrangeSendBackward = useCallback((id: number) => {
-    const newNodes = sendBackward(nodesRef.current, id);
-    nodesRef.current = newNodes;
-    pushHistory();
-    setNodes(newNodes);
-  }, [pushHistory]);
-  const arrangeSendToBack = useCallback((id: number) => {
-    const newNodes = sendToBack(nodesRef.current, id);
-    nodesRef.current = newNodes;
-    pushHistory();
-    setNodes(newNodes);
-  }, [pushHistory]);
+  const arrangeBringToFront = useCallback(
+    (id: number) => {
+      const newNodes = bringToFront(nodesRef.current, id);
+      nodesRef.current = newNodes;
+      pushHistory();
+      setNodes(newNodes);
+    },
+    [pushHistory],
+  );
+  const arrangeBringForward = useCallback(
+    (id: number) => {
+      const newNodes = bringForward(nodesRef.current, id);
+      nodesRef.current = newNodes;
+      pushHistory();
+      setNodes(newNodes);
+    },
+    [pushHistory],
+  );
+  const arrangeSendBackward = useCallback(
+    (id: number) => {
+      const newNodes = sendBackward(nodesRef.current, id);
+      nodesRef.current = newNodes;
+      pushHistory();
+      setNodes(newNodes);
+    },
+    [pushHistory],
+  );
+  const arrangeSendToBack = useCallback(
+    (id: number) => {
+      const newNodes = sendToBack(nodesRef.current, id);
+      nodesRef.current = newNodes;
+      pushHistory();
+      setNodes(newNodes);
+    },
+    [pushHistory],
+  );
 
   const deleteSelected = useCallback(() => {
     if (selectedIdsRef.current.size > 0) {
@@ -850,7 +899,9 @@ export default function Canvas() {
       const newConns = connectionsRef.current.filter(
         (c) => !ids.has(c.from) && !ids.has(c.to),
       );
-      const newOrder = presentationOrderRef.current.filter((id) => !ids.has(id));
+      const newOrder = presentationOrderRef.current.filter(
+        (id) => !ids.has(id),
+      );
       nodesRef.current = newNodes;
       connectionsRef.current = newConns;
       presentationOrderRef.current = newOrder;
@@ -886,55 +937,64 @@ export default function Canvas() {
     if (n) setCopiedNode(n);
   }, []);
 
-  const pasteNode = useCallback((cx?: number, cy?: number) => {
-    const node = copiedNodeRef.current;
-    if (!node) return;
-    const maxExistingId = getMaxNodeId(nodeMapRef.current);
-    if (idCounterRef.current <= maxExistingId)
-      idCounterRef.current = maxExistingId + 1;
-    const newId = idCounterRef.current;
-    idCounterRef.current += 1;
-    const tx =
-      cx !== undefined
-        ? cx - node.w / 2
-        : lastMousePosRef.current.x - node.w / 2 + 10;
-    const ty =
-      cy !== undefined
-        ? cy - node.h / 2
-        : lastMousePosRef.current.y - node.h / 2 + 10;
-    const pastedNode = { ...node, id: newId, x: tx, y: ty };
-    const newNodes = [...nodesRef.current, pastedNode];
-    const newOrder = [...presentationOrderRef.current, newId];
-    nodesRef.current = newNodes;
-    presentationOrderRef.current = newOrder;
-    pushHistory();
-    setNodes(newNodes);
-    setPresentationOrder(newOrder);
-    setSelected(newId);
-    setContextMenu(null);
-  }, [pushHistory]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pasteNode = useCallback(
+    (cx?: number, cy?: number) => {
+      const node = copiedNodeRef.current;
+      if (!node) return;
+      const maxExistingId = getMaxNodeId(nodeMapRef.current);
+      if (idCounterRef.current <= maxExistingId)
+        idCounterRef.current = maxExistingId + 1;
+      const newId = idCounterRef.current;
+      idCounterRef.current += 1;
+      const tx =
+        cx !== undefined
+          ? cx - node.w / 2
+          : lastMousePosRef.current.x - node.w / 2 + 10;
+      const ty =
+        cy !== undefined
+          ? cy - node.h / 2
+          : lastMousePosRef.current.y - node.h / 2 + 10;
+      const pastedNode = { ...node, id: newId, x: tx, y: ty };
+      const newNodes = [...nodesRef.current, pastedNode];
+      const newOrder = [...presentationOrderRef.current, newId];
+      nodesRef.current = newNodes;
+      presentationOrderRef.current = newOrder;
+      pushHistory();
+      setNodes(newNodes);
+      setPresentationOrder(newOrder);
+      setSelected(newId);
+      setContextMenu(null);
+    },
+    [pushHistory],
+  ); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const movePresentationNodeUp = useCallback((id: number) => {
-    const prev = presentationOrderRef.current;
-    const idx = prev.indexOf(id);
-    if (idx <= 0) return;
-    const next = [...prev];
-    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-    presentationOrderRef.current = next;
-    pushHistory();
-    setPresentationOrder(next);
-  }, [pushHistory]);
+  const movePresentationNodeUp = useCallback(
+    (id: number) => {
+      const prev = presentationOrderRef.current;
+      const idx = prev.indexOf(id);
+      if (idx <= 0) return;
+      const next = [...prev];
+      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+      presentationOrderRef.current = next;
+      pushHistory();
+      setPresentationOrder(next);
+    },
+    [pushHistory],
+  );
 
-  const movePresentationNodeDown = useCallback((id: number) => {
-    const prev = presentationOrderRef.current;
-    const idx = prev.indexOf(id);
-    if (idx === -1 || idx === prev.length - 1) return;
-    const next = [...prev];
-    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-    presentationOrderRef.current = next;
-    pushHistory();
-    setPresentationOrder(next);
-  }, [pushHistory]);
+  const movePresentationNodeDown = useCallback(
+    (id: number) => {
+      const prev = presentationOrderRef.current;
+      const idx = prev.indexOf(id);
+      if (idx === -1 || idx === prev.length - 1) return;
+      const next = [...prev];
+      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+      presentationOrderRef.current = next;
+      pushHistory();
+      setPresentationOrder(next);
+    },
+    [pushHistory],
+  );
 
   // Commits an edited field: runs are the source of truth, the plain string
   // mirror is derived, and rich storage is dropped when no marks remain.
@@ -962,13 +1022,18 @@ export default function Canvas() {
     [pushHistory],
   );
 
-  const updateNodeLabel = useCallback((id: number, label: string) => {
-    const old = nodesRef.current.find((n) => n.id === id)?.label ?? "";
-    const newNodes = nodesRef.current.map((n) => (n.id === id ? { ...n, label } : n));
-    nodesRef.current = newNodes;
-    if (label !== old) pushHistory();
-    setNodes(newNodes);
-  }, [pushHistory]);
+  const updateNodeLabel = useCallback(
+    (id: number, label: string) => {
+      const old = nodesRef.current.find((n) => n.id === id)?.label ?? "";
+      const newNodes = nodesRef.current.map((n) =>
+        n.id === id ? { ...n, label } : n,
+      );
+      nodesRef.current = newNodes;
+      if (label !== old) pushHistory();
+      setNodes(newNodes);
+    },
+    [pushHistory],
+  );
 
   const updateFontSize = useCallback((id: number, size: number) => {
     const newNodes = nodesRef.current.map((n) =>
@@ -1110,9 +1175,17 @@ export default function Canvas() {
       const w = 240;
       const h = 140;
       const docNode: CanvasNode = {
-        id: newId, x: cx - w / 2, y: cy - h / 2, w, h,
-        title: cleanTitle, label: cleanTitle || "Document", body: "",
-        type: "textfile", color: "#1D5C50", fontSize: 13,
+        id: newId,
+        x: cx - w / 2,
+        y: cy - h / 2,
+        w,
+        h,
+        title: cleanTitle,
+        label: cleanTitle || "Document",
+        body: "",
+        type: "textfile",
+        color: "#1D5C50",
+        fontSize: 13,
         textFileContent: plain,
         ...(keepRich && { docRich: keepRich }),
       };
@@ -1124,9 +1197,7 @@ export default function Canvas() {
       setNodes(newNodes);
       setPresentationOrder(newOrder);
       setSelected(newId);
-      setDocEditor((prev) =>
-        prev ? { nodeId: newId, seq: prev.seq } : prev,
-      );
+      setDocEditor((prev) => (prev ? { nodeId: newId, seq: prev.seq } : prev));
       setToast({ msg: "Document saved", variant: "success" });
       return;
     }
@@ -1518,7 +1589,10 @@ export default function Canvas() {
         <ColorPickerWindow
           picker={colorPicker}
           onColorChange={onPickerColorChange}
-          onClose={() => { pushHistory(); setColorPicker(null); }}
+          onClose={() => {
+            pushHistory();
+            setColorPicker(null);
+          }}
         />
       )}
 
@@ -1527,7 +1601,10 @@ export default function Canvas() {
         <ColorPickerWindow
           picker={textColorPicker}
           onColorChange={onPickerTextColorChange}
-          onClose={() => { pushHistory(); setTextColorPicker(null); }}
+          onClose={() => {
+            pushHistory();
+            setTextColorPicker(null);
+          }}
         />
       )}
 
@@ -1592,10 +1669,38 @@ export default function Canvas() {
 
       {/* ── Mobile fallback ── */}
       <div className="mobile-fallback">
-        <span style={{ color: "#F1B24A", fontSize: 22, fontWeight: 700, letterSpacing: "0.12em" }}>DNKRM</span>
-        <div style={{ width: 32, height: 2, background: "#F1B24A", borderRadius: 1, margin: "20px 0 24px" }} />
-        <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 16, lineHeight: 1.6, textAlign: "center", maxWidth: 280, margin: 0 }}>
-          DNKRM is built for desktop.<br />Open it on your computer for the full experience.
+        <span
+          style={{
+            color: "#F1B24A",
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: "0.12em",
+          }}
+        >
+          DNKRM
+        </span>
+        <div
+          style={{
+            width: 32,
+            height: 2,
+            background: "#F1B24A",
+            borderRadius: 1,
+            margin: "20px 0 24px",
+          }}
+        />
+        <p
+          style={{
+            color: "rgba(255,255,255,0.85)",
+            fontSize: 16,
+            lineHeight: 1.6,
+            textAlign: "center",
+            maxWidth: 280,
+            margin: 0,
+          }}
+        >
+          DNKRM is built for desktop.
+          <br />
+          Open it on your computer for the full experience.
         </p>
       </div>
     </div>
