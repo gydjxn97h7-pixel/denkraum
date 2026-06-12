@@ -48,6 +48,11 @@ export type CanvasNode = {
   // always hold the derived plain text.
   titleRich?: RichText;
   bodyRich?: RichText;
+  // Document content for "textfile" nodes authored in the editor panel.
+  // Present only when the content carries inline formatting;
+  // `textFileContent` always holds the derived plain text. Both are stripped
+  // from localStorage and persisted via the IndexedDB asset store.
+  docRich?: RichText;
 };
 
 export type Connection = { from: number; to: number };
@@ -67,7 +72,11 @@ export type ColorPicker = {
   color: string;
 } | null;
 
-export type AssetRecord = { textFileContent?: string; imageUrl?: string };
+export type AssetRecord = {
+  textFileContent?: string;
+  imageUrl?: string;
+  docRich?: RichText;
+};
 
 export const PRESET_COLORS = [
   "#0C2018",

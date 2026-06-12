@@ -28,6 +28,7 @@ export function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
   // to plain-only storage.
   const titleRich = sanitizeRichText(n.titleRich);
   const bodyRich = sanitizeRichText(n.bodyRich);
+  const docRich = sanitizeRichText(n.docRich);
   return {
     id: Math.trunc(n.id as number),
     x: n.x as number,
@@ -52,9 +53,15 @@ export function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
       Number.isFinite(n.fontSize) && { fontSize: n.fontSize as number }),
     ...(typeof n.label === "string" && { label: n.label }),
     ...(typeof n.imageUrl === "string" && { imageUrl: n.imageUrl }),
-    ...(typeof n.textFileContent === "string" && {
-      textFileContent: n.textFileContent,
-    }),
+    // Document runs win over the stored plain mirror when both are present.
+    ...(docRich
+      ? {
+          ...(richHasMarks(docRich) && { docRich }),
+          textFileContent: richToPlain(docRich),
+        }
+      : typeof n.textFileContent === "string" && {
+          textFileContent: n.textFileContent,
+        }),
     ...(typeof n.textFileName === "string" && { textFileName: n.textFileName }),
     ...(typeof n.bold === "boolean" && { bold: n.bold }),
     ...(typeof n.italic === "boolean" && { italic: n.italic }),

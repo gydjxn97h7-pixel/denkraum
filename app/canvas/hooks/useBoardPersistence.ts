@@ -55,6 +55,11 @@ export function useBoardPersistence({
   // Tracks which node IDs currently have an entry in IndexedDB so we can
   // delete stale records when a node is removed or loses its asset fields.
   const prevAssetNodeIdsRef = useRef(new Set<number>());
+  // Last-written asset content by reference — node content is immutable by
+  // convention, so reference equality tells us a record is unchanged and the
+  // 500ms board save can skip rewriting it (matters once documents are
+  // large: a node drag shouldn't re-serialize a 50k-char document to IDB).
+  const prevAssetRecordsRef = useRef(new Map<number, AssetRecord>());
 
   // ── localStorage ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -99,26 +104,36 @@ export function useBoardPersistence({
             else delete node.titleRich;
             if (bodyRich && richHasMarks(bodyRich)) node.bodyRich = bodyRich;
             else delete node.bodyRich;
+            // Document content never lives in localStorage — the IndexedDB
+            // merge below is its only trusted source.
+            delete node.docRich;
             return node;
           });
           const maxId = loadedNodes.reduce((m, n) => Math.max(m, n.id), -1);
           if (maxId >= idCounterRef.current) idCounterRef.current = maxId + 1;
 
-          // ② IndexedDB (async) — merge textFileContent / imageUrl back in
+          // ② IndexedDB (async) — merge textFileContent / imageUrl / docRich
           try {
             const allAssets = await getAllAssets();
             if (allAssets.size > 0) {
               loadedNodes = loadedNodes.map((n) => {
                 const a = allAssets.get(n.id);
-                return a
-                  ? {
-                      ...n,
-                      ...(a.textFileContent != null && {
-                        textFileContent: a.textFileContent,
-                      }),
-                      ...(a.imageUrl != null && { imageUrl: a.imageUrl }),
-                    }
-                  : n;
+                if (!a) return n;
+                // Document runs are validated structurally; when present they
+                // are the source of truth and the plain mirror is re-derived.
+                const docRich = sanitizeRichText(a.docRich);
+                return {
+                  ...n,
+                  ...(a.textFileContent != null && {
+                    textFileContent: a.textFileContent,
+                  }),
+                  ...(a.imageUrl != null && { imageUrl: a.imageUrl }),
+                  ...(docRich &&
+                    richHasMarks(docRich) && {
+                      docRich,
+                      textFileContent: richToPlain(docRich),
+                    }),
+                };
               });
               // Orphan cleanup: IDB keys with no matching node
               const nodeIdSet = new Set(loadedNodes.map((n) => n.id));
@@ -196,7 +211,8 @@ export function useBoardPersistence({
       try {
         const nodesToSave = nodes.map(
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          ({ textFileContent: _tc, imageUrl: _iu, ...rest }) => rest,
+          ({ textFileContent: _tc, imageUrl: _iu, docRich: _dr, ...rest }) =>
+            rest,
         );
         localStorage.setItem(LS_NODES, JSON.stringify(nodesToSave));
         localStorage.setItem(LS_CONNECTIONS, JSON.stringify(connections));
@@ -219,14 +235,27 @@ export function useBoardPersistence({
 
       // ── IndexedDB: write assets / delete stale entries ──────────────────────
       const currentAssetIds = new Set<number>();
+      const currentRecords = new Map<number, AssetRecord>();
       for (const n of nodes) {
         const record: AssetRecord = {};
         if (n.textFileContent != null)
           record.textFileContent = n.textFileContent;
         if (n.imageUrl != null) record.imageUrl = n.imageUrl;
+        if (n.docRich != null) record.docRich = n.docRich;
         if (Object.keys(record).length > 0) {
           currentAssetIds.add(n.id);
-          setAsset(n.id, record).catch(() => {});
+          currentRecords.set(n.id, record);
+          // Content is immutable by convention, so identical references mean
+          // the stored record is already current — skip the write.
+          const prev = prevAssetRecordsRef.current.get(n.id);
+          if (
+            !prev ||
+            prev.textFileContent !== record.textFileContent ||
+            prev.imageUrl !== record.imageUrl ||
+            prev.docRich !== record.docRich
+          ) {
+            setAsset(n.id, record).catch(() => {});
+          }
         }
       }
       // Delete entries whose node was removed or lost all asset fields
@@ -234,6 +263,7 @@ export function useBoardPersistence({
         if (!currentAssetIds.has(id)) deleteAsset(id).catch(() => {});
       }
       prevAssetNodeIdsRef.current = currentAssetIds;
+      prevAssetRecordsRef.current = currentRecords;
     }, 500);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);

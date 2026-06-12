@@ -9,6 +9,13 @@ import type { RichText, TextRun } from "./canvas-types";
 export const MIN_RUN_FONT_SIZE = 8;
 export const MAX_RUN_FONT_SIZE = 72;
 
+// Per-document character budget. Documents live in board state (undo
+// snapshots, .dnkrm files) and in the IndexedDB asset store — 50k chars keeps
+// 40 retained history versions in the single-digit-MB range and stays far
+// inside browser quotas. The editor enforces this gracefully (counter +
+// blocked insertions), never by truncating silently.
+export const MAX_DOC_CHARS = 50_000;
+
 export function richToPlain(rich: RichText): string {
   return rich.map((line) => line.map((r) => r.t).join("")).join("\n");
 }
