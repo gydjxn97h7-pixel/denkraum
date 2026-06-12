@@ -52,12 +52,19 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
     setCharCount(contentRef.current?.textContent?.length ?? 0);
   };
 
-  const onBeforeInput = (e: React.FormEvent) => {
-    const ie = e.nativeEvent as InputEvent;
-    if (!ie.inputType?.startsWith("insert")) return; // deletions always allowed
-    const len = contentRef.current?.textContent?.length ?? 0;
-    if (len + (ie.data?.length ?? 1) > MAX_DOC_CHARS) e.preventDefault();
-  };
+  // Native listener: React's onBeforeInput polyfill doesn't expose inputType
+  // for contenteditable, so the guard must hang off the real DOM event.
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const onBeforeInput = (e: InputEvent) => {
+      if (!e.inputType?.startsWith("insert")) return; // deletions always allowed
+      const len = el.textContent?.length ?? 0;
+      if (len + (e.data?.length ?? 1) > MAX_DOC_CHARS) e.preventDefault();
+    };
+    el.addEventListener("beforeinput", onBeforeInput);
+    return () => el.removeEventListener("beforeinput", onBeforeInput);
+  }, []);
 
   const onPaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
@@ -188,7 +195,6 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
         contentEditable
         suppressContentEditableWarning
         onInput={refreshCount}
-        onBeforeInput={onBeforeInput}
         onPaste={onPaste}
         style={{
           flex: 1,
