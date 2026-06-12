@@ -396,50 +396,79 @@ export const NodeView = React.memo(function NodeView({
         </div>
       )}
 
-      {/* Text File */}
+      {/* Document (textfile) — title + short preview, never the full content */}
       {isTextFile && (
         <div
           style={{
             display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "0 12px",
+            flexDirection: "column",
+            gap: 6,
+            padding: "12px 14px",
             width: "100%",
             height: "100%",
             boxSizing: "border-box",
             cursor: "pointer",
             pointerEvents: "none",
+            overflow: "hidden",
           }}
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="rgba(255,255,255,0.45)"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ flexShrink: 0 }}
-          >
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
-          </svg>
-          <span
+          <div
             style={{
-              fontSize: fs,
-              color: "rgba(255,255,255,0.82)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              flex: 1,
-              letterSpacing: "-0.1px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              minWidth: 0,
+              flexShrink: 0,
             }}
           >
-            {n.textFileName ?? n.title}
-          </span>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="rgba(255,255,255,0.45)"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ flexShrink: 0 }}
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+            <span
+              style={{
+                fontSize: fs,
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.9)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                flex: 1,
+                letterSpacing: "-0.1px",
+              }}
+            >
+              {n.title.trim() || n.textFileName || "Untitled document"}
+            </span>
+          </div>
+          {(n.textFileContent ?? "").trim() !== "" && (
+            <div
+              style={{
+                fontSize: Math.max(10, fs - 3),
+                lineHeight: 1.5,
+                color: "rgba(255,255,255,0.55)",
+                overflow: "hidden",
+                display: "-webkit-box",
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: "vertical",
+                overflowWrap: "break-word",
+                wordBreak: "break-word",
+              }}
+            >
+              {(n.textFileContent ?? "").slice(0, 240)}
+            </div>
+          )}
         </div>
       )}
 
