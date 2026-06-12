@@ -4,6 +4,7 @@ import type { CanvasNode, RichText } from "../lib/canvas-types";
 import { TrafficDot } from "./ColorPickerWindow";
 import {
   MAX_DOC_CHARS,
+  MAX_DOC_IMAGE_CHARS,
   editableRichText,
   setEditableContent,
 } from "../lib/rich-text";
@@ -14,6 +15,7 @@ interface DocEditorPanelProps {
   node: CanvasNode | null;
   onSave: (title: string, rich: RichText) => void;
   onClose: () => void;
+  onNotify: (msg: string) => void;
 }
 
 // A4 portrait: 210mm × 297mm.
@@ -30,8 +32,14 @@ const DESK_PAD = 24;
 // (FormatBar works inside it via the data-doc-editor attribute). Save commits
 // to board state; closing also saves, so there is no data-loss path —
 // discarding is one Cmd+Z away.
-export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
+export function DocEditorPanel({
+  node,
+  onSave,
+  onClose,
+  onNotify,
+}: DocEditorPanelProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState(
     () => node?.title.trim() || node?.textFileName || "",
   );
@@ -85,6 +93,37 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
     const remaining = Math.max(0, MAX_DOC_CHARS - len);
     const text = e.clipboardData.getData("text/plain").slice(0, remaining);
     if (text) document.execCommand("insertText", false, text);
+  };
+
+  // Inserts the picked image at the caret (or document end) as a data URL —
+  // it becomes an image run on its own line at parse time.
+  const onImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const url = ev.target?.result as string;
+      if (!url) return;
+      if (url.length > MAX_DOC_IMAGE_CHARS) {
+        onNotify("Image too large — max ~1.5 MB per image");
+        return;
+      }
+      const el = contentRef.current;
+      if (!el) return;
+      el.focus();
+      const sel = window.getSelection();
+      if (!sel) return;
+      if (sel.rangeCount === 0 || !el.contains(sel.anchorNode)) {
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        r.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      document.execCommand("insertImage", false, url);
+    };
+    reader.readAsDataURL(file);
   };
 
   const nearLimit = charCount >= MAX_DOC_CHARS * 0.9;
@@ -220,7 +259,57 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
             </span>
           )}
         </div>
+        {mode !== "min" && (
+          <button
+            title="Insert image"
+            onClick={() => imageInputRef.current?.click()}
+            // Don't steal focus/caret from the editor.
+            onMouseDown={(e) => e.preventDefault()}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "rgba(255,255,255,0.7)",
+              cursor: "pointer",
+              padding: "4px 6px",
+              borderRadius: 5,
+              display: "flex",
+              alignItems: "center",
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.color =
+                "rgba(255,255,255,0.95)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.color =
+                "rgba(255,255,255,0.7)";
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+          </button>
+        )}
       </div>
+      <input
+        ref={imageInputRef}
+        data-doc-image-input="true"
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp"
+        style={{ display: "none" }}
+        onChange={onImageFileChange}
+      />
 
       {/* ── Desk: dark surface the white sheet floats on ── */}
       <div

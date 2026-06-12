@@ -103,6 +103,12 @@ input[type="range"].fmt-slider::-webkit-slider-runnable-track {
 }
 
 /* Document editor: white A4 page */
+[data-doc-editor] img {
+  max-width: 100%;
+  border-radius: 3px;
+  display: block;
+}
+
 .doc-title-input::placeholder {
   color: rgba(20, 40, 33, 0.3);
 }

@@ -1542,6 +1542,7 @@ export default function Canvas() {
           }
           onSave={saveDocument}
           onClose={() => setDocEditor(null)}
+          onNotify={(msg) => setToast({ msg, variant: "error" })}
         />
       )}
 
