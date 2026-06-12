@@ -60,11 +60,12 @@ export default function Canvas() {
   const [zoom, setZoom] = useState(1);
   const [activePanel, setActivePanel] = useState<PanelSection | null>(null);
   // Document editor panel: nodeId null = new, not-yet-saved document.
-  const [docEditor, setDocEditor] = useState<{ nodeId: number | null } | null>(
-    null,
-  );
-  // Bumped on every open so the panel remounts (and re-reads the node) per
-  // session, but not when a first save assigns the new node's id.
+  // seq bumps on every open so the panel remounts (and re-reads the node)
+  // per session, but not when a first save assigns the new node's id.
+  const [docEditor, setDocEditor] = useState<{
+    nodeId: number | null;
+    seq: number;
+  } | null>(null);
   const docEditorSeqRef = useRef(0);
   const [copiedNode, setCopiedNode] = useState<CanvasNode | null>(null);
   const [snapGuides, setSnapGuides] = useState<{ x?: number; y?: number }>({});
@@ -1080,13 +1081,13 @@ export default function Canvas() {
     // stationary clicks.
     if (lastInteractionMovedRef.current) return;
     docEditorSeqRef.current += 1;
-    setDocEditor({ nodeId });
+    setDocEditor({ nodeId, seq: docEditorSeqRef.current });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openNewDocument = useCallback(() => {
     docEditorSeqRef.current += 1;
-    setDocEditor({ nodeId: null });
+    setDocEditor({ nodeId: null, seq: docEditorSeqRef.current });
   }, []);
 
   // Commits the panel's content to board state. For a new document the node
@@ -1123,7 +1124,9 @@ export default function Canvas() {
       setNodes(newNodes);
       setPresentationOrder(newOrder);
       setSelected(newId);
-      setDocEditor({ nodeId: newId });
+      setDocEditor((prev) =>
+        prev ? { nodeId: newId, seq: prev.seq } : prev,
+      );
       setToast({ msg: "Document saved", variant: "success" });
       return;
     }
@@ -1151,6 +1154,9 @@ export default function Canvas() {
   // Close the panel when its node disappears (deleted, undone, board loaded).
   useEffect(() => {
     if (docEditor?.nodeId != null && !nodeMap.has(docEditor.nodeId)) {
+      // Derived-at-render hiding would resurface the panel if a later node
+      // reuses the id — clearing state here is the correct semantics.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDocEditor(null);
     }
   }, [nodeMap, docEditor]);
@@ -1528,7 +1534,7 @@ export default function Canvas() {
       {/* ── Document Editor ── */}
       {docEditor && !isPresenting && (
         <DocEditorPanel
-          key={docEditorSeqRef.current}
+          key={docEditor.seq}
           node={
             docEditor.nodeId !== null
               ? (nodeMap.get(docEditor.nodeId) ?? null)

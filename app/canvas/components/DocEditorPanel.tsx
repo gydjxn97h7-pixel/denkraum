@@ -249,6 +249,8 @@ export function DocEditorPanel({ node, onSave, onClose }: DocEditorPanelProps) {
         </span>
         <button
           onClick={commit}
+          // Keep focus (and the caret) in the editor across saves.
+          onMouseDown={(e) => e.preventDefault()}
           style={{
             height: 30,
             padding: "0 16px",
