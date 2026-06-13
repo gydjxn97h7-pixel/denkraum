@@ -83,13 +83,47 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
     return () => document.removeEventListener("selectionchange", refresh);
   }, [refresh]);
 
+  // Captured on the toolbar's mousedown (before any focus shift) so commands
+  // act on what was selected even if the click moves focus or the browser
+  // collapses the live selection. Restored just before each command.
+  const liveRangeRef = useRef<Range | null>(null);
+  const captureSelection = () => {
+    const editor = editorRef.current;
+    const sel = window.getSelection();
+    if (
+      editor &&
+      sel &&
+      sel.rangeCount > 0 &&
+      editor.contains(sel.anchorNode)
+    ) {
+      liveRangeRef.current = sel.getRangeAt(0).cloneRange();
+    }
+  };
+  const restoreSelection = (): Selection | null => {
+    const range = liveRangeRef.current;
+    const editor = editorRef.current;
+    if (!range || !editor) return window.getSelection();
+    editor.focus();
+    const sel = window.getSelection();
+    if (sel) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    return sel;
+  };
+
   const exec = (cmd: "bold" | "italic" | "underline") => {
-    editorRef.current?.focus();
+    restoreSelection();
     document.execCommand(cmd);
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0)
+      liveRangeRef.current = sel.getRangeAt(0).cloneRange();
     refresh();
   };
 
   const stepSize = (dir: 1 | -1) => {
+    const sel = restoreSelection();
+    if (!sel || sel.isCollapsed) return;
     const cur = fmt.fontSize;
     const next =
       dir === 1
@@ -97,11 +131,13 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
         : [...FONT_SIZE_LADDER].reverse().find((s) => s < cur);
     if (next === undefined) return;
     applyFontSizeToSelection(next);
+    if (sel.rangeCount > 0)
+      liveRangeRef.current = sel.getRangeAt(0).cloneRange();
     refresh();
   };
 
   const openPicker = (prop: "color" | "backgroundColor") => {
-    const sel = window.getSelection();
+    const sel = restoreSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
     savedRangeRef.current = sel.getRangeAt(0).cloneRange();
     const r = toolbarRef.current?.getBoundingClientRect();
@@ -159,8 +195,14 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
     <>
       <div
         ref={toolbarRef}
-        // Don't steal focus/selection from the editor when a button is pressed.
-        onMouseDown={(e) => e.preventDefault()}
+        // Capture the editor selection and keep focus there: mousedown fires
+        // before the click and before any focus shift, so this snapshots what
+        // the user selected and preventDefault stops the button from stealing
+        // focus. Commands restore this range before applying.
+        onMouseDown={(e) => {
+          captureSelection();
+          e.preventDefault();
+        }}
         style={{
           background:
             "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
