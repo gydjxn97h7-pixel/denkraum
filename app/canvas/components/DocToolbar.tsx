@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   applyColorToSelection,
   applyFontSizeToSelection,
@@ -329,16 +330,27 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
         </button>
       </div>
 
-      {picker && (
-        <ColorPickerWindow
-          picker={{ nodeId: -1, x: picker.x, y: picker.y, color: picker.color }}
-          onColorChange={(_, color) => applyPickedColor(color)}
-          onClose={() => {
-            setPicker(null);
-            savedRangeRef.current = null;
-          }}
-        />
-      )}
+      {/* Portaled to body: position:fixed must be viewport-relative, but the
+          toolbar's wrapper uses transform, which would otherwise become the
+          containing block and push the picker off-screen. */}
+      {picker &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <ColorPickerWindow
+            picker={{
+              nodeId: -1,
+              x: picker.x,
+              y: picker.y,
+              color: picker.color,
+            }}
+            onColorChange={(_, color) => applyPickedColor(color)}
+            onClose={() => {
+              setPicker(null);
+              savedRangeRef.current = null;
+            }}
+          />,
+          document.body,
+        )}
     </>
   );
 }
