@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CanvasNode, RichText } from "../lib/canvas-types";
 import { TrafficDot } from "./ColorPickerWindow";
+import { DocToolbar } from "./DocToolbar";
 import {
   MAX_DOC_CHARS,
   MAX_DOC_IMAGE_CHARS,
@@ -259,48 +260,6 @@ export function DocEditorPanel({
             </span>
           )}
         </div>
-        {mode !== "min" && (
-          <button
-            title="Insert image"
-            onClick={() => imageInputRef.current?.click()}
-            // Don't steal focus/caret from the editor.
-            onMouseDown={(e) => e.preventDefault()}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: "rgba(255,255,255,0.7)",
-              cursor: "pointer",
-              padding: "4px 6px",
-              borderRadius: 5,
-              display: "flex",
-              alignItems: "center",
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.95)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.7)";
-            }}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
-            </svg>
-          </button>
-        )}
       </div>
       <input
         ref={imageInputRef}
@@ -314,6 +273,7 @@ export function DocEditorPanel({
       {/* ── Desk: dark surface the white sheet floats on ── */}
       <div
         style={{
+          position: "relative",
           flex: 1,
           minHeight: 0,
           display: mode === "min" ? "none" : "flex",
@@ -324,6 +284,22 @@ export function DocEditorPanel({
           justifyContent: "center",
         }}
       >
+        {/* Floating formatting toolbar, pinned to the top of the page */}
+        <div
+          style={{
+            position: "absolute",
+            top: 10,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 10,
+          }}
+        >
+          <DocToolbar
+            editorRef={contentRef}
+            onInsertImage={() => imageInputRef.current?.click()}
+          />
+        </div>
+
         {/* ── A4 page ── */}
         <div
           onClick={(e) => {
@@ -358,7 +334,7 @@ export function DocEditorPanel({
             }}
             style={{
               flexShrink: 0,
-              margin: "40px 48px 0",
+              margin: "56px 48px 0",
               fontSize: 24,
               fontWeight: 700,
               fontFamily: "inherit",
