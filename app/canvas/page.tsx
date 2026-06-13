@@ -965,8 +965,9 @@ export default function Canvas() {
       setSelected(newId);
       setContextMenu(null);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [pushHistory],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const movePresentationNodeUp = useCallback(
     (id: number) => {
@@ -1255,7 +1256,7 @@ export default function Canvas() {
       style={{
         width: "100vw",
         height: "100vh",
-        background: "#0C2018",
+        background: "#E8EBE6",
         overflow: "hidden",
         position: "relative",
         fontFamily:
@@ -1409,7 +1410,7 @@ export default function Canvas() {
               height={20 * zoom}
               patternUnits="userSpaceOnUse"
             >
-              <circle cx={1} cy={1} r={0.8} fill="rgba(255,255,255,0.08)" />
+              <circle cx={1} cy={1} r={0.9} fill="rgba(20,71,56,0.28)" />
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#dots)" />

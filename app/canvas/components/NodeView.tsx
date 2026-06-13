@@ -174,7 +174,7 @@ export const NodeView = React.memo(function NodeView({
             : isEditing
               ? "1.5px solid rgba(255,255,255,0.15)"
               : isText && (isSel || n.title === "")
-                ? "1.5px dashed rgba(255,255,255,0.45)"
+                ? "1.5px dashed rgba(20,71,56,0.45)"
                 : "none",
         opacity: dimmed ? 0.15 : 1,
         pointerEvents: dimmed ? "none" : undefined,
@@ -596,7 +596,7 @@ export const NodeView = React.memo(function NodeView({
             fontWeight: n.bold ? 700 : 400,
             fontStyle: n.italic ? "italic" : "normal",
             textDecoration: n.underline ? "underline" : "none",
-            color: n.textColor ?? "#FFFFFF",
+            color: n.textColor ?? "#14201B",
             outline: "none",
             textAlign: "center",
             lineHeight: 1.55,
