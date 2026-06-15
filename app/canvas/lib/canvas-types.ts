@@ -27,7 +27,17 @@ export type TextRun = {
   // line of their own — insertion and parsing both enforce this.
   img?: string;
 };
-export type RichText = TextRun[][];
+// A line is either a bare run array (the original, still-valid shape used by
+// plain/inline-only content — no migration needed) or a metadata object that
+// additionally carries block-level formatting: text alignment and list type.
+// Lists group consecutive lines sharing the same `list` value.
+export type RichLineMeta = {
+  runs: TextRun[];
+  align?: "center" | "right"; // omitted = left (default)
+  list?: "bullet" | "number"; // omitted = not a list item
+};
+export type RichLine = TextRun[] | RichLineMeta;
+export type RichText = RichLine[];
 
 export type CanvasNode = {
   id: number;

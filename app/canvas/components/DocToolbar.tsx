@@ -28,6 +28,9 @@ type FmtState = {
   underline: boolean;
   fontSize: number;
   textColor: string;
+  bullet: boolean;
+  numbered: boolean;
+  align: "left" | "center" | "right";
 };
 
 type PickerState = {
@@ -161,6 +164,9 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
     underline: false,
     fontSize: 14,
     textColor: "#243029",
+    bullet: false,
+    numbered: false,
+    align: "left",
   });
   const [picker, setPicker] = useState<PickerState | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -183,12 +189,20 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
         ? sel.focusNode
         : (sel.focusNode?.parentElement ?? null);
     const fsPx = focusEl ? parseFloat(getComputedStyle(focusEl).fontSize) : 14;
+    const align = document.queryCommandState("justifyCenter")
+      ? "center"
+      : document.queryCommandState("justifyRight")
+        ? "right"
+        : "left";
     setFmt({
       bold: document.queryCommandState("bold"),
       italic: document.queryCommandState("italic"),
       underline: document.queryCommandState("underline"),
       fontSize: Math.round(fsPx),
       textColor: computedHex(focusEl),
+      bullet: document.queryCommandState("insertUnorderedList"),
+      numbered: document.queryCommandState("insertOrderedList"),
+      align,
     });
   }, [editorRef]);
 
@@ -226,7 +240,17 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
     return sel;
   };
 
-  const exec = (cmd: "bold" | "italic" | "underline") => {
+  const exec = (
+    cmd:
+      | "bold"
+      | "italic"
+      | "underline"
+      | "insertUnorderedList"
+      | "insertOrderedList"
+      | "justifyLeft"
+      | "justifyCenter"
+      | "justifyRight",
+  ) => {
     restoreSelection();
     document.execCommand(cmd);
     const sel = window.getSelection();
@@ -367,6 +391,137 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
           glyphStyle={{ fontSize: 14 }}
         >
           A+
+        </IconButton>
+
+        {divider}
+
+        {/* Lists */}
+        <IconButton
+          label="Bullet list"
+          active={fmt.bullet}
+          onClick={() => exec("insertUnorderedList")}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="9" y1="6" x2="20" y2="6" />
+            <line x1="9" y1="12" x2="20" y2="12" />
+            <line x1="9" y1="18" x2="20" y2="18" />
+            <circle cx="4.5" cy="6" r="1.1" fill="currentColor" stroke="none" />
+            <circle cx="4.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
+            <circle cx="4.5" cy="18" r="1.1" fill="currentColor" stroke="none" />
+          </svg>
+        </IconButton>
+        <IconButton
+          label="Numbered list"
+          active={fmt.numbered}
+          onClick={() => exec("insertOrderedList")}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="10" y1="6" x2="20" y2="6" />
+            <line x1="10" y1="12" x2="20" y2="12" />
+            <line x1="10" y1="18" x2="20" y2="18" />
+            <text
+              x="2"
+              y="8.5"
+              fontSize="8"
+              fontWeight="700"
+              fill="currentColor"
+              stroke="none"
+            >
+              1
+            </text>
+            <text
+              x="2"
+              y="20.5"
+              fontSize="8"
+              fontWeight="700"
+              fill="currentColor"
+              stroke="none"
+            >
+              2
+            </text>
+          </svg>
+        </IconButton>
+
+        {divider}
+
+        {/* Alignment */}
+        <IconButton
+          label="Align left"
+          active={fmt.align === "left"}
+          onClick={() => exec("justifyLeft")}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="3" y1="6" x2="15" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="13" y2="18" />
+          </svg>
+        </IconButton>
+        <IconButton
+          label="Align center"
+          active={fmt.align === "center"}
+          onClick={() => exec("justifyCenter")}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="6" y1="6" x2="18" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="7" y1="18" x2="17" y2="18" />
+          </svg>
+        </IconButton>
+        <IconButton
+          label="Align right"
+          active={fmt.align === "right"}
+          onClick={() => exec("justifyRight")}
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="9" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="11" y1="18" x2="21" y2="18" />
+          </svg>
         </IconButton>
 
         {divider}

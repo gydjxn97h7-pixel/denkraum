@@ -1,5 +1,5 @@
 import type { CanvasNode, Connection, RichText } from "./canvas-types";
-import { plainToRich } from "./rich-text";
+import { plainToRich, lineRuns } from "./rich-text";
 
 // Canvas background in RGB — used to composite rgba node colors into solid values.
 const PDF_BG_RGB: [number, number, number] = [12, 32, 24]; // #0C2018
@@ -264,8 +264,9 @@ export async function exportBoardPdf(
     };
     const laid: LaidLine[] = [];
     for (const srcLine of rich) {
+      const srcRuns = lineRuns(srcLine);
       // Standalone image line — sized from the data URL, capped to the field.
-      const imgRun = srcLine.find((r) => r.img);
+      const imgRun = srcRuns.find((r) => r.img);
       if (imgRun?.img) {
         try {
           const props = doc.getImageProperties(imgRun.img);
@@ -285,7 +286,7 @@ export async function exportBoardPdf(
         continue;
       }
       const toks: Tok[] = [];
-      for (const run of srcLine) {
+      for (const run of srcRuns) {
         const bold = !!run.b || base.bold;
         const italic = !!run.i || base.italic;
         const underline = !!run.u || base.underline;

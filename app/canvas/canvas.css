@@ -109,6 +109,24 @@ input[type="range"].fmt-slider::-webkit-slider-runnable-track {
   display: block;
 }
 
+/* Lists created in the editor: keep markers visible and spacing tight, since
+   the host uses white-space: pre-wrap and zeroed block margins elsewhere. */
+[data-doc-editor] ul,
+[data-doc-editor] ol {
+  margin: 0;
+  padding-left: 1.6em;
+  list-style-position: outside;
+}
+[data-doc-editor] ul {
+  list-style-type: disc;
+}
+[data-doc-editor] ol {
+  list-style-type: decimal;
+}
+[data-doc-editor] li {
+  margin: 0;
+}
+
 .doc-title-input::placeholder {
   color: rgba(20, 40, 33, 0.34);
 }

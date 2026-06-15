@@ -1,4 +1,5 @@
-import type { CanvasNode, Connection, TextRun } from "./canvas-types";
+import type { CanvasNode, Connection, RichLine } from "./canvas-types";
+import { lineRuns, lineMeta } from "./rich-text";
 
 // ── Markdown export ───────────────────────────────────────────────────────────
 // Interprets the directed connection graph as an outline: nodes with no
@@ -17,14 +18,20 @@ function nodeText(n: CanvasNode): string {
 // convention). Font sizes have no Markdown equivalent and are dropped.
 // Titles stay plain — outline bullets already wrap them in **, and nested
 // markers would break the emphasis.
-function lineToMd(line: TextRun[]): string {
+function lineToMd(line: RichLine): string {
+  const runs = lineRuns(line);
+  const meta = lineMeta(line);
+  // List lines get a Markdown marker; alignment has no Markdown equivalent and
+  // is dropped. (Repeated "1." still renders 1, 2, 3… in standard Markdown.)
+  const prefix =
+    meta.list === "bullet" ? "- " : meta.list === "number" ? "1. " : "";
   // Image runs occupy their own line and have no Markdown equivalent worth
   // inlining (data URLs) — emit a placeholder. Run colors are dropped.
-  if (line.some((r) => r.img)) return "*(image)*";
+  if (runs.some((r) => r.img)) return prefix + "*(image)*";
   // Group consecutive runs that differ only in font size so markers don't
   // butt against each other (`**a****b**` would not render as bold).
   const groups: { b: boolean; i: boolean; u: boolean; t: string }[] = [];
-  for (const r of line) {
+  for (const r of runs) {
     const prev = groups[groups.length - 1];
     if (prev && prev.b === !!r.b && prev.i === !!r.i && prev.u === !!r.u) {
       prev.t += r.t;
@@ -32,7 +39,7 @@ function lineToMd(line: TextRun[]): string {
       groups.push({ b: !!r.b, i: !!r.i, u: !!r.u, t: r.t });
     }
   }
-  return groups
+  return prefix + groups
     .map((g) => {
       if (!g.b && !g.i && !g.u) return g.t;
       // Emphasis markers don't tolerate adjacent whitespace — keep it outside.

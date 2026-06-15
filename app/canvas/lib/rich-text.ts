@@ -1,5 +1,29 @@
-import type { RichText, TextRun } from "./canvas-types";
+import type { RichText, RichLine, TextRun } from "./canvas-types";
 import { rgbToHex } from "./color-helpers";
+
+// ── Line accessors ────────────────────────────────────────────────────────────
+// A RichLine is either a bare TextRun[] (no block formatting) or a
+// { runs, align?, list? } object. These normalize access so callers don't
+// branch on the shape.
+type LineMeta = { align?: "center" | "right"; list?: "bullet" | "number" };
+
+export function lineRuns(line: RichLine): TextRun[] {
+  return Array.isArray(line) ? line : line.runs;
+}
+export function lineMeta(line: RichLine): LineMeta {
+  return Array.isArray(line)
+    ? {}
+    : { align: line.align, list: line.list };
+}
+// Build the most compact line for given runs + meta: a bare array when there
+// is no block formatting, otherwise the metadata object.
+function makeLine(runs: TextRun[], meta: LineMeta): RichLine {
+  if (!meta.align && !meta.list) return runs;
+  const line: RichLine = { runs };
+  if (meta.align) line.align = meta.align;
+  if (meta.list) line.list = meta.list;
+  return line;
+}
 
 // ── Rich text model helpers ───────────────────────────────────────────────────
 // RichText is the source of truth for formatted fields; the node's plain
@@ -33,7 +57,13 @@ function cssColorToHex(v: string): string | undefined {
 }
 
 export function richToPlain(rich: RichText): string {
-  return rich.map((line) => line.map((r) => r.t).join("")).join("\n");
+  return rich
+    .map((line) =>
+      lineRuns(line)
+        .map((r) => r.t)
+        .join(""),
+    )
+    .join("\n");
 }
 
 export function plainToRich(plain: string): RichText {
@@ -41,12 +71,13 @@ export function plainToRich(plain: string): RichText {
 }
 
 export function richHasMarks(rich: RichText): boolean {
-  return rich.some((line) =>
-    line.some(
-      (r) =>
-        r.b || r.i || r.u || r.fs !== undefined || r.c || r.bg || r.img,
-    ),
-  );
+  return rich.some((line) => {
+    const meta = lineMeta(line);
+    if (meta.align || meta.list) return true;
+    return lineRuns(line).some(
+      (r) => r.b || r.i || r.u || r.fs !== undefined || r.c || r.bg || r.img,
+    );
+  });
 }
 
 // Merge adjacent runs with identical marks so state stays compact no matter
@@ -80,9 +111,55 @@ function normalizeLine(line: TextRun[]): TextRun[] {
 
 // ── DOM ↔ runs ────────────────────────────────────────────────────────────────
 
+// Appends a single inline run (image / plain text / styled span) to `parent`.
+function appendRunInline(parent: HTMLElement, run: TextRun): void {
+  if (run.img) {
+    const img = document.createElement("img");
+    img.src = run.img;
+    img.draggable = false;
+    img.style.maxWidth = "100%";
+    img.style.borderRadius = "3px";
+    parent.appendChild(img);
+    return;
+  }
+  if (
+    !run.b &&
+    !run.i &&
+    !run.u &&
+    run.fs === undefined &&
+    run.c === undefined &&
+    run.bg === undefined
+  ) {
+    parent.appendChild(document.createTextNode(run.t));
+    return;
+  }
+  const span = document.createElement("span");
+  if (run.b) span.style.fontWeight = "700";
+  if (run.i) span.style.fontStyle = "italic";
+  if (run.u) span.style.textDecoration = "underline";
+  if (run.fs !== undefined) span.style.fontSize = `${run.fs}px`;
+  if (run.c !== undefined) span.style.color = run.c;
+  if (run.bg !== undefined) span.style.backgroundColor = run.bg;
+  span.textContent = run.t;
+  parent.appendChild(span);
+}
+
+// Fills a block element (div / li) with a line's runs; empty lines get a <br>
+// so the block keeps height and the caret can land in it.
+function appendRunsBlock(parent: HTMLElement, runs: TextRun[]): void {
+  if (runs.length === 0) {
+    parent.appendChild(document.createElement("br"));
+    return;
+  }
+  for (const run of runs) appendRunInline(parent, run);
+}
+
 // Renders a field into its contenteditable host. Built with DOM APIs (never
-// innerHTML) so run text can't inject markup. Lines are joined with literal
-// "\n" — the host renders with white-space: pre-wrap.
+// innerHTML) so run text can't inject markup. Plain (no align/list) lines are
+// inline runs joined with literal "\n" (host uses white-space: pre-wrap) — byte
+// identical to before, so node fields are unaffected. Lines carrying block
+// formatting render as real blocks: aligned lines as <div text-align>, and runs
+// of list lines grouped into <ul>/<ol> with one <li> each.
 export function setEditableContent(
   el: HTMLElement,
   rich: RichText | undefined,
@@ -93,40 +170,45 @@ export function setEditableContent(
     return;
   }
   el.textContent = "";
-  rich.forEach((line, li) => {
-    if (li > 0) el.appendChild(document.createTextNode("\n"));
-    for (const run of line) {
-      if (run.img) {
-        const img = document.createElement("img");
-        img.src = run.img;
-        img.draggable = false;
-        img.style.maxWidth = "100%";
-        img.style.borderRadius = "3px";
-        el.appendChild(img);
-        continue;
+  let prevInline = false;
+  let i = 0;
+  while (i < rich.length) {
+    const meta = lineMeta(rich[i]);
+    if (meta.list) {
+      const listEl = document.createElement(
+        meta.list === "number" ? "ol" : "ul",
+      );
+      listEl.style.margin = "0";
+      listEl.style.paddingLeft = "1.5em";
+      let j = i;
+      while (j < rich.length) {
+        const m = lineMeta(rich[j]);
+        if (m.list !== meta.list) break;
+        const li = document.createElement("li");
+        if (m.align) li.style.textAlign = m.align;
+        appendRunsBlock(li, lineRuns(rich[j]));
+        listEl.appendChild(li);
+        j++;
       }
-      if (
-        !run.b &&
-        !run.i &&
-        !run.u &&
-        run.fs === undefined &&
-        run.c === undefined &&
-        run.bg === undefined
-      ) {
-        el.appendChild(document.createTextNode(run.t));
-        continue;
-      }
-      const span = document.createElement("span");
-      if (run.b) span.style.fontWeight = "700";
-      if (run.i) span.style.fontStyle = "italic";
-      if (run.u) span.style.textDecoration = "underline";
-      if (run.fs !== undefined) span.style.fontSize = `${run.fs}px`;
-      if (run.c !== undefined) span.style.color = run.c;
-      if (run.bg !== undefined) span.style.backgroundColor = run.bg;
-      span.textContent = run.t;
-      el.appendChild(span);
+      el.appendChild(listEl);
+      prevInline = false;
+      i = j;
+    } else if (meta.align) {
+      const div = document.createElement("div");
+      div.style.textAlign = meta.align;
+      appendRunsBlock(div, lineRuns(rich[i]));
+      el.appendChild(div);
+      prevInline = false;
+      i++;
+    } else {
+      // Plain inline line — preceded by a literal "\n" only between two inline
+      // lines (a block already breaks the line on its own).
+      if (prevInline) el.appendChild(document.createTextNode("\n"));
+      for (const run of lineRuns(rich[i])) appendRunInline(el, run);
+      prevInline = true;
+      i++;
     }
-  });
+  }
 }
 
 type MarkCtx = {
@@ -196,16 +278,31 @@ function makeRun(t: string, ctx: MarkCtx): TextRun {
 // supersedes: Chrome wraps each Enter-created line in a <div> (an empty line
 // becomes <div><br></div>), and a trailing <br> is the browser's placeholder
 // for the line that produced it — not an extra break.
+// Reads block alignment; left/start/justify collapse to the default (omitted).
+function alignOf(el: HTMLElement): "center" | "right" | undefined {
+  const a = el.style?.textAlign;
+  if (a === "center") return "center";
+  if (a === "right") return "right";
+  return undefined;
+}
+
 export function editableRichText(root: HTMLElement): RichText {
-  const blockLines = (block: Node, blockCtx: MarkCtx): TextRun[][] => {
-    const out: TextRun[][] = [];
+  const out: RichLine[] = [];
+  const pushLine = (runs: TextRun[], meta: LineMeta) =>
+    out.push(makeLine(normalizeLine(runs), meta));
+
+  // Walks a block, emitting one RichLine per visual line. `meta` is the
+  // inherited block formatting (alignment / list) applied to lines this block
+  // produces directly; nested blocks override it. Plain content yields bare
+  // run arrays (no meta), so node fields serialize exactly as before.
+  const walk = (block: Node, blockCtx: MarkCtx, meta: LineMeta) => {
+    const startLen = out.length;
     let cur: TextRun[] = [];
-    // True when the last thing seen was a literal "\n" in a text node — those
-    // are real breaks (our own rendered line separators), unlike a trailing
-    // <br>, and must keep their empty final line.
+    // True when the last thing seen was a literal "\n" — a real break (our own
+    // rendered separator), unlike a trailing <br>; keeps the empty final line.
     let trailingNewline = false;
     const endLine = () => {
-      out.push(cur);
+      pushLine(cur, meta);
       cur = [];
     };
     const visit = (node: Node, ctx: MarkCtx) => {
@@ -229,12 +326,9 @@ export function editableRichText(root: HTMLElement): RichText {
       if (tag === "IMG") {
         // Images occupy a line of their own; only bounded data URLs survive.
         const src = el.getAttribute("src") ?? "";
-        if (
-          src.startsWith("data:image/") &&
-          src.length <= MAX_DOC_IMAGE_CHARS
-        ) {
+        if (src.startsWith("data:image/") && src.length <= MAX_DOC_IMAGE_CHARS) {
           if (cur.length > 0) endLine();
-          out.push([{ t: "", img: src }]);
+          pushLine([{ t: "", img: src }], meta);
           trailingNewline = false;
         }
         return;
@@ -244,9 +338,26 @@ export function editableRichText(root: HTMLElement): RichText {
         trailingNewline = false;
         return;
       }
-      if (tag === "DIV" || tag === "P") {
+      if (tag === "UL" || tag === "OL") {
         if (cur.length > 0) endLine();
-        out.push(...blockLines(el, ctxFromElement(el, ctx)));
+        const list = tag === "OL" ? "number" : "bullet";
+        for (const li of Array.from(el.children)) {
+          if (li.tagName !== "LI") continue;
+          const liEl = li as HTMLElement;
+          walk(liEl, ctxFromElement(liEl, ctx), {
+            align: alignOf(liEl) ?? meta.align,
+            list,
+          });
+        }
+        trailingNewline = false;
+        return;
+      }
+      if (tag === "DIV" || tag === "P" || tag === "LI") {
+        if (cur.length > 0) endLine();
+        walk(el, ctxFromElement(el, ctx), {
+          align: alignOf(el) ?? meta.align,
+          list: meta.list,
+        });
         trailingNewline = false;
         return;
       }
@@ -254,10 +365,13 @@ export function editableRichText(root: HTMLElement): RichText {
       for (const child of Array.from(el.childNodes)) visit(child, childCtx);
     };
     for (const child of Array.from(block.childNodes)) visit(child, blockCtx);
-    if (cur.length > 0 || out.length === 0 || trailingNewline) endLine();
-    return out;
+    // Emit a trailing/empty line when this block produced nothing on its own,
+    // mirroring the previous serializer's out.length===0 guarantee per block.
+    if (cur.length > 0 || trailingNewline || out.length === startLen) endLine();
   };
-  return blockLines(root, { b: false, i: false, u: false }).map(normalizeLine);
+
+  walk(root, { b: false, i: false, u: false }, {});
+  return out;
 }
 
 export const FONT_SIZE_LADDER = [9, 11, 13, 15, 18, 24, 32, 48];
@@ -316,38 +430,60 @@ export function applyColorToSelection(
 // Structural validation for untrusted payloads (localStorage, .dnkrm files) —
 // same philosophy as sanitizeLoadedNode: accept only known fields with the
 // right types, clamp numbers, reject anything malformed.
+function sanitizeRuns(raw: unknown): TextRun[] | null {
+  if (!Array.isArray(raw)) return null;
+  const line: TextRun[] = [];
+  for (const rawRun of raw) {
+    if (!rawRun || typeof rawRun !== "object") return null;
+    const r = rawRun as Record<string, unknown>;
+    if (typeof r.t !== "string") return null;
+    if (typeof r.img === "string") {
+      if (r.img.startsWith("data:image/") && r.img.length <= MAX_DOC_IMAGE_CHARS) {
+        line.push({ t: "", img: r.img });
+      }
+      continue;
+    }
+    if (r.t === "") continue;
+    const run: TextRun = { t: r.t };
+    if (r.b === true) run.b = true;
+    if (r.i === true) run.i = true;
+    if (r.u === true) run.u = true;
+    if (typeof r.fs === "number" && Number.isFinite(r.fs)) {
+      run.fs = Math.min(
+        MAX_RUN_FONT_SIZE,
+        Math.max(MIN_RUN_FONT_SIZE, Math.round(r.fs)),
+      );
+    }
+    if (typeof r.c === "string" && HEX_COLOR.test(r.c)) run.c = r.c;
+    if (typeof r.bg === "string" && HEX_COLOR.test(r.bg)) run.bg = r.bg;
+    line.push(run);
+  }
+  return line;
+}
+
 export function sanitizeRichText(raw: unknown): RichText | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const lines: RichText = [];
   for (const rawLine of raw) {
-    if (!Array.isArray(rawLine)) return null;
-    const line: TextRun[] = [];
-    for (const rawRun of rawLine) {
-      if (!rawRun || typeof rawRun !== "object") return null;
-      const r = rawRun as Record<string, unknown>;
-      if (typeof r.t !== "string") return null;
-      if (typeof r.img === "string") {
-        if (r.img.startsWith("data:image/") && r.img.length <= MAX_DOC_IMAGE_CHARS) {
-          line.push({ t: "", img: r.img });
-        }
-        continue;
-      }
-      if (r.t === "") continue;
-      const run: TextRun = { t: r.t };
-      if (r.b === true) run.b = true;
-      if (r.i === true) run.i = true;
-      if (r.u === true) run.u = true;
-      if (typeof r.fs === "number" && Number.isFinite(r.fs)) {
-        run.fs = Math.min(
-          MAX_RUN_FONT_SIZE,
-          Math.max(MIN_RUN_FONT_SIZE, Math.round(r.fs)),
-        );
-      }
-      if (typeof r.c === "string" && HEX_COLOR.test(r.c)) run.c = r.c;
-      if (typeof r.bg === "string" && HEX_COLOR.test(r.bg)) run.bg = r.bg;
-      line.push(run);
+    // Bare array line (original shape — still emitted for unformatted lines).
+    if (Array.isArray(rawLine)) {
+      const runs = sanitizeRuns(rawLine);
+      if (runs === null) return null;
+      lines.push(runs);
+      continue;
     }
-    lines.push(line);
+    // Object line carrying block formatting (align / list).
+    if (rawLine && typeof rawLine === "object") {
+      const o = rawLine as Record<string, unknown>;
+      const runs = sanitizeRuns(o.runs);
+      if (runs === null) return null;
+      const meta: LineMeta = {};
+      if (o.align === "center" || o.align === "right") meta.align = o.align;
+      if (o.list === "bullet" || o.list === "number") meta.list = o.list;
+      lines.push(makeLine(runs, meta));
+      continue;
+    }
+    return null;
   }
   return lines;
 }
