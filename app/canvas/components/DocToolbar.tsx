@@ -53,6 +53,11 @@ function computedHex(el: Element | null): string {
 const TACTILE_SHADOW =
   "0 4px 14px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.06)";
 
+// Shared dark sage-green glass used by both the full bar and the compact
+// trigger so they read as the same surface.
+const GLASS_BG =
+  "linear-gradient(180deg, rgba(157,200,141,0.06) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)";
+
 // Hover tooltip that names what a control does (e.g. "Bold"). Sits just below
 // its button, over the white page where it reads clearly.
 function Tooltip({ children }: { children: React.ReactNode }) {
@@ -169,6 +174,10 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
     align: "left",
   });
   const [picker, setPicker] = useState<PickerState | null>(null);
+  // Contextual visibility: the full bar shows whenever text is selected; when
+  // nothing is selected it collapses to a compact trigger unless pinned open.
+  const [hasSel, setHasSel] = useState(false);
+  const [pinned, setPinned] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
   // The picker steals focus and collapses the visual selection — keep the
   // Range so each color change can be applied to the original text.
@@ -179,11 +188,18 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
   const refresh = useCallback(() => {
     const editor = editorRef.current;
     const sel = window.getSelection();
-    if (!editor || !sel || sel.rangeCount === 0) return;
+    if (!editor || !sel || sel.rangeCount === 0) {
+      setHasSel(false);
+      return;
+    }
     const anchor = sel.anchorNode;
     const anchorEl =
       anchor instanceof Element ? anchor : (anchor?.parentElement ?? null);
-    if (!anchorEl || !editor.contains(anchorEl)) return;
+    if (!anchorEl || !editor.contains(anchorEl)) {
+      setHasSel(false);
+      return;
+    }
+    setHasSel(!sel.isCollapsed);
     const focusEl =
       sel.focusNode instanceof Element
         ? sel.focusNode
@@ -312,6 +328,82 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
     />
   );
 
+  // Portaled to body: position:fixed must be viewport-relative, but an ancestor
+  // transform would otherwise become the containing block and push it off-screen.
+  const pickerPortal =
+    picker && typeof document !== "undefined"
+      ? createPortal(
+          <ColorPickerWindow
+            picker={{
+              nodeId: -1,
+              x: picker.x,
+              y: picker.y,
+              color: picker.color,
+            }}
+            onColorChange={(_, color) => applyPickedColor(color)}
+            onClose={() => {
+              setPicker(null);
+              savedRangeRef.current = null;
+            }}
+          />,
+          document.body,
+        )
+      : null;
+
+  // The full bar is shown while text is selected, or when the user pins it open
+  // from the compact trigger.
+  const showFull = hasSel || pinned;
+
+  if (!showFull) {
+    return (
+      <>
+        <button
+          title="Formatting"
+          // Keep the editor selection/focus when opening the bar.
+          onMouseDown={(e) => {
+            captureSelection();
+            e.preventDefault();
+          }}
+          onClick={() => setPinned(true)}
+          style={{
+            height: 40,
+            padding: "0 14px",
+            borderRadius: RADIUS.pill,
+            background: GLASS_BG,
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            border: BORDER_DARK,
+            boxShadow: TACTILE_SHADOW,
+            color: "rgba(255,255,255,0.9)",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            cursor: "pointer",
+            fontFamily: FONT_SANS,
+            fontSize: 14,
+            fontWeight: 600,
+            userSelect: "none",
+          }}
+        >
+          <span style={{ letterSpacing: "-0.3px" }}>Aa</span>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {pickerPortal}
+      </>
+    );
+  }
+
   return (
     <>
       <div
@@ -325,8 +417,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
           e.preventDefault();
         }}
         style={{
-          background:
-            "linear-gradient(180deg, rgba(157,200,141,0.06) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
+          background: GLASS_BG,
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
           border: BORDER_DARK,
@@ -556,29 +647,27 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
             <polyline points="21 15 16 10 5 21" />
           </svg>
         </IconButton>
-      </div>
 
-      {/* Portaled to body: position:fixed must be viewport-relative, but the
-          toolbar's wrapper uses transform, which would otherwise become the
-          containing block and push the picker off-screen. */}
-      {picker &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <ColorPickerWindow
-            picker={{
-              nodeId: -1,
-              x: picker.x,
-              y: picker.y,
-              color: picker.color,
-            }}
-            onColorChange={(_, color) => applyPickedColor(color)}
-            onClose={() => {
-              setPicker(null);
-              savedRangeRef.current = null;
-            }}
-          />,
-          document.body,
-        )}
+        {divider}
+
+        {/* Collapse back to the compact trigger (only sticks when nothing is
+            selected — a live selection keeps the full bar up). */}
+        <IconButton label="Hide" onClick={() => setPinned(false)}>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="18 15 12 9 6 15" />
+          </svg>
+        </IconButton>
+      </div>
+      {pickerPortal}
     </>
   );
 }

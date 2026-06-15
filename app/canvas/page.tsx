@@ -1638,6 +1638,24 @@ export default function Canvas() {
           onSave={saveDocument}
           onClose={() => setDocEditor(null)}
           onNotify={(msg) => setToast({ msg, variant: "error" })}
+          getOriginRect={() => {
+            // Screen rect of the source node, from canvas bounds + live camera,
+            // so the zoom animation targets its current on-screen position.
+            const id = docEditor.nodeId;
+            if (id == null) return null;
+            const n = nodeMapRef.current.get(id);
+            const canvas = canvasRef.current;
+            if (!n || !canvas) return null;
+            const rect = canvas.getBoundingClientRect();
+            const z = zoomRef.current;
+            const p = panRef.current;
+            return {
+              left: rect.left + p.x + n.x * z,
+              top: rect.top + p.y + n.y * z,
+              width: n.w * z,
+              height: n.h * z,
+            };
+          }}
         />
       )}
 
