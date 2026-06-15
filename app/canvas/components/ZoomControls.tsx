@@ -23,13 +23,13 @@ export function ZoomControls({
         right: 24,
         background: "rgba(22,64,56,0.92)",
         backdropFilter: "blur(12px)",
-        border: "0.5px solid rgba(255,255,255,0.08)",
-        borderRadius: 12,
-        padding: "6px 10px",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 16,
+        padding: "8px 12px",
         display: isPresenting ? "none" : "flex",
         gap: 8,
         alignItems: "center",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 100,
       }}
     >
@@ -75,7 +75,7 @@ export function ZoomControls({
       </button>
       <div
         style={{
-          width: "0.5px",
+          width: "1px",
           height: 16,
           background: "rgba(255,255,255,0.1)",
         }}
@@ -86,9 +86,13 @@ export function ZoomControls({
           setPan({ x: 0, y: 0 });
         }}
         style={{
-          border: "none",
+          height: 24,
+          padding: "0 12px",
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,0.12)",
           background: "none",
           fontSize: 11,
+          fontWeight: 600,
           cursor: "pointer",
           color: "rgba(255,255,255,0.7)",
         }}

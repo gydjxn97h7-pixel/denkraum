@@ -27,14 +27,14 @@ export function SidebarStrip({
         WebkitBackdropFilter: "blur(20px)",
         borderRadius: 16,
         boxShadow:
-          "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+          "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 151,
         display: isPresenting ? "none" : "flex",
         flexDirection: "column",
         alignItems: "center",
-        padding: "14px 0",
+        padding: "16px 0",
         fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+          "var(--font-geist-sans), system-ui, sans-serif",
       }}
     >
       {/* Logo mark — decorative, not clickable */}
@@ -51,7 +51,7 @@ export function SidebarStrip({
           width="21"
           height="21"
           rx="5"
-          stroke="rgba(241,178,74,0.3)"
+          stroke="rgba(201,168,118,0.3)"
           strokeWidth="1"
         />
         <rect
@@ -60,7 +60,7 @@ export function SidebarStrip({
           width="14"
           height="14"
           rx="3"
-          fill="rgba(241,178,74,0.12)"
+          fill="rgba(201,168,118,0.12)"
         />
         <rect
           x="7"
@@ -68,7 +68,7 @@ export function SidebarStrip({
           width="8"
           height="8"
           rx="2"
-          fill="rgba(241,178,74,0.45)"
+          fill="rgba(201,168,118,0.45)"
         />
       </svg>
 
@@ -195,23 +195,28 @@ export function SidebarStrip({
               position: "relative",
               width: 36,
               height: 36,
-              borderRadius: 9,
-              marginBottom: 6,
-              border: "none",
+              borderRadius: 8,
+              marginBottom: 16,
+              border: isActive
+                ? "1px solid rgba(201,168,118,0.35)"
+                : "1px solid rgba(255,255,255,0.07)",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: isActive ? "#F1B24A" : "rgba(255,255,255,0.75)",
-              background: isActive ? "rgba(241,178,74,0.12)" : "transparent",
+              color: isActive ? "#C9A876" : "rgba(255,255,255,0.75)",
+              background: isActive
+                ? "rgba(201,168,118,0.14)"
+                : "rgba(255,255,255,0.04)",
               flexShrink: 0,
+              transition: "color 0.12s, background 0.12s, border-color 0.12s",
             }}
             onMouseEnter={(e) => {
               if (!isActive) {
                 (e.currentTarget as HTMLElement).style.color =
                   "rgba(255,255,255,0.95)";
                 (e.currentTarget as HTMLElement).style.background =
-                  "rgba(255,255,255,0.06)";
+                  "rgba(255,255,255,0.09)";
               }
             }}
             onMouseLeave={(e) => {
@@ -219,23 +224,10 @@ export function SidebarStrip({
                 (e.currentTarget as HTMLElement).style.color =
                   "rgba(255,255,255,0.75)";
                 (e.currentTarget as HTMLElement).style.background =
-                  "transparent";
+                  "rgba(255,255,255,0.04)";
               }
             }}
           >
-            {isActive && (
-              <div
-                style={{
-                  position: "absolute",
-                  left: -8,
-                  top: 6,
-                  width: 2.5,
-                  height: 24,
-                  background: "#F1B24A",
-                  borderRadius: "0 2px 2px 0",
-                }}
-              />
-            )}
             {icon}
           </button>
         );
@@ -251,7 +243,7 @@ export function SidebarStrip({
           height: 30,
           borderRadius: "50%",
           background: "rgba(255,255,255,0.06)",
-          border: "0.5px solid rgba(255,255,255,0.1)",
+          border: "1px solid rgba(255,255,255,0.1)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

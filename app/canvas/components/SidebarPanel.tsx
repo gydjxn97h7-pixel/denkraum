@@ -2,6 +2,7 @@
 import type { CanvasNode, PanelSection } from "../lib/canvas-types";
 import { SidebarNodeItem } from "./SidebarNodeItem";
 import { PresentationPanel } from "./PresentationPanel";
+import { PanelSectionLabel, StatusRow } from "./panel-ui";
 
 interface SidebarPanelProps {
   activePanel: PanelSection | null;
@@ -14,6 +15,8 @@ interface SidebarPanelProps {
   setEditingBoardName: React.Dispatch<React.SetStateAction<boolean>>;
   // Nodes section
   nodes: CanvasNode[];
+  connectionCount: number;
+  saveState: "saved" | "saving";
   selected: number | null;
   editingSidebarNodeId: number | null;
   setEditingSidebarNodeId: React.Dispatch<React.SetStateAction<number | null>>;
@@ -42,6 +45,8 @@ export function SidebarPanel({
   editingBoardName,
   setEditingBoardName,
   nodes,
+  connectionCount,
+  saveState,
   selected,
   editingSidebarNodeId,
   setEditingSidebarNodeId,
@@ -72,13 +77,13 @@ export function SidebarPanel({
         WebkitBackdropFilter: "blur(24px)",
         borderRadius: 16,
         boxShadow:
-          "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+          "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 149,
         display: panelOpen && !isPresenting ? "flex" : "none",
         flexDirection: "column",
         overflow: "hidden",
         fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+          "var(--font-geist-sans), system-ui, sans-serif",
       }}
     >
       {/* ── Panel Header (dynamic title) ── */}
@@ -87,18 +92,18 @@ export function SidebarPanel({
           height: 52,
           flexShrink: 0,
           background: "rgba(0,0,0,0.15)",
-          borderBottom: "0.5px solid rgba(255,255,255,0.05)",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "0 14px 0 16px",
+          padding: "0 16px 0 16px",
         }}
       >
         <span
           style={{
             fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "1.4px",
+            fontWeight: 600,
+            letterSpacing: "0.1em",
             color: "#FFFFFF",
           }}
         >
@@ -116,9 +121,9 @@ export function SidebarPanel({
             color: "rgba(255,255,255,0.7)",
             fontSize: 13,
             cursor: "pointer",
-            padding: "4px 6px",
+            padding: "4px 8px",
             lineHeight: 1,
-            borderRadius: 5,
+            borderRadius: 8,
           }}
           onMouseEnter={(e) => {
             (e.currentTarget as HTMLElement).style.color =
@@ -167,9 +172,10 @@ export function SidebarPanel({
             flex: 1,
             overflowY: "auto",
             overflowX: "hidden",
-            paddingTop: 12,
+            paddingTop: 16,
           }}
         >
+          <PanelSectionLabel first>Details</PanelSectionLabel>
           {/* Board row */}
           <div
             onDoubleClick={() => setEditingBoardName(true)}
@@ -180,7 +186,7 @@ export function SidebarPanel({
               alignItems: "center",
               cursor: "text",
               background:
-                "linear-gradient(to right, rgba(241,178,74,0.07), transparent)",
+                "linear-gradient(to right, rgba(201,168,118,0.07), transparent)",
               justifyContent: "flex-start",
             }}
           >
@@ -192,7 +198,7 @@ export function SidebarPanel({
                 top: 0,
                 width: 2.5,
                 height: 40,
-                background: "#F1B24A",
+                background: "#C9A876",
                 borderRadius: "0 1px 1px 0",
               }}
             />
@@ -258,15 +264,15 @@ export function SidebarPanel({
                 }}
                 style={{
                   flex: 1,
-                  marginLeft: 10,
+                  marginLeft: 12,
                   marginRight: 12,
-                  fontSize: 12.5,
+                  fontSize: 12,
                   fontFamily: "inherit",
                   background: "rgba(255,255,255,0.07)",
                   border: "none",
-                  outline: "1px solid rgba(241,178,74,0.4)",
-                  borderRadius: 5,
-                  padding: "1px 5px",
+                  outline: "1px solid rgba(201,168,118,0.4)",
+                  borderRadius: 8,
+                  padding: "0 4px",
                   color: "#FFFFFF",
                   minWidth: 0,
                 }}
@@ -276,9 +282,9 @@ export function SidebarPanel({
                 <span
                   style={{
                     flex: 1,
-                    marginLeft: 10,
-                    fontSize: 12.5,
-                    fontWeight: 500,
+                    marginLeft: 12,
+                    fontSize: 12,
+                    fontWeight: 600,
                     color: "#FFFFFF",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -294,23 +300,22 @@ export function SidebarPanel({
                   viewBox="0 0 16 16"
                   style={{ marginRight: 20, flexShrink: 0 }}
                 >
-                  <circle cx="8" cy="8" r="6" fill="rgba(241,178,74,0.12)" />
-                  <circle cx="8" cy="8" r="3.5" fill="#F1B24A" />
+                  <circle cx="8" cy="8" r="6" fill="rgba(201,168,118,0.12)" />
+                  <circle cx="8" cy="8" r="3.5" fill="#C9A876" />
                 </svg>
               </>
             )}
           </div>
 
-          {/* Info line */}
-          <div
-            style={{
-              fontSize: 10,
-              color: "rgba(255,255,255,0.75)",
-              padding: "12px 16px",
-            }}
-          >
-            Canvas · {nodes.length} nodes
-          </div>
+          {/* Status group — label left, value/state right */}
+          <PanelSectionLabel>Status</PanelSectionLabel>
+          <StatusRow label="Nodes" value={nodes.length} />
+          <StatusRow label="Connections" value={connectionCount} />
+          <StatusRow
+            label="Autosave"
+            value={saveState === "saving" ? "Saving…" : "Saved"}
+            dotColor={saveState === "saving" ? "#C9A876" : "#86EFAC"}
+          />
         </div>
       )}
 
@@ -321,13 +326,14 @@ export function SidebarPanel({
             flex: 1,
             overflowY: "auto",
             overflowX: "hidden",
-            paddingTop: 12,
+            paddingTop: 16,
           }}
         >
+          <PanelSectionLabel first>All Nodes · {nodes.length}</PanelSectionLabel>
           {nodes.length === 0 ? (
             <div
               style={{
-                padding: "6px 20px",
+                padding: "8px 20px",
                 fontSize: 12,
                 color: "rgba(255,255,255,0.4)",
               }}
@@ -376,9 +382,10 @@ export function SidebarPanel({
             flex: 1,
             overflowY: "auto",
             overflowX: "hidden",
-            padding: "8px 0",
+            paddingTop: 16,
           }}
         >
+          <PanelSectionLabel first>Files</PanelSectionLabel>
           {/* Save row */}
           <button
             title="Save board"
@@ -388,7 +395,7 @@ export function SidebarPanel({
               width: "100%",
               display: "flex",
               alignItems: "center",
-              gap: 10,
+              gap: 12,
               justifyContent: "flex-start",
               paddingLeft: 16,
               paddingRight: 16,
@@ -425,7 +432,7 @@ export function SidebarPanel({
               style={{
                 flex: 1,
                 textAlign: "left",
-                fontSize: 12.5,
+                fontSize: 12,
                 color: "rgba(255,255,255,0.85)",
               }}
             >
@@ -433,12 +440,12 @@ export function SidebarPanel({
             </span>
             <kbd
               style={{
-                fontSize: 10.5,
+                fontSize: 11,
                 color: "rgba(255,255,255,0.55)",
                 background: "rgba(255,255,255,0.04)",
-                border: "0.5px solid rgba(255,255,255,0.07)",
-                borderRadius: 5,
-                padding: "2px 7px",
+                border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: 8,
+                padding: "4px 8px",
                 fontFamily: "inherit",
                 flexShrink: 0,
               }}
@@ -456,7 +463,7 @@ export function SidebarPanel({
               width: "100%",
               display: "flex",
               alignItems: "center",
-              gap: 10,
+              gap: 12,
               justifyContent: "flex-start",
               paddingLeft: 16,
               paddingRight: 16,
@@ -493,7 +500,7 @@ export function SidebarPanel({
               style={{
                 flex: 1,
                 textAlign: "left",
-                fontSize: 12.5,
+                fontSize: 12,
                 color: "rgba(255,255,255,0.55)",
               }}
             >
@@ -510,9 +517,10 @@ export function SidebarPanel({
             flex: 1,
             overflowY: "auto",
             overflowX: "hidden",
-            paddingTop: 12,
+            paddingTop: 16,
           }}
         >
+          <PanelSectionLabel first>Keyboard</PanelSectionLabel>
           {(
             [
               { kbd: "⌫  Delete", desc: "Delete selected" },
@@ -539,17 +547,17 @@ export function SidebarPanel({
                 display: "flex",
                 alignItems: "center",
                 padding: "0 16px",
-                gap: 10,
+                gap: 12,
               }}
             >
               <kbd
                 style={{
-                  fontSize: 10.5,
+                  fontSize: 11,
                   color: "rgba(255,255,255,0.7)",
                   background: "rgba(255,255,255,0.04)",
-                  border: "0.5px solid rgba(255,255,255,0.07)",
-                  borderRadius: 5,
-                  padding: "2px 7px",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  borderRadius: 8,
+                  padding: "4px 8px",
                   fontFamily: "inherit",
                   flexShrink: 0,
                 }}
@@ -558,7 +566,7 @@ export function SidebarPanel({
               </kbd>
               <span
                 style={{
-                  fontSize: 11.5,
+                  fontSize: 11,
                   color: "rgba(255,255,255,0.4)",
                 }}
               >

@@ -1,5 +1,6 @@
 "use client";
 import type { CanvasNode } from "../lib/canvas-types";
+import { PanelSectionLabel } from "./panel-ui";
 
 interface PresentationPanelProps {
   presentationOrder: number[];
@@ -31,11 +32,12 @@ export function PresentationPanel({
         flexDirection: "column",
       }}
     >
-      <div style={{ flex: 1, overflowY: "auto", paddingTop: 8 }}>
+      <div style={{ flex: 1, overflowY: "auto", paddingTop: 16 }}>
+        <PanelSectionLabel first>Slide Order</PanelSectionLabel>
         {presentationOrder.length === 0 ? (
           <div
             style={{
-              padding: "6px 20px",
+              padding: "8px 20px",
               fontSize: 12,
               color: "rgba(255,255,255,0.4)",
             }}
@@ -71,7 +73,7 @@ export function PresentationPanel({
                   {/* Sequence number */}
                   <span
                     style={{
-                      fontSize: 10.5,
+                      fontSize: 11,
                       color: excluded
                         ? "rgba(255,255,255,0.4)"
                         : "rgba(255,255,255,0.3)",
@@ -88,7 +90,7 @@ export function PresentationPanel({
                   <span
                     style={{
                       flex: 1,
-                      fontSize: 12.5,
+                      fontSize: 12,
                       color: excluded
                         ? "rgba(255,255,255,0.5)"
                         : "rgba(255,255,255,0.8)",
@@ -114,7 +116,7 @@ export function PresentationPanel({
                       width: 22,
                       height: 22,
                       border: "none",
-                      borderRadius: 5,
+                      borderRadius: 8,
                       background: "transparent",
                       color: excluded
                         ? "rgba(255,255,255,0.4)"
@@ -176,7 +178,7 @@ export function PresentationPanel({
                   </button>
 
                   {/* Up/Down buttons */}
-                  <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                     <button
                       onClick={() => movePresentationNodeUp(id)}
                       disabled={isFirst}
@@ -185,7 +187,7 @@ export function PresentationPanel({
                         width: 22,
                         height: 22,
                         border: "none",
-                        borderRadius: 5,
+                        borderRadius: 8,
                         background: "transparent",
                         color: isFirst
                           ? "rgba(255,255,255,0.15)"
@@ -229,7 +231,7 @@ export function PresentationPanel({
                         width: 22,
                         height: 22,
                         border: "none",
-                        borderRadius: 5,
+                        borderRadius: 8,
                         background: "transparent",
                         color: isLast
                           ? "rgba(255,255,255,0.15)"
@@ -276,9 +278,9 @@ export function PresentationPanel({
       {/* Present button */}
       <div
         style={{
-          padding: "12px 14px",
+          padding: "12px 16px",
           flexShrink: 0,
-          borderTop: "0.5px solid rgba(255,255,255,0.06)",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
         }}
       >
         <button
@@ -287,12 +289,12 @@ export function PresentationPanel({
           style={{
             width: "100%",
             height: 38,
-            borderRadius: 10,
+            borderRadius: 12,
             border: "none",
             background:
               presentActiveSeqLength === 0
-                ? "rgba(241,178,74,0.35)"
-                : "#F1B24A",
+                ? "rgba(201,168,118,0.35)"
+                : "#C9A876",
             color: "#0C2018",
             fontSize: 13,
             fontWeight: 600,

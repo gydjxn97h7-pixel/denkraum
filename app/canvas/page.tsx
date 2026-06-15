@@ -658,7 +658,7 @@ export default function Canvas() {
   );
 
   // ── localStorage + IndexedDB persistence ─────────────────────────────────────
-  const hydrated = useBoardPersistence({
+  const { hydrated, saveState } = useBoardPersistence({
     nodes,
     connections,
     boardName,
@@ -1260,7 +1260,7 @@ export default function Canvas() {
         overflow: "hidden",
         position: "relative",
         fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+          "var(--font-geist-sans), system-ui, sans-serif",
       }}
       onClick={() => setContextMenu(null)}
     >
@@ -1302,8 +1302,8 @@ export default function Canvas() {
             <stop offset="100%" stopColor="#143F38" />
           </linearGradient>
           <linearGradient id="gShapeA" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3D3216" />
-            <stop offset="100%" stopColor="#2A2410" />
+            <stop offset="0%" stopColor="#3A3120" />
+            <stop offset="100%" stopColor="#28231A" />
           </linearGradient>
         </defs>
       </svg>
@@ -1323,6 +1323,8 @@ export default function Canvas() {
         editingBoardName={editingBoardName}
         setEditingBoardName={setEditingBoardName}
         nodes={nodes}
+        connectionCount={connections.length}
+        saveState={saveState}
         selected={selected}
         editingSidebarNodeId={editingSidebarNodeId}
         setEditingSidebarNodeId={setEditingSidebarNodeId}
@@ -1410,7 +1412,7 @@ export default function Canvas() {
               height={20 * zoom}
               patternUnits="userSpaceOnUse"
             >
-              <circle cx={1} cy={1} r={0.9} fill="rgba(20,71,56,0.28)" />
+              <circle cx={1} cy={1} r={0.9} fill="rgba(20,71,56,0.18)" />
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#dots)" />
@@ -1482,7 +1484,7 @@ export default function Canvas() {
                 width: marqueeRect.w,
                 height: marqueeRect.h,
                 border: `1px solid ${ACCENT}`,
-                background: "rgba(241,178,74,0.08)",
+                background: "rgba(201,168,118,0.08)",
                 pointerEvents: "none",
                 zIndex: 999,
               }}
@@ -1514,6 +1516,21 @@ export default function Canvas() {
             />
           ))}
         </div>
+
+        {/* Edge vignette — a soft inner shadow at the viewport edges so the
+            dot-grid canvas reads as slightly recessed within the frame. Sits
+            above the world but below all floating chrome, and never intercepts
+            pointer events. */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            boxShadow:
+              "inset 0 0 60px rgba(20,40,33,0.13), inset 0 0 180px rgba(20,40,33,0.08)",
+          }}
+        />
       </div>
 
       {/* ── Snap Guides ── */}
@@ -1525,7 +1542,7 @@ export default function Canvas() {
             top: 0,
             width: 1,
             height: "100%",
-            background: "rgba(241,178,74,0.6)",
+            background: "rgba(201,168,118,0.6)",
             pointerEvents: "none",
             zIndex: 50,
           }}
@@ -1539,7 +1556,7 @@ export default function Canvas() {
             top: Math.round(snapGuides.y * zoom + pan.y),
             width: "100%",
             height: 1,
-            background: "rgba(241,178,74,0.6)",
+            background: "rgba(201,168,118,0.6)",
             pointerEvents: "none",
             zIndex: 50,
           }}
@@ -1640,10 +1657,10 @@ export default function Canvas() {
           transform: "translateX(-50%)",
           background: "rgba(22,64,56,0.88)",
           backdropFilter: "blur(12px)",
-          border: "0.5px solid rgba(255,255,255,0.07)",
-          borderRadius: 10,
-          padding: "7px 16px",
-          fontSize: 11.5,
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 12,
+          padding: "8px 16px",
+          fontSize: 11,
           color: "rgba(255,255,255,0.55)",
           letterSpacing: "-0.1px",
           whiteSpace: "nowrap",
@@ -1672,9 +1689,9 @@ export default function Canvas() {
       <div className="mobile-fallback">
         <span
           style={{
-            color: "#F1B24A",
+            color: "#C9A876",
             fontSize: 22,
-            fontWeight: 700,
+            fontWeight: 600,
             letterSpacing: "0.12em",
           }}
         >
@@ -1684,7 +1701,7 @@ export default function Canvas() {
           style={{
             width: 32,
             height: 2,
-            background: "#F1B24A",
+            background: "#C9A876",
             borderRadius: 1,
             margin: "20px 0 24px",
           }}

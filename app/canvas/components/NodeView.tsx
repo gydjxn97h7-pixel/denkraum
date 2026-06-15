@@ -84,16 +84,16 @@ export const NodeView = React.memo(function NodeView({
       ? "none"
       : isSel
         ? "1px solid rgba(255,255,255,0.28)"
-        : "0.5px solid rgba(255,255,255,0.13)";
+        : "1px solid rgba(255,255,255,0.13)";
   const hostShadow =
     isDiamond || isText || isImage
       ? "none"
       : isPotentialTarget
-        ? "0 0 0 2px rgba(241,178,74,0.35)"
+        ? "0 0 0 2px rgba(201,168,118,0.35)"
         : isSel
           ? "0 4px 24px rgba(0,0,0,0.5), 0 1px 6px rgba(0,0,0,0.3)"
           : "0 2px 12px rgba(0,0,0,0.4)";
-  const hostRadius = isCircle ? "50%" : isRounded ? 24 : 12;
+  const hostRadius = isCircle ? "50%" : isRounded ? 16 : 12;
 
   const showResize = (hoveredId === n.id || isSel) && !isText;
   const isSource = connectDrag?.fromId === n.id;
@@ -161,14 +161,14 @@ export const NodeView = React.memo(function NodeView({
             ? 0
             : isDiamond
               ? 0
-              : "14px 18px",
+              : "12px 16px",
         cursor:
           connectDrag !== null && n.id !== connectDrag.fromId
             ? "crosshair"
             : "default",
         userSelect: "none",
         outline: isSource
-          ? "1.5px solid rgba(241,178,74,0.5)"
+          ? "1.5px solid rgba(201,168,118,0.5)"
           : isMultiSelected
             ? `2px solid ${ACCENT}`
             : isEditing
@@ -322,7 +322,7 @@ export const NodeView = React.memo(function NodeView({
                       : "#888",
                   outline: "none",
                   textAlign: "center",
-                  marginTop: 3,
+                  marginTop: 4,
                   width: "100%",
                   whiteSpace: "pre-wrap",
                   overflowWrap: "break-word",
@@ -396,8 +396,8 @@ export const NodeView = React.memo(function NodeView({
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: 6,
-            padding: "12px 14px",
+            gap: 8,
+            padding: "12px 16px",
             width: "100%",
             height: "100%",
             boxSizing: "border-box",
@@ -550,7 +550,7 @@ export const NodeView = React.memo(function NodeView({
                 : isDark
                   ? "rgba(255,255,255,0.82)"
                   : "#888",
-              marginTop: 5,
+              marginTop: 4,
               outline: "none",
               lineHeight: 1.55,
               minHeight: 16,
@@ -713,9 +713,9 @@ export const NodeView = React.memo(function NodeView({
                 cx="11"
                 cy="11"
                 r="9"
-                fill="#0C2018"
+                fill="#A8C4B5"
                 stroke={
-                  isSource ? "rgba(241,178,74,0.85)" : "rgba(241,178,74,0.3)"
+                  isSource ? "#7A9E8A" : "rgba(122,158,138,0.55)"
                 }
                 strokeWidth={isSource ? "2" : "1.5"}
               />
@@ -723,7 +723,7 @@ export const NodeView = React.memo(function NodeView({
                 cx="11"
                 cy="11"
                 r={isSource ? "6.5" : "5.5"}
-                fill={isSource ? "#F1B24A" : "rgba(241,178,74,0.65)"}
+                fill={isSource ? "#C9A876" : "rgba(201,168,118,0.65)"}
               />
             </svg>
           </div>
@@ -743,7 +743,7 @@ export const NodeView = React.memo(function NodeView({
             bottom: -11 / zoom,
             width: 22 / zoom,
             height: 22 / zoom,
-            padding: 6 / zoom,
+            padding: 8 / zoom,
             boxSizing: "content-box",
             background: "rgba(28,32,36,0.97)",
             border: `${1 / zoom}px solid rgba(255,255,255,0.12)`,

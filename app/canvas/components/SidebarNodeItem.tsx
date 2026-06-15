@@ -40,7 +40,7 @@ const GRAD: Record<NodeType, string> = {
 function NodeIcon({ type, active }: { type: NodeType; active: boolean }) {
   const gid = GRAD[type];
   const fill = `url(#${gid})`;
-  const stroke = active ? "rgba(241,178,74,0.65)" : "rgba(255,255,255,0.6)";
+  const stroke = active ? "rgba(201,168,118,0.65)" : "rgba(255,255,255,0.6)";
   const sw = 1.7;
 
   return (
@@ -151,7 +151,7 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
         alignItems: "center",
         cursor: "pointer",
         background: isActive
-          ? "linear-gradient(to right, rgba(241,178,74,0.07), transparent)"
+          ? "linear-gradient(to right, rgba(201,168,118,0.07), transparent)"
           : "transparent",
         padding: "0 16px",
       }}
@@ -174,7 +174,7 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
             top: 0,
             width: 2.5,
             height: 36,
-            background: "#F1B24A",
+            background: "#C9A876",
             borderRadius: "0 1px 1px 0",
           }}
         />
@@ -207,14 +207,14 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
           }}
           style={{
             flex: 1,
-            marginLeft: 10,
-            fontSize: 12.5,
+            marginLeft: 12,
+            fontSize: 12,
             fontFamily: "inherit",
             background: "rgba(255,255,255,0.07)",
             border: "none",
-            outline: "1px solid rgba(241,178,74,0.4)",
-            borderRadius: 5,
-            padding: "1px 5px",
+            outline: "1px solid rgba(201,168,118,0.4)",
+            borderRadius: 8,
+            padding: "0 4px",
             color: "#FFFFFF",
             minWidth: 0,
           }}
@@ -224,8 +224,8 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
           <span
             style={{
               flex: 1,
-              marginLeft: 10,
-              fontSize: 12.5,
+              marginLeft: 12,
+              fontSize: 12,
               fontWeight: isActive ? 500 : 400,
               color: isActive ? "#FFFFFF" : "rgba(255,255,255,0.75)",
               overflow: "hidden",

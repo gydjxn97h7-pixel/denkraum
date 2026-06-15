@@ -164,13 +164,13 @@ export function DocEditorPanel({
         WebkitBackdropFilter: "blur(24px)",
         borderRadius: 16,
         boxShadow:
-          "0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+          "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 220,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
         fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+          "var(--font-geist-sans), system-ui, sans-serif",
       }}
     >
       {/* ── Header ── */}
@@ -183,7 +183,7 @@ export function DocEditorPanel({
           flexShrink: 0,
           background: "rgba(0,0,0,0.15)",
           borderBottom:
-            mode === "min" ? "none" : "0.5px solid rgba(255,255,255,0.05)",
+            mode === "min" ? "none" : "1px solid rgba(255,255,255,0.05)",
           display: "flex",
           alignItems: "center",
           padding: "0 16px",
@@ -194,7 +194,7 @@ export function DocEditorPanel({
         {/* Traffic lights */}
         <div
           onClick={(e) => e.stopPropagation()}
-          style={{ display: "flex", gap: 7, alignItems: "center", flexShrink: 0 }}
+          style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}
         >
           <TrafficDot color="#ff5f57" title="Save and close" onClick={saveAndClose} />
           <TrafficDot
@@ -212,7 +212,7 @@ export function DocEditorPanel({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 9,
+            gap: 8,
             minWidth: 0,
             flex: 1,
           }}
@@ -222,7 +222,7 @@ export function DocEditorPanel({
             height="13"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="rgba(241,178,74,0.75)"
+            stroke="rgba(201,168,118,0.75)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -237,7 +237,7 @@ export function DocEditorPanel({
             <span
               style={{
                 fontSize: 12,
-                fontWeight: 500,
+                fontWeight: 600,
                 color: "rgba(255,255,255,0.75)",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -251,8 +251,8 @@ export function DocEditorPanel({
             <span
               style={{
                 fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: "1.4px",
+                fontWeight: 600,
+                letterSpacing: "0.1em",
                 color: "#FFFFFF",
               }}
             >
@@ -313,9 +313,9 @@ export function DocEditorPanel({
                 : "100%",
             height: "100%",
             background: "#FDFCF9",
-            borderRadius: 4,
+            borderRadius: 8,
             boxShadow:
-              "0 18px 50px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.3), 0 0 0 0.5px rgba(255,255,255,0.06)",
+              "0 8px 24px rgba(0,0,0,0.3)",
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
@@ -334,23 +334,24 @@ export function DocEditorPanel({
             }}
             style={{
               flexShrink: 0,
-              margin: "56px 48px 0",
-              fontSize: 24,
-              fontWeight: 700,
+              margin: "64px 48px 0",
+              fontSize: 30,
+              fontWeight: 600,
               fontFamily: "inherit",
               background: "transparent",
               border: "none",
               outline: "none",
-              padding: "0 0 12px",
+              padding: "0 0 16px",
               borderBottom: "1px solid rgba(20,40,33,0.08)",
               color: "#14201B",
-              letterSpacing: "-0.4px",
-              caretColor: "#B97F1F",
+              letterSpacing: "-0.5px",
+              caretColor: "#A1834B",
             }}
           />
           <div
             ref={contentRef}
             data-doc-editor="true"
+            data-placeholder="Start writing…"
             contentEditable
             suppressContentEditableWarning
             onInput={refreshCount}
@@ -359,7 +360,7 @@ export function DocEditorPanel({
             style={{
               flex: 1,
               minHeight: 0,
-              padding: "18px 48px 48px",
+              padding: "28px 48px 64px",
               overflowY: "auto",
               overflowX: "hidden",
               outline: "none",
@@ -370,7 +371,7 @@ export function DocEditorPanel({
               overflowWrap: "break-word",
               wordBreak: "break-word",
               userSelect: "text",
-              caretColor: "#B97F1F",
+              caretColor: "#A1834B",
               cursor: "text",
             }}
           />
@@ -381,12 +382,12 @@ export function DocEditorPanel({
       <div
         style={{
           flexShrink: 0,
-          borderTop: "0.5px solid rgba(255,255,255,0.06)",
-          padding: "10px 14px",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          padding: "12px 16px",
           display: mode === "min" ? "none" : "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 10,
+          gap: 12,
         }}
       >
         <span
@@ -396,12 +397,12 @@ export function DocEditorPanel({
               : undefined
           }
           style={{
-            fontSize: 10.5,
+            fontSize: 11,
             fontVariantNumeric: "tabular-nums",
             color: atLimit
               ? "#FCA5A5"
               : nearLimit
-                ? "#F1B24A"
+                ? "#C9A876"
                 : "rgba(255,255,255,0.45)",
           }}
         >
@@ -418,9 +419,9 @@ export function DocEditorPanel({
             padding: "0 16px",
             borderRadius: 8,
             border: "none",
-            background: "#F1B24A",
+            background: "#C9A876",
             color: "#0C2018",
-            fontSize: 12.5,
+            fontSize: 12,
             fontWeight: 600,
             fontFamily: "inherit",
             cursor: "pointer",

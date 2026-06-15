@@ -216,7 +216,7 @@ export function ShapeButton({
 }) {
   const [hovered, setHovered] = useState(false);
   const stroke = isActive
-    ? "#A07030"
+    ? "#8E6F3F"
     : hovered
       ? "rgba(255,255,255,1)"
       : "rgba(255,255,255,0.8)";
@@ -230,7 +230,7 @@ export function ShapeButton({
         width: 36,
         height: 36,
         border: "none",
-        background: isActive ? "rgba(241,178,74,0.06)" : "transparent",
+        background: isActive ? "rgba(201,168,118,0.06)" : "transparent",
         cursor: "pointer",
         display: "flex",
         alignItems: "center",

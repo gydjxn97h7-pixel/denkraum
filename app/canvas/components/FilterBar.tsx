@@ -37,14 +37,13 @@ export function FilterBar({
           "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.95)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
-        border: "0.5px solid rgba(255,255,255,0.1)",
-        borderRadius: 14,
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 16,
         padding: "8px 12px",
         display: "flex",
         flexDirection: "column",
-        gap: 7,
-        boxShadow:
-          "0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+        gap: 8,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 202,
         minWidth: 420,
       }}
@@ -113,8 +112,8 @@ export function FilterBar({
             cursor: "pointer",
             fontSize: 14,
             lineHeight: 1,
-            padding: 2,
-            borderRadius: 4,
+            padding: 4,
+            borderRadius: 8,
             flexShrink: 0,
             display: "flex",
             alignItems: "center",
@@ -154,14 +153,15 @@ export function FilterBar({
               key={value}
               onClick={() => setFilterType(value)}
               style={{
-                padding: "3px 9px",
-                borderRadius: 6,
+                padding: "4px 12px",
+                borderRadius: 999,
                 border: active
                   ? `1px solid ${ACCENT}66`
                   : "1px solid rgba(255,255,255,0.07)",
                 background: active ? `${ACCENT}22` : "transparent",
                 color: active ? ACCENT : "rgba(255,255,255,0.7)",
-                fontSize: 11.5,
+                fontSize: 11,
+                fontWeight: 600,
                 fontFamily: "inherit",
                 cursor: "pointer",
                 transition: "all 0.1s",

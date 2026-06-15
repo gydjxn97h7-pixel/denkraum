@@ -108,11 +108,11 @@ export function FormatBar() {
     width: 26,
     height: 26,
     border: "none",
-    borderRadius: 6,
-    background: active ? "rgba(241,178,74,0.18)" : "transparent",
-    color: active ? "#F1B24A" : "rgba(255,255,255,0.85)",
+    borderRadius: 8,
+    background: active ? "rgba(201,168,118,0.18)" : "transparent",
+    color: active ? "#C9A876" : "rgba(255,255,255,0.85)",
     cursor: "pointer",
-    fontSize: 12.5,
+    fontSize: 12,
     fontFamily: "inherit",
     display: "flex",
     alignItems: "center",
@@ -132,24 +132,23 @@ export function FormatBar() {
           "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
-        border: "0.5px solid rgba(255,255,255,0.1)",
-        borderRadius: 10,
-        boxShadow:
-          "0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 0 rgba(255,255,255,0.12)",
-        padding: "4px 6px",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 12,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
+        padding: "4px 8px",
         display: "flex",
         alignItems: "center",
-        gap: 2,
+        gap: 4,
         zIndex: 400,
         fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+          "var(--font-geist-sans), system-ui, sans-serif",
         userSelect: "none",
       }}
     >
       <button
         title="Bold (⌘B)"
         onClick={() => exec("bold")}
-        style={{ ...toggleStyle(bar.bold), fontWeight: 700 }}
+        style={{ ...toggleStyle(bar.bold), fontWeight: 600 }}
       >
         B
       </button>
@@ -170,7 +169,7 @@ export function FormatBar() {
 
       <div
         style={{
-          width: "0.5px",
+          width: "1px",
           height: 14,
           background: "rgba(255,255,255,0.12)",
           margin: "0 4px",
@@ -181,7 +180,7 @@ export function FormatBar() {
       <button
         title="Smaller text"
         onClick={() => stepSize(-1)}
-        style={{ ...toggleStyle(false), fontSize: 10.5 }}
+        style={{ ...toggleStyle(false), fontSize: 11 }}
       >
         A−
       </button>
@@ -199,7 +198,7 @@ export function FormatBar() {
       <button
         title="Larger text"
         onClick={() => stepSize(1)}
-        style={{ ...toggleStyle(false), fontSize: 12.5 }}
+        style={{ ...toggleStyle(false), fontSize: 12 }}
       >
         A+
       </button>

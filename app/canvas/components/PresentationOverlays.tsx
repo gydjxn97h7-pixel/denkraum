@@ -25,7 +25,7 @@ export function PresentationOverlays({
             pointerEvents: "none",
             zIndex: 249,
             boxShadow:
-              "inset 0 0 0 2px rgba(241,178,74,0.38), inset 0 0 28px rgba(157,200,141,0.07)",
+              "inset 0 0 0 2px rgba(201,168,118,0.38), inset 0 0 28px rgba(157,200,141,0.07)",
             borderRadius: 0,
           }}
         />
@@ -43,27 +43,27 @@ export function PresentationOverlays({
             background: "linear-gradient(160deg, #265048 0%, #143F38 100%)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
-            border: "0.5px solid rgba(157,200,141,0.18)",
-            borderRadius: 18,
+            border: "1px solid rgba(157,200,141,0.18)",
+            borderRadius: 16,
             boxShadow:
-              "0 8px 40px rgba(0,0,0,0.45), 0 2px 10px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.08)",
-            padding: "18px 32px",
+              "0 8px 24px rgba(0,0,0,0.22)",
+            padding: "20px 32px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: 6,
+            gap: 8,
             zIndex: 350,
             userSelect: "none",
           }}
         >
           <span
             style={{
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: 600,
               color: "#FFFFFF",
               letterSpacing: "-0.2px",
               fontFamily:
-                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+                "var(--font-geist-sans), system-ui, sans-serif",
             }}
           >
             Presentation mode
@@ -73,11 +73,11 @@ export function PresentationOverlays({
               fontSize: 12,
               color: "rgba(255,255,255,0.5)",
               fontFamily:
-                "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+                "var(--font-geist-sans), system-ui, sans-serif",
             }}
           >
             ← → navigate &nbsp;·&nbsp;{" "}
-            <span style={{ color: "#F1B24A" }}>Esc</span> to exit
+            <span style={{ color: "#C9A876" }}>Esc</span> to exit
           </span>
         </div>
       )}
@@ -92,20 +92,20 @@ export function PresentationOverlays({
             transform: "translateX(-50%)",
             background: "rgba(12,32,24,0.82)",
             backdropFilter: "blur(12px)",
-            border: "0.5px solid rgba(255,255,255,0.1)",
-            borderRadius: 10,
-            padding: "7px 18px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 12,
+            padding: "8px 20px",
             display: "flex",
             alignItems: "center",
             gap: 16,
-            fontSize: 11.5,
+            fontSize: 11,
             color: "rgba(255,255,255,0.55)",
             zIndex: 300,
             pointerEvents: "none",
             userSelect: "none",
           }}
         >
-          <span style={{ color: "#F1B24A", fontWeight: 600 }}>
+          <span style={{ color: "#C9A876", fontWeight: 600 }}>
             {presentationIndex + 1} / {presentActiveCount}
           </span>
           <span>← → navigate · Esc exit</span>

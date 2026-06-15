@@ -1,4 +1,4 @@
-export const ACCENT = "#F1B24A";
+export const ACCENT = "#C9A876";
 
 export type NodeType =
   | "block"

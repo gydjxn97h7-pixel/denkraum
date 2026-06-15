@@ -8,6 +8,13 @@ import {
 } from "../lib/rich-text";
 import { rgbToHex } from "../lib/color-helpers";
 import { ColorPickerWindow } from "./ColorPickerWindow";
+import {
+  RADIUS,
+  SPACE,
+  BORDER_DARK,
+  FONT_SANS,
+  CONTROL,
+} from "../lib/design-tokens";
 
 interface DocToolbarProps {
   // The document's contenteditable; toolbar actions operate on its selection.
@@ -35,6 +42,112 @@ function computedHex(el: Element | null): string {
   const v = getComputedStyle(el).color;
   const m = v.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
   return m ? rgbToHex(+m[1], +m[2], +m[3]) : "#243029";
+}
+
+// A soft, low shadow keeps the pill integrated with the otherwise-flat app
+// (most surfaces use ELEVATION ≈ 0 8px 24px / .22). A faint top rim-light
+// preserves a hint of tactility without reading as a foreign overlay.
+const TACTILE_SHADOW =
+  "0 4px 14px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.06)";
+
+// Hover tooltip that names what a control does (e.g. "Bold"). Sits just below
+// its button, over the white page where it reads clearly.
+function Tooltip({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        position: "absolute",
+        top: "100%",
+        left: "50%",
+        transform: "translateX(-50%)",
+        marginTop: SPACE.sm,
+        background: "rgba(12,32,24,0.97)",
+        color: "rgba(255,255,255,0.92)",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: RADIUS.pill,
+        padding: "4px 10px",
+        fontSize: 11,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        pointerEvents: "none",
+        boxShadow: "0 6px 18px rgba(0,0,0,0.4)",
+        zIndex: 30,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+// A single circular icon button. `swatch` turns it into a filled color swatch
+// (for the text-color / highlight pickers); otherwise it's a ring-style icon
+// button that highlights in ocher when active. Each carries its own tooltip.
+function IconButton({
+  label,
+  onClick,
+  children,
+  active = false,
+  swatch,
+  glyphStyle,
+  diameter = CONTROL.md,
+}: {
+  label: string;
+  onClick: () => void;
+  children?: React.ReactNode;
+  active?: boolean;
+  swatch?: string;
+  glyphStyle?: React.CSSProperties;
+  diameter?: number;
+}) {
+  const [hover, setHover] = useState(false);
+  const base: React.CSSProperties = {
+    width: diameter,
+    height: diameter,
+    borderRadius: RADIUS.pill,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 0,
+    flexShrink: 0,
+    fontFamily: "inherit",
+    transition:
+      "background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s",
+  };
+  const style: React.CSSProperties = swatch
+    ? {
+        ...base,
+        background: swatch,
+        border: `2px solid rgba(255,255,255,${hover ? 0.55 : 0.3})`,
+        boxShadow: "inset 0 1px 2px rgba(0,0,0,0.3)",
+      }
+    : {
+        ...base,
+        background: active
+          ? "rgba(201,168,118,0.20)"
+          : hover
+            ? "rgba(255,255,255,0.12)"
+            : "rgba(255,255,255,0.05)",
+        border: active
+          ? "1px solid rgba(201,168,118,0.5)"
+          : "1px solid rgba(255,255,255,0.09)",
+        color: active ? "#C9A876" : "rgba(255,255,255,0.85)",
+        ...glyphStyle,
+      };
+  return (
+    <span style={{ position: "relative", display: "inline-flex" }}>
+      <button
+        title={label}
+        onClick={onClick}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={style}
+      >
+        {children}
+      </button>
+      {hover && <Tooltip>{label}</Tooltip>}
+    </span>
+  );
 }
 
 // Persistent floating formatting toolbar for the document editor. Mirrors the
@@ -146,7 +259,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
       prop,
       x: (r ? r.left + r.width / 2 : window.innerWidth / 2) - 130,
       y: (r ? r.bottom : 80) + 8,
-      color: prop === "color" ? fmt.textColor : "#F1B24A",
+      color: prop === "color" ? fmt.textColor : "#C9A876",
     });
   };
 
@@ -163,30 +276,13 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
     setPicker((p) => (p ? { ...p, color } : p));
   };
 
-  const btn = (active: boolean): React.CSSProperties => ({
-    width: 28,
-    height: 28,
-    border: "none",
-    borderRadius: 7,
-    background: active ? "rgba(241,178,74,0.18)" : "transparent",
-    color: active ? "#F1B24A" : "rgba(255,255,255,0.85)",
-    cursor: "pointer",
-    fontSize: 13,
-    fontFamily: "inherit",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 0,
-    transition: "background 0.12s, color 0.12s",
-  });
-
   const divider = (
     <div
       style={{
-        width: "0.5px",
-        height: 16,
+        width: "1px",
+        height: SPACE.lg,
         background: "rgba(255,255,255,0.12)",
-        margin: "0 3px",
+        margin: `0 ${SPACE.xs}px`,
         flexShrink: 0,
       }}
     />
@@ -206,53 +302,54 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
         }}
         style={{
           background:
-            "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
+            "linear-gradient(180deg, rgba(157,200,141,0.06) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
-          border: "0.5px solid rgba(255,255,255,0.1)",
-          borderRadius: 12,
-          boxShadow:
-            "0 6px 28px rgba(0,0,0,0.32), inset 0 1px 0 0 rgba(255,255,255,0.12)",
-          padding: "5px 8px",
+          border: BORDER_DARK,
+          borderRadius: RADIUS.lg,
+          boxShadow: TACTILE_SHADOW,
+          padding: `${SPACE.sm}px ${SPACE.md}px`,
           display: "flex",
           alignItems: "center",
-          gap: 3,
+          gap: SPACE.xs,
           userSelect: "none",
-          fontFamily:
-            "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+          fontFamily: FONT_SANS,
         }}
       >
-        <button
-          title="Bold (⌘B)"
+        <IconButton
+          label="Bold"
+          active={fmt.bold}
           onClick={() => exec("bold")}
-          style={{ ...btn(fmt.bold), fontWeight: 700 }}
+          glyphStyle={{ fontSize: 13, fontWeight: 600 }}
         >
           B
-        </button>
-        <button
-          title="Italic (⌘I)"
+        </IconButton>
+        <IconButton
+          label="Italic"
+          active={fmt.italic}
           onClick={() => exec("italic")}
-          style={{ ...btn(fmt.italic), fontStyle: "italic" }}
+          glyphStyle={{ fontSize: 13, fontStyle: "italic" }}
         >
           I
-        </button>
-        <button
-          title="Underline (⌘U)"
+        </IconButton>
+        <IconButton
+          label="Underline"
+          active={fmt.underline}
           onClick={() => exec("underline")}
-          style={{ ...btn(fmt.underline), textDecoration: "underline" }}
+          glyphStyle={{ fontSize: 13, textDecoration: "underline" }}
         >
           U
-        </button>
+        </IconButton>
 
         {divider}
 
-        <button
-          title="Smaller text"
+        <IconButton
+          label="Smaller text"
           onClick={() => stepSize(-1)}
-          style={{ ...btn(false), fontSize: 11 }}
+          glyphStyle={{ fontSize: 12 }}
         >
           A−
-        </button>
+        </IconButton>
         <span
           style={{
             fontSize: 11,
@@ -264,55 +361,31 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
         >
           {fmt.fontSize}
         </span>
-        <button
-          title="Larger text"
+        <IconButton
+          label="Larger text"
           onClick={() => stepSize(1)}
-          style={{ ...btn(false), fontSize: 13 }}
+          glyphStyle={{ fontSize: 14 }}
         >
           A+
-        </button>
+        </IconButton>
 
         {divider}
 
-        <button
-          title="Text color"
+        {/* Color + highlight pickers as circular swatches */}
+        <IconButton
+          label="Text color"
+          swatch={fmt.textColor}
           onClick={() => openPicker("color")}
-          style={{ ...btn(false), flexDirection: "column", gap: 1 }}
-        >
-          <span style={{ fontSize: 12, lineHeight: 1 }}>A</span>
-          <span
-            style={{
-              width: 13,
-              height: 3,
-              borderRadius: 1.5,
-              background: fmt.textColor,
-              border: "0.5px solid rgba(255,255,255,0.25)",
-            }}
-          />
-        </button>
-        <button
-          title="Highlight color"
+        />
+        <IconButton
+          label="Highlight"
+          swatch="#C9A876"
           onClick={() => openPicker("backgroundColor")}
-          style={btn(false)}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M9 11l-6 6v3h9l3-3" />
-            <path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
-          </svg>
-        </button>
+        />
 
         {divider}
 
-        <button title="Insert image" onClick={onInsertImage} style={btn(false)}>
+        <IconButton label="Insert image" onClick={onInsertImage}>
           <svg
             width="15"
             height="15"
@@ -327,7 +400,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
             <circle cx="8.5" cy="8.5" r="1.5" />
             <polyline points="21 15 16 10 5 21" />
           </svg>
-        </button>
+        </IconButton>
       </div>
 
       {/* Portaled to body: position:fixed must be viewport-relative, but the

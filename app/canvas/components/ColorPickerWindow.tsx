@@ -201,9 +201,9 @@ export function ColorPickerWindow({
         width: W,
         background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
         backdropFilter: "blur(28px)",
-        border: "0.5px solid rgba(255,255,255,0.08)",
-        borderRadius: 18,
-        boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 16,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 500,
         overflow: "hidden",
         userSelect: "none",
@@ -219,26 +219,26 @@ export function ColorPickerWindow({
           };
         }}
         style={{
-          padding: "12px 16px 10px",
+          padding: "12px 16px 12px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           cursor: "grab",
-          borderBottom: "0.5px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
           background: "rgba(255,255,255,0.04)",
         }}
       >
         <span
           style={{
             fontSize: 12,
-            fontWeight: 500,
+            fontWeight: 600,
             color: "rgba(255,255,255,0.65)",
             letterSpacing: "-0.1px",
           }}
         >
           Color
         </span>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <TrafficDot color="#ff5f57" title="Close" onClick={onClose} />
           <TrafficDot
             color="#28c840"
@@ -248,14 +248,14 @@ export function ColorPickerWindow({
         </div>
       </div>
 
-      <div style={{ padding: "14px 16px 16px" }}>
+      <div style={{ padding: "16px 16px 16px" }}>
         {/* Swatch — checkerboard reveals alpha */}
         <div
           style={{
             height: 44,
-            borderRadius: 10,
+            borderRadius: 12,
             marginBottom: 12,
-            border: "0.5px solid rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.1)",
             overflow: "hidden",
             position: "relative",
             boxShadow: "inset 0 1px 4px rgba(0,0,0,0.07)",
@@ -296,11 +296,11 @@ export function ColorPickerWindow({
             position: "relative",
             width: "100%",
             height: pickerH,
-            borderRadius: 10,
+            borderRadius: 12,
             background: pureHueHex,
             cursor: "crosshair",
-            marginBottom: 10,
-            border: "0.5px solid rgba(255,255,255,0.08)",
+            marginBottom: 12,
+            border: "1px solid rgba(255,255,255,0.1)",
             overflow: "hidden",
             flexShrink: 0,
             transition: "height 0.2s ease",
@@ -338,7 +338,7 @@ export function ColorPickerWindow({
         </div>
 
         {/* Hue slider */}
-        <div style={{ position: "relative", height: 18, marginBottom: 14 }}>
+        <div style={{ position: "relative", height: 18, marginBottom: 16 }}>
           <div
             style={{
               position: "absolute",
@@ -347,10 +347,10 @@ export function ColorPickerWindow({
               right: 0,
               height: 12,
               transform: "translateY(-50%)",
-              borderRadius: 6,
+              borderRadius: 8,
               background:
                 "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)",
-              border: "0.5px solid rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.1)",
               pointerEvents: "none",
             }}
           />
@@ -393,21 +393,21 @@ export function ColorPickerWindow({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 6,
+            gap: 8,
             background: "rgba(255,255,255,0.06)",
             borderRadius: 8,
-            padding: "6px 9px",
-            border: "0.5px solid rgba(255,255,255,0.08)",
-            marginBottom: 6,
+            padding: "8px 8px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            marginBottom: 8,
           }}
         >
           <div
             style={{
               width: 14,
               height: 14,
-              borderRadius: 4,
+              borderRadius: 8,
               background: currentHex,
-              border: "0.5px solid rgba(255,255,255,0.12)",
+              border: "1px solid rgba(255,255,255,0.12)",
               flexShrink: 0,
             }}
           />
@@ -425,37 +425,37 @@ export function ColorPickerWindow({
               border: "none",
               background: "transparent",
               fontSize: 11,
-              fontFamily: "monospace",
+              fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
               color: "#FFFFFF",
               outline: "none",
               minWidth: 0,
-              letterSpacing: "0.3px",
+              letterSpacing: "0.08em",
             }}
           />
         </div>
 
         {/* Opacity slider */}
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 16 }}>
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              marginBottom: 5,
+              marginBottom: 4,
             }}
           >
             <span
               style={{
                 fontSize: 10,
                 color: "rgba(255,255,255,0.45)",
-                letterSpacing: "0.5px",
+                letterSpacing: "0.08em",
                 textTransform: "uppercase",
               }}
             >
               Opacity
             </span>
             <span
-              style={{ fontSize: 10, color: "rgba(255,255,255,0.65)", fontFamily: "monospace" }}
+              style={{ fontSize: 10, color: "rgba(255,255,255,0.65)", fontFamily: "var(--font-geist-mono), ui-monospace, monospace" }}
             >
               {Math.round(alpha * 100)}%
             </span>
@@ -469,9 +469,9 @@ export function ColorPickerWindow({
                 right: 0,
                 height: 12,
                 transform: "translateY(-50%)",
-                borderRadius: 6,
+                borderRadius: 8,
                 overflow: "hidden",
-                border: "0.5px solid rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.1)",
                 pointerEvents: "none",
               }}
             >
@@ -542,8 +542,8 @@ export function ColorPickerWindow({
         <div
           style={{
             display: "flex",
-            gap: 6,
-            marginBottom: 14,
+            gap: 8,
+            marginBottom: 16,
             alignItems: "flex-start",
           }}
         >
@@ -555,7 +555,7 @@ export function ColorPickerWindow({
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                gap: 3,
+                gap: 4,
               }}
             >
               <input
@@ -586,22 +586,22 @@ export function ColorPickerWindow({
                   width: "100%",
                   boxSizing: "border-box",
                   textAlign: "center",
-                  border: "0.5px solid rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(255,255,255,0.1)",
                   background: "rgba(255,255,255,0.06)",
-                  borderRadius: 7,
-                  padding: "5px 4px",
+                  borderRadius: 8,
+                  padding: "4px 4px",
                   fontSize: 11,
                   color: "#FFFFFF",
                   outline: "none",
-                  fontFamily: "monospace",
+                  fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
                 }}
               />
               <span
                 style={{
-                  fontSize: 9,
+                  fontSize: 10,
                   color: "rgba(255,255,255,0.45)",
-                  letterSpacing: "0.4px",
-                  fontWeight: 500,
+                  letterSpacing: "0.08em",
+                  fontWeight: 600,
                 }}
               >
                 {label}
@@ -615,9 +615,9 @@ export function ColorPickerWindow({
             style={{
               fontSize: 10,
               color: "rgba(255,255,255,0.45)",
-              letterSpacing: "0.5px",
+              letterSpacing: "0.08em",
               textTransform: "uppercase",
-              marginBottom: 7,
+              marginBottom: 8,
             }}
           >
             Quick Picks
@@ -626,7 +626,7 @@ export function ColorPickerWindow({
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(5, 1fr)",
-              gap: 5,
+              gap: 4,
             }}
           >
             {PRESET_COLORS.map((c) => {
@@ -637,7 +637,7 @@ export function ColorPickerWindow({
                   onClick={() => applyPreset(c)}
                   style={{
                     height: 24,
-                    borderRadius: 6,
+                    borderRadius: 8,
                     background: c,
                     border: active
                       ? `2px solid ${ACCENT}`

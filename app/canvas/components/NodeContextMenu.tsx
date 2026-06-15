@@ -63,13 +63,13 @@ export function NodeContextMenu({
         background:
           "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
         backdropFilter: "blur(24px)",
-        border: "0.5px solid rgba(255,255,255,0.08)",
-        borderRadius: 14,
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 12,
         boxShadow:
-          "0 8px 40px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+          "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 300,
         minWidth: 240,
-        padding: "6px 0",
+        padding: "8px 0",
       }}
     >
       {/* ── Copy ── */}
@@ -87,20 +87,20 @@ export function NodeContextMenu({
       </div>
       <div
         style={{
-          height: "0.5px",
+          height: "1px",
           background: "rgba(255,255,255,0.10)",
-          margin: "2px 0",
+          margin: "4px 0",
         }}
       />
       {/* ── Text formatting ── */}
-      <div style={{ padding: "8px 14px 10px" }}>
+      <div style={{ padding: "8px 16px 12px" }}>
         <div
           style={{
             fontSize: 11,
             color: "rgba(255,255,255,0.5)",
             textTransform: "uppercase",
-            letterSpacing: "0.5px",
-            marginBottom: 9,
+            letterSpacing: "0.08em",
+            marginBottom: 8,
           }}
         >
           Text
@@ -110,7 +110,7 @@ export function NodeContextMenu({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 7,
+            gap: 8,
             marginBottom: 8,
           }}
         >
@@ -148,10 +148,10 @@ export function NodeContextMenu({
           </span>
         </div>
         {/* B / I / U */}
-        <div style={{ display: "flex", gap: 5 }}>
+        <div style={{ display: "flex", gap: 4 }}>
           {(
             [
-              { field: "bold", label: "B", style: { fontWeight: 700 } },
+              { field: "bold", label: "B", style: { fontWeight: 600 } },
               {
                 field: "italic",
                 label: "I",
@@ -180,13 +180,13 @@ export function NodeContextMenu({
                   border: active
                     ? "1px solid rgba(255,255,255,0.25)"
                     : "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 7,
+                  borderRadius: 8,
                   background: active
                     ? "rgba(255,255,255,0.12)"
                     : "transparent",
                   color: active ? "#FFFFFF" : "rgba(255,255,255,0.7)",
                   cursor: "pointer",
-                  fontSize: 12.5,
+                  fontSize: 12,
                   fontFamily: "inherit",
                   transition: "all 0.1s",
                   ...style,
@@ -220,7 +220,7 @@ export function NodeContextMenu({
             style={{
               fontSize: 11,
               color: "rgba(255,255,255,0.7)",
-              fontFamily: "monospace",
+              fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
               flex: 1,
             }}
           >
@@ -236,16 +236,16 @@ export function NodeContextMenu({
               )
             }
             style={{
-              padding: "5px 10px",
+              padding: "4px 12px",
               borderRadius: 8,
               background: "rgba(255,255,255,0.07)",
-              border: "0.5px solid rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.1)",
               cursor: "pointer",
               fontSize: 12,
               color: "rgba(255,255,255,0.85)",
               display: "flex",
               alignItems: "center",
-              gap: 5,
+              gap: 4,
             }}
             onMouseEnter={(e) =>
               (e.currentTarget.style.background = "rgba(255,255,255,0.12)")
@@ -263,18 +263,18 @@ export function NodeContextMenu({
         <>
           <div
             style={{
-              height: "0.5px",
+              height: "1px",
               background: "rgba(255,255,255,0.10)",
-              margin: "2px 0",
+              margin: "4px 0",
             }}
           />
           <div
             style={{
               fontSize: 11,
               color: "rgba(255,255,255,0.5)",
-              padding: "6px 14px 4px",
+              padding: "8px 16px 4px",
               textTransform: "uppercase",
-              letterSpacing: "0.5px",
+              letterSpacing: "0.08em",
             }}
           >
             Color
@@ -284,7 +284,7 @@ export function NodeContextMenu({
               display: "flex",
               alignItems: "center",
               gap: 8,
-              padding: "6px 14px 10px",
+              padding: "8px 16px 12px",
             }}
           >
             <div
@@ -301,7 +301,7 @@ export function NodeContextMenu({
               style={{
                 fontSize: 11,
                 color: "rgba(255,255,255,0.7)",
-                fontFamily: "monospace",
+                fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
                 flex: 1,
               }}
             >
@@ -310,16 +310,16 @@ export function NodeContextMenu({
             <div
               onClick={() => openColorPicker(menu.id, n.color, menu.x, menu.y)}
               style={{
-                padding: "5px 10px",
+                padding: "4px 12px",
                 borderRadius: 8,
                 background: "rgba(255,255,255,0.07)",
-                border: "0.5px solid rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.1)",
                 cursor: "pointer",
                 fontSize: 12,
                 color: "rgba(255,255,255,0.85)",
                 display: "flex",
                 alignItems: "center",
-                gap: 5,
+                gap: 4,
               }}
               onMouseEnter={(e) =>
                 (e.currentTarget.style.background = "rgba(255,255,255,0.12)")
@@ -336,18 +336,18 @@ export function NodeContextMenu({
 
       <div
         style={{
-          height: "0.5px",
+          height: "1px",
           background: "rgba(255,255,255,0.10)",
-          margin: "2px 0",
+          margin: "4px 0",
         }}
       />
       <div
         style={{
           fontSize: 11,
           color: "rgba(255,255,255,0.55)",
-          padding: "6px 14px 4px",
+          padding: "8px 16px 4px",
           textTransform: "uppercase",
-          letterSpacing: "0.5px",
+          letterSpacing: "0.08em",
         }}
       >
         Arrange
@@ -391,7 +391,7 @@ export function NodeContextMenu({
               width: 22,
               textAlign: "center",
               fontSize: 14,
-              fontFamily: "monospace",
+              fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
             }}
           >
             {icon}
@@ -402,9 +402,9 @@ export function NodeContextMenu({
 
       <div
         style={{
-          height: "0.5px",
+          height: "1px",
           background: "rgba(255,255,255,0.10)",
-          margin: "2px 0",
+          margin: "4px 0",
         }}
       />
       {/* ── Exclude / Include from presentation ── */}
@@ -426,9 +426,9 @@ export function NodeContextMenu({
       </div>
       <div
         style={{
-          height: "0.5px",
+          height: "1px",
           background: "rgba(255,255,255,0.10)",
-          margin: "2px 0",
+          margin: "4px 0",
         }}
       />
       <div

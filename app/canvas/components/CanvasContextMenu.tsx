@@ -1,6 +1,6 @@
 "use client";
 import type { NodeType } from "../lib/canvas-types";
-import { menuItem, hoverMenu } from "../lib/menu-styles";
+import { menuItem, hoverMenu, menuSectionLabel } from "../lib/menu-styles";
 
 interface CanvasContextMenuProps {
   menu: { x: number; y: number; cx: number; cy: number };
@@ -32,13 +32,12 @@ export function CanvasContextMenu({
         background:
           "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
         backdropFilter: "blur(24px)",
-        border: "0.5px solid rgba(255,255,255,0.08)",
-        borderRadius: 14,
-        boxShadow:
-          "0 8px 40px rgba(0,0,0,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 12,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 300,
         minWidth: 220,
-        padding: "6px 0",
+        padding: "8px 0",
       }}
     >
       <div
@@ -59,22 +58,12 @@ export function CanvasContextMenu({
       </div>
       <div
         style={{
-          height: "0.5px",
-          background: "rgba(255,255,255,0.10)",
-          margin: "2px 0",
+          height: "1px",
+          background: "rgba(255,255,255,0.1)",
+          margin: "4px 0",
         }}
       />
-      <div
-        style={{
-          fontSize: 11,
-          color: "rgba(255,255,255,0.55)",
-          padding: "6px 14px 4px",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
-        }}
-      >
-        Insert
-      </div>
+      <div style={menuSectionLabel}>Insert</div>
       {(
         [
           {
@@ -202,9 +191,9 @@ export function CanvasContextMenu({
       ))}
       <div
         style={{
-          height: "0.5px",
+          height: "1px",
           background: "rgba(255,255,255,0.10)",
-          margin: "2px 0",
+          margin: "4px 0",
         }}
       />
       <div

@@ -48,8 +48,11 @@ export function useBoardPersistence({
   setPresentationOrder,
   setPan,
   setZoom,
-}: BoardPersistenceArgs): boolean {
+}: BoardPersistenceArgs): { hydrated: boolean; saveState: "saved" | "saving" } {
   const [hydrated, setHydrated] = useState(false);
+  // Reflects the debounce-autosave: "saving" while a write is pending, "saved"
+  // once board data has been flushed to localStorage / IndexedDB.
+  const [saveState, setSaveState] = useState<"saved" | "saving">("saved");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks which node IDs currently have an entry in IndexedDB so we can
@@ -205,6 +208,7 @@ export function useBoardPersistence({
 
   useEffect(() => {
     if (!hydrated) return;
+    setSaveState("saving");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       // ── localStorage: strip large asset fields ──────────────────────────────
@@ -264,6 +268,7 @@ export function useBoardPersistence({
       }
       prevAssetNodeIdsRef.current = currentAssetIds;
       prevAssetRecordsRef.current = currentRecords;
+      setSaveState("saved");
     }, 500);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -285,5 +290,5 @@ export function useBoardPersistence({
     };
   }, [pan, zoom, hydrated]);
 
-  return hydrated;
+  return { hydrated, saveState };
 }
