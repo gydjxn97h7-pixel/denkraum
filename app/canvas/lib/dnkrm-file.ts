@@ -48,7 +48,7 @@ export function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
         : "",
     ...(titleRich && richHasMarks(titleRich) && { titleRich }),
     ...(bodyRich && richHasMarks(bodyRich) && { bodyRich }),
-    color: typeof n.color === "string" ? n.color : "#1D5C50",
+    color: typeof n.color === "string" ? n.color : "#FCFBF8",
     ...(typeof n.fontSize === "number" &&
       Number.isFinite(n.fontSize) && { fontSize: n.fontSize as number }),
     ...(typeof n.label === "string" && { label: n.label }),

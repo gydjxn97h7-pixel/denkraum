@@ -1,6 +1,18 @@
 "use client";
 import type { NodeType } from "../lib/canvas-types";
 import { menuItem, hoverMenu, menuSectionLabel } from "../lib/menu-styles";
+import {
+  Square,
+  Squircle,
+  Circle,
+  Diamond,
+  Type,
+  Image as ImageIcon,
+  FileText,
+  ClipboardPaste,
+} from "lucide-react";
+import { OvalIcon } from "./ShapeButton";
+import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 interface CanvasContextMenuProps {
   menu: { x: number; y: number; cx: number; cy: number };
@@ -30,9 +42,9 @@ export function CanvasContextMenu({
         left: menu.x,
         top: menu.y,
         background:
-          "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
+          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
         backdropFilter: "blur(24px)",
-        border: "1px solid rgba(255,255,255,0.1)",
+        border: "1px solid rgba(42,40,35,0.1)",
         borderRadius: 12,
         boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 300,
@@ -53,13 +65,15 @@ export function CanvasContextMenu({
           cursor: hasCopiedNode ? "pointer" : "default",
         }}
       >
-        <span style={{ width: 22, textAlign: "center", fontSize: 14 }}>⎘</span>
+        <span style={{ width: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <ClipboardPaste size={ICON.sm} {...ICON_PROPS} />
+        </span>
         Paste
       </div>
       <div
         style={{
           height: "1px",
-          background: "rgba(255,255,255,0.1)",
+          background: "rgba(42,40,35,0.1)",
           margin: "4px 0",
         }}
       />
@@ -70,97 +84,42 @@ export function CanvasContextMenu({
             type: "block" as const,
             label: "Block",
             icon: (
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <rect
-                  x="1"
-                  y="1"
-                  width="11"
-                  height="11"
-                  rx="2"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                />
-              </svg>
+              <Square size={ICON.sm} {...ICON_PROPS} />
             ),
           },
           {
             type: "rounded" as const,
             label: "Area",
             icon: (
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <rect
-                  x="1"
-                  y="1"
-                  width="11"
-                  height="11"
-                  rx="5"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                />
-              </svg>
+              <Squircle size={ICON.sm} {...ICON_PROPS} />
             ),
           },
           {
             type: "circle" as const,
             label: "Circle",
             icon: (
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <circle
-                  cx="6.5"
-                  cy="6.5"
-                  r="5.5"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                />
-              </svg>
+              <Circle size={ICON.sm} {...ICON_PROPS} />
             ),
           },
           {
             type: "oval" as const,
             label: "Oval",
             icon: (
-              <svg width="13" height="9" viewBox="0 0 13 9" fill="none">
-                <ellipse
-                  cx="6.5"
-                  cy="4.5"
-                  rx="5.5"
-                  ry="3.5"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                />
-              </svg>
+              <OvalIcon size={ICON.sm} />
             ),
           },
           {
             type: "diamond" as const,
             label: "Diamond",
             icon: (
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <polygon
-                  points="6.5,1 12,6.5 6.5,12 1,6.5"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  fill="none"
-                />
-              </svg>
+              <Diamond size={ICON.sm} {...ICON_PROPS} />
             ),
           },
           {
             type: "text" as const,
             label: "Free Text",
             icon: (
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                <text
-                  x="1"
-                  y="11"
-                  fontSize="11"
-                  fill="currentColor"
-                  fontFamily="serif"
-                  fontWeight="bold"
-                >
-                  T
-                </text>
-              </svg>
+              <Type size={ICON.sm} {...ICON_PROPS} />
             ),
           },
         ] as const
@@ -181,7 +140,7 @@ export function CanvasContextMenu({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "rgba(255,255,255,0.75)",
+              color: "rgba(42,40,35,0.75)",
             }}
           >
             {icon}
@@ -192,7 +151,7 @@ export function CanvasContextMenu({
       <div
         style={{
           height: "1px",
-          background: "rgba(255,255,255,0.10)",
+          background: "rgba(42,40,35,0.10)",
           margin: "4px 0",
         }}
       />
@@ -210,30 +169,7 @@ export function CanvasContextMenu({
             justifyContent: "center",
           }}
         >
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <rect
-              x="1"
-              y="1"
-              width="11"
-              height="11"
-              rx="2"
-              stroke="rgba(255,255,255,0.75)"
-              strokeWidth="1.3"
-            />
-            <circle
-              cx="4.5"
-              cy="4.5"
-              r="1.2"
-              fill="rgba(255,255,255,0.75)"
-            />
-            <path
-              d="M1 9l3-3 2.5 2.5L9 6l3 4"
-              stroke="rgba(255,255,255,0.75)"
-              strokeWidth="1.1"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <ImageIcon size={ICON.sm} {...ICON_PROPS} color="rgba(42,40,35,0.75)" />
         </span>
         Image
       </div>
@@ -254,19 +190,7 @@ export function CanvasContextMenu({
             justifyContent: "center",
           }}
         >
-          <svg width="11" height="13" viewBox="0 0 11 13" fill="none">
-            <path
-              d="M2 1h5l3 3v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"
-              stroke="rgba(255,255,255,0.75)"
-              strokeWidth="1.2"
-            />
-            <path
-              d="M7 1v3h3"
-              stroke="rgba(255,255,255,0.75)"
-              strokeWidth="1.2"
-              strokeLinecap="round"
-            />
-          </svg>
+          <FileText size={ICON.sm} {...ICON_PROPS} color="rgba(42,40,35,0.75)" />
         </span>
         Text File
       </div>

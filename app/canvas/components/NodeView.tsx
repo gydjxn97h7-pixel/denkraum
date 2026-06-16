@@ -1,8 +1,9 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { ACCENT } from "../lib/canvas-types";
+import { NODE_SHADOW, ICON, ICON_PROPS } from "../lib/design-tokens";
+import { FileText, Grip } from "lucide-react";
 import type { CanvasNode, ConnectDrag, RichText } from "../lib/canvas-types";
-import { parseColor } from "../lib/color-helpers";
 import { setEditableContent, editableRichText } from "../lib/rich-text";
 
 interface NodeViewProps {
@@ -53,8 +54,6 @@ export const NodeView = React.memo(function NodeView({
   const isRounded = n.type === "rounded";
   const isImage = n.type === "image";
   const isTextFile = n.type === "textfile";
-  const { r: _nr, g: _ng, b: _nb } = parseColor(n.color);
-  const isDark = (0.299 * _nr + 0.587 * _ng + 0.114 * _nb) / 255 < 0.45;
   const fs = n.fontSize ?? 13;
 
   const [isEditing, setIsEditing] = useState(false);
@@ -78,21 +77,24 @@ export const NodeView = React.memo(function NodeView({
   const isPotentialTarget =
     connectDrag !== null && n.id !== connectDrag.fromId && !isText;
 
-  const hostBg = isDiamond || isText || isImage ? "transparent" : n.color;
-  const hostBorder =
-    isDiamond || isText || isImage
-      ? "none"
-      : isSel
-        ? "1px solid rgba(255,255,255,0.28)"
-        : "1px solid rgba(255,255,255,0.13)";
+  const hostBg = isDiamond || isText || isImage ? "transparent" : "#FCFBF8";
+  // Borderless cards — the soft drop shadow does the separation now.
+  const hostBorder = "none";
+  const isHovered = hoveredId === n.id;
+  // Elevation by state: selected/dragged sits highest, hover lifts slightly.
+  const elevation = isSel
+    ? NODE_SHADOW.active
+    : isHovered
+      ? NODE_SHADOW.hover
+      : NODE_SHADOW.rest;
+  // Diamond casts its shadow via an SVG filter; text floats via a glyph
+  // drop-shadow (see below) — neither uses a box shadow on the host.
   const hostShadow =
-    isDiamond || isText || isImage
+    isDiamond || isText
       ? "none"
       : isPotentialTarget
-        ? "0 0 0 2px rgba(201,168,118,0.35)"
-        : isSel
-          ? "0 4px 24px rgba(0,0,0,0.5), 0 1px 6px rgba(0,0,0,0.3)"
-          : "0 2px 12px rgba(0,0,0,0.4)";
+        ? `0 0 0 2px rgba(197,107,71,0.5), ${elevation}`
+        : elevation;
   const hostRadius = isCircle ? "50%" : isRounded ? 16 : 12;
 
   const showResize = (hoveredId === n.id || isSel) && !isText;
@@ -168,13 +170,13 @@ export const NodeView = React.memo(function NodeView({
             : "default",
         userSelect: "none",
         outline: isSource
-          ? "1.5px solid rgba(201,168,118,0.5)"
+          ? "1.5px solid rgba(197,107,71,0.6)"
           : isMultiSelected
             ? `2px solid ${ACCENT}`
             : isEditing
-              ? "1.5px solid rgba(255,255,255,0.15)"
+              ? "1.5px solid rgba(42,40,35,0.18)"
               : isText && (isSel || n.title === "")
-                ? "1.5px dashed rgba(20,71,56,0.45)"
+                ? "1.5px dashed rgba(176,121,94,0.5)"
                 : "none",
         opacity: dimmed ? 0.15 : 1,
         pointerEvents: dimmed ? "none" : undefined,
@@ -207,30 +209,29 @@ export const NodeView = React.memo(function NodeView({
             <defs>
               <filter
                 id={`ds-${n.id}`}
-                x="-20%"
-                y="-20%"
-                width="140%"
-                height="140%"
+                x="-90%"
+                y="-90%"
+                width="280%"
+                height="280%"
               >
                 <feDropShadow
                   dx="0"
-                  dy="1"
-                  stdDeviation={isSel ? 5 : 3}
-                  floodColor={
-                    isSel ? "rgba(0,0,0,0.13)" : "rgba(0,0,0,0.08)"
-                  }
+                  dy={isSel ? 9 : 4}
+                  stdDeviation={isSel ? 17 : 10}
+                  floodColor="rgb(58,48,38)"
+                  floodOpacity={isSel ? 0.28 : 0.18}
                 />
               </filter>
             </defs>
             <polygon
               points={`${n.w / 2},2 ${n.w - 2},${n.h / 2} ${n.w / 2},${n.h - 2} 2,${n.h / 2}`}
-              fill={n.color}
+              fill="#FCFBF8"
               stroke={
                 isPotentialTarget
                   ? ACCENT
                   : isSel
-                    ? "rgba(255,255,255,0.25)"
-                    : "rgba(255,255,255,0.12)"
+                    ? "rgba(197,107,71,0.55)"
+                    : "rgba(124,122,78,0.4)"
               }
               strokeWidth={isPotentialTarget || isSel ? 1.5 : 0.8}
               filter={`url(#ds-${n.id})`}
@@ -275,7 +276,8 @@ export const NodeView = React.memo(function NodeView({
                 fontWeight: n.bold ? 700 : 500,
                 fontStyle: n.italic ? "italic" : "normal",
                 textDecoration: n.underline ? "underline" : "none",
-                color: n.textColor ?? (isDark ? "#FFFFFF" : "#111"),
+                color: n.textColor ?? "#2A2823",
+                fontFamily: "var(--font-clash), system-ui, sans-serif",
                 outline: "none",
                 textAlign: "center",
                 letterSpacing: "-0.2px",
@@ -317,9 +319,7 @@ export const NodeView = React.memo(function NodeView({
                   textDecoration: n.underline ? "underline" : "none",
                   color: n.textColor
                     ? n.textColor + "bb"
-                    : isDark
-                      ? "rgba(255,255,255,0.82)"
-                      : "#888",
+                    : "rgba(42,40,35,0.55)",
                   outline: "none",
                   textAlign: "center",
                   marginTop: 4,
@@ -368,7 +368,7 @@ export const NodeView = React.memo(function NodeView({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "rgba(255,255,255,0.45)",
+                color: "rgba(42,40,35,0.4)",
                 fontSize: 13,
               }}
             >
@@ -381,7 +381,7 @@ export const NodeView = React.memo(function NodeView({
                 position: "absolute",
                 inset: 0,
                 borderRadius: 12,
-                border: "1.5px solid rgba(255,255,255,0.2)",
+                border: "1.5px solid rgba(197,107,71,0.5)",
                 pointerEvents: "none",
                 zIndex: 5,
               }}
@@ -415,27 +415,18 @@ export const NodeView = React.memo(function NodeView({
               flexShrink: 0,
             }}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="rgba(255,255,255,0.45)"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+            <FileText
+              size={ICON.sm}
+              {...ICON_PROPS}
+              color="rgba(42,40,35,0.4)"
               style={{ flexShrink: 0 }}
-            >
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-            </svg>
+            />
             <span
               style={{
                 fontSize: fs,
                 fontWeight: 600,
-                color: "rgba(255,255,255,0.9)",
+                color: "#2A2823",
+                fontFamily: "var(--font-clash), system-ui, sans-serif",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -451,7 +442,7 @@ export const NodeView = React.memo(function NodeView({
               style={{
                 fontSize: Math.max(10, fs - 3),
                 lineHeight: 1.5,
-                color: "rgba(255,255,255,0.55)",
+                color: "rgba(42,40,35,0.55)",
                 overflow: "hidden",
                 display: "-webkit-box",
                 WebkitLineClamp: 3,
@@ -504,7 +495,8 @@ export const NodeView = React.memo(function NodeView({
               fontWeight: n.bold ? 700 : 500,
               fontStyle: n.italic ? "italic" : "normal",
               textDecoration: n.underline ? "underline" : "none",
-              color: n.textColor ?? (isDark ? "#FFFFFF" : "#111"),
+              color: n.textColor ?? "#2A2823",
+              fontFamily: "var(--font-clash), system-ui, sans-serif",
               outline: "none",
               letterSpacing: "-0.2px",
               textAlign: isCircle ? "center" : "left",
@@ -547,9 +539,7 @@ export const NodeView = React.memo(function NodeView({
               textDecoration: n.underline ? "underline" : "none",
               color: n.textColor
                 ? n.textColor + "bb"
-                : isDark
-                  ? "rgba(255,255,255,0.82)"
-                  : "#888",
+                : "rgba(42,40,35,0.55)",
               marginTop: 4,
               outline: "none",
               lineHeight: 1.55,
@@ -596,7 +586,8 @@ export const NodeView = React.memo(function NodeView({
             fontWeight: n.bold ? 700 : 400,
             fontStyle: n.italic ? "italic" : "normal",
             textDecoration: n.underline ? "underline" : "none",
-            color: n.textColor ?? "#14201B",
+            color: n.textColor ?? "#2A2823",
+            fontFamily: "var(--font-clash), system-ui, sans-serif",
             outline: "none",
             textAlign: "center",
             lineHeight: 1.55,
@@ -609,6 +600,11 @@ export const NodeView = React.memo(function NodeView({
             overflowWrap: "break-word",
             wordBreak: "break-word",
             overflow: "visible",
+            // Free text has no card — a soft glyph drop-shadow gives it the same
+            // lifted feel as the floating card nodes.
+            filter: isSel
+              ? "drop-shadow(0 3px 9px rgba(58,48,38,0.30))"
+              : "drop-shadow(0 2px 6px rgba(58,48,38,0.22))",
           }}
         />
       )}
@@ -627,34 +623,23 @@ export const NodeView = React.memo(function NodeView({
             top: -8,
             width: 16,
             height: 16,
-            background: "rgba(28,32,36,0.97)",
+            background: "rgba(42,40,35,0.95)",
             border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 4,
             cursor: "move",
             zIndex: 20,
-            boxShadow: "0 1px 6px rgba(0,0,0,0.6)",
+            boxShadow: "0 1px 6px rgba(58,48,38,0.4)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <svg
-            width="8"
-            height="8"
-            viewBox="0 0 8 8"
-            fill="none"
-            style={{ pointerEvents: "none", display: "block" }}
-          >
-            <circle cx="2" cy="2" r="0.8" fill="rgba(255,255,255,0.55)" />
-            <circle cx="4" cy="2" r="0.8" fill="rgba(255,255,255,0.55)" />
-            <circle cx="6" cy="2" r="0.8" fill="rgba(255,255,255,0.55)" />
-            <circle cx="2" cy="4" r="0.8" fill="rgba(255,255,255,0.55)" />
-            <circle cx="4" cy="4" r="0.8" fill="rgba(255,255,255,0.55)" />
-            <circle cx="6" cy="4" r="0.8" fill="rgba(255,255,255,0.55)" />
-            <circle cx="2" cy="6" r="0.8" fill="rgba(255,255,255,0.55)" />
-            <circle cx="4" cy="6" r="0.8" fill="rgba(255,255,255,0.55)" />
-            <circle cx="6" cy="6" r="0.8" fill="rgba(255,255,255,0.55)" />
-          </svg>
+          <Grip
+            size={12}
+            {...ICON_PROPS}
+            color="rgba(255,255,255,0.55)"
+            style={{ pointerEvents: "none" }}
+          />
         </div>
       )}
 
@@ -713,9 +698,9 @@ export const NodeView = React.memo(function NodeView({
                 cx="11"
                 cy="11"
                 r="9"
-                fill="#A8C4B5"
+                fill="#FCFBF8"
                 stroke={
-                  isSource ? "#7A9E8A" : "rgba(122,158,138,0.55)"
+                  isSource ? "#C56B47" : "rgba(176,121,94,0.6)"
                 }
                 strokeWidth={isSource ? "2" : "1.5"}
               />
@@ -723,7 +708,7 @@ export const NodeView = React.memo(function NodeView({
                 cx="11"
                 cy="11"
                 r={isSource ? "6.5" : "5.5"}
-                fill={isSource ? "#C9A876" : "rgba(201,168,118,0.65)"}
+                fill={isSource ? "#C56B47" : "rgba(176,121,94,0.7)"}
               />
             </svg>
           </div>
@@ -745,12 +730,12 @@ export const NodeView = React.memo(function NodeView({
             height: 22 / zoom,
             padding: 8 / zoom,
             boxSizing: "content-box",
-            background: "rgba(28,32,36,0.97)",
-            border: `${1 / zoom}px solid rgba(255,255,255,0.12)`,
+            background: "rgba(42,40,35,0.95)",
+            border: `${1 / zoom}px solid rgba(252,251,248,0.18)`,
             borderRadius: 4 / zoom,
             cursor: "nwse-resize",
             zIndex: 20,
-            boxShadow: `0 ${1 / zoom}px ${6 / zoom}px rgba(0,0,0,0.6)`,
+            boxShadow: `0 ${1 / zoom}px ${6 / zoom}px rgba(58,48,38,0.4)`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -760,13 +745,13 @@ export const NodeView = React.memo(function NodeView({
           }}
           onMouseEnter={(e) => {
             (e.currentTarget as HTMLElement).style.boxShadow =
-              `0 ${2 / zoom}px ${10 / zoom}px rgba(0,0,0,0.7)`;
+              `0 ${2 / zoom}px ${10 / zoom}px rgba(58,48,38,0.5)`;
             (e.currentTarget as HTMLElement).style.background =
-              "rgba(40,46,54,0.99)";
+              "rgba(58,52,44,0.98)";
           }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLElement).style.boxShadow =
-              `0 ${1 / zoom}px ${6 / zoom}px rgba(0,0,0,0.6)`;
+              `0 ${1 / zoom}px ${6 / zoom}px rgba(58,48,38,0.4)`;
             (e.currentTarget as HTMLElement).style.background =
               "rgba(28,32,36,0.97)";
           }}

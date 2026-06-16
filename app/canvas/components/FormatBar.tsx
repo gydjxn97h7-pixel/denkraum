@@ -1,9 +1,8 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import {
-  applyFontSizeToSelection,
-  FONT_SIZE_LADDER,
-} from "../lib/rich-text";
+import { applyFontSizeToSelection, FONT_SIZE_LADDER } from "../lib/rich-text";
+import { Bold, Italic, Underline } from "lucide-react";
+import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 type BarState = {
   x: number;
@@ -109,8 +108,8 @@ export function FormatBar() {
     height: 26,
     border: "none",
     borderRadius: 8,
-    background: active ? "rgba(201,168,118,0.18)" : "transparent",
-    color: active ? "#C9A876" : "rgba(255,255,255,0.85)",
+    background: active ? "rgba(197,107,71,0.18)" : "transparent",
+    color: active ? "#C56B47" : "rgba(42,40,35,0.85)",
     cursor: "pointer",
     fontSize: 12,
     fontFamily: "inherit",
@@ -129,10 +128,10 @@ export function FormatBar() {
         top: Math.max(8, bar.y - 44),
         transform: "translateX(-50%)",
         background:
-          "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
+          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
-        border: "1px solid rgba(255,255,255,0.1)",
+        border: "1px solid rgba(42,40,35,0.1)",
         borderRadius: 12,
         boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         padding: "4px 8px",
@@ -141,37 +140,37 @@ export function FormatBar() {
         gap: 4,
         zIndex: 400,
         fontFamily:
-          "var(--font-geist-sans), system-ui, sans-serif",
+          "var(--font-geist-mono), ui-monospace, monospace",
         userSelect: "none",
       }}
     >
       <button
         title="Bold (⌘B)"
         onClick={() => exec("bold")}
-        style={{ ...toggleStyle(bar.bold), fontWeight: 600 }}
+        style={toggleStyle(bar.bold)}
       >
-        B
+        <Bold size={ICON.sm} {...ICON_PROPS} />
       </button>
       <button
         title="Italic (⌘I)"
         onClick={() => exec("italic")}
-        style={{ ...toggleStyle(bar.italic), fontStyle: "italic" }}
+        style={toggleStyle(bar.italic)}
       >
-        I
+        <Italic size={ICON.sm} {...ICON_PROPS} />
       </button>
       <button
         title="Underline (⌘U)"
         onClick={() => exec("underline")}
-        style={{ ...toggleStyle(bar.underline), textDecoration: "underline" }}
+        style={toggleStyle(bar.underline)}
       >
-        U
+        <Underline size={ICON.sm} {...ICON_PROPS} />
       </button>
 
       <div
         style={{
           width: "1px",
           height: 14,
-          background: "rgba(255,255,255,0.12)",
+          background: "rgba(42,40,35,0.12)",
           margin: "0 4px",
           flexShrink: 0,
         }}
@@ -187,7 +186,7 @@ export function FormatBar() {
       <span
         style={{
           fontSize: 11,
-          color: "rgba(255,255,255,0.75)",
+          color: "rgba(42,40,35,0.75)",
           minWidth: 20,
           textAlign: "center",
           fontVariantNumeric: "tabular-nums",

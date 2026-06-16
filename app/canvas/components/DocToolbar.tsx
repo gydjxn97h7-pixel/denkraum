@@ -9,11 +9,28 @@ import {
 import { rgbToHex } from "../lib/color-helpers";
 import { ColorPickerWindow } from "./ColorPickerWindow";
 import {
+  Bold,
+  Italic,
+  Underline,
+  List,
+  ListOrdered,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Baseline,
+  Highlighter,
+  Image as ImageIcon,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
+import {
   RADIUS,
   SPACE,
   BORDER_DARK,
   FONT_SANS,
   CONTROL,
+  ICON,
+  ICON_PROPS,
 } from "../lib/design-tokens";
 
 interface DocToolbarProps {
@@ -41,22 +58,22 @@ type PickerState = {
 };
 
 function computedHex(el: Element | null): string {
-  if (!el) return "#243029";
+  if (!el) return "#2A2823";
   const v = getComputedStyle(el).color;
   const m = v.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-  return m ? rgbToHex(+m[1], +m[2], +m[3]) : "#243029";
+  return m ? rgbToHex(+m[1], +m[2], +m[3]) : "#2A2823";
 }
 
 // A soft, low shadow keeps the pill integrated with the otherwise-flat app
 // (most surfaces use ELEVATION ≈ 0 8px 24px / .22). A faint top rim-light
 // preserves a hint of tactility without reading as a foreign overlay.
 const TACTILE_SHADOW =
-  "0 4px 14px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.06)";
+  "0 4px 14px rgba(0,0,0,0.20), inset 0 1px 0 rgba(42,40,35,0.06)";
 
 // Shared dark sage-green glass used by both the full bar and the compact
 // trigger so they read as the same surface.
 const GLASS_BG =
-  "linear-gradient(180deg, rgba(157,200,141,0.06) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)";
+  "linear-gradient(180deg, rgba(216,201,168,0.06) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)";
 
 // Hover tooltip that names what a control does (e.g. "Bold"). Sits just below
 // its button, over the white page where it reads clearly.
@@ -70,8 +87,8 @@ function Tooltip({ children }: { children: React.ReactNode }) {
         transform: "translateX(-50%)",
         marginTop: SPACE.sm,
         background: "rgba(12,32,24,0.97)",
-        color: "rgba(255,255,255,0.92)",
-        border: "1px solid rgba(255,255,255,0.1)",
+        color: "rgba(42,40,35,0.92)",
+        border: "1px solid rgba(42,40,35,0.1)",
         borderRadius: RADIUS.pill,
         padding: "4px 10px",
         fontSize: 11,
@@ -126,20 +143,20 @@ function IconButton({
     ? {
         ...base,
         background: swatch,
-        border: `2px solid rgba(255,255,255,${hover ? 0.55 : 0.3})`,
+        border: `2px solid rgba(42,40,35,${hover ? 0.55 : 0.3})`,
         boxShadow: "inset 0 1px 2px rgba(0,0,0,0.3)",
       }
     : {
         ...base,
         background: active
-          ? "rgba(201,168,118,0.20)"
+          ? "rgba(197,107,71,0.20)"
           : hover
-            ? "rgba(255,255,255,0.12)"
-            : "rgba(255,255,255,0.05)",
+            ? "rgba(42,40,35,0.12)"
+            : "rgba(42,40,35,0.05)",
         border: active
-          ? "1px solid rgba(201,168,118,0.5)"
-          : "1px solid rgba(255,255,255,0.09)",
-        color: active ? "#C9A876" : "rgba(255,255,255,0.85)",
+          ? "1px solid rgba(197,107,71,0.5)"
+          : "1px solid rgba(42,40,35,0.09)",
+        color: active ? "#C56B47" : "rgba(42,40,35,0.85)",
         ...glyphStyle,
       };
   return (
@@ -168,7 +185,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
     italic: false,
     underline: false,
     fontSize: 14,
-    textColor: "#243029",
+    textColor: "#2A2823",
     bullet: false,
     numbered: false,
     align: "left",
@@ -299,7 +316,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
       prop,
       x: (r ? r.left + r.width / 2 : window.innerWidth / 2) - 130,
       y: (r ? r.bottom : 80) + 8,
-      color: prop === "color" ? fmt.textColor : "#C9A876",
+      color: prop === "color" ? fmt.textColor : "#C56B47",
     });
   };
 
@@ -321,7 +338,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
       style={{
         width: "1px",
         height: SPACE.lg,
-        background: "rgba(255,255,255,0.12)",
+        background: "rgba(42,40,35,0.12)",
         margin: `0 ${SPACE.xs}px`,
         flexShrink: 0,
       }}
@@ -374,7 +391,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
             WebkitBackdropFilter: "blur(20px)",
             border: BORDER_DARK,
             boxShadow: TACTILE_SHADOW,
-            color: "rgba(255,255,255,0.9)",
+            color: "rgba(42,40,35,0.9)",
             display: "flex",
             alignItems: "center",
             gap: 8,
@@ -386,18 +403,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
           }}
         >
           <span style={{ letterSpacing: "-0.3px" }}>Aa</span>
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
+          <ChevronDown size={ICON.sm} {...ICON_PROPS} />
         </button>
         {pickerPortal}
       </>
@@ -431,29 +437,22 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
           fontFamily: FONT_SANS,
         }}
       >
-        <IconButton
-          label="Bold"
-          active={fmt.bold}
-          onClick={() => exec("bold")}
-          glyphStyle={{ fontSize: 13, fontWeight: 600 }}
-        >
-          B
+        <IconButton label="Bold" active={fmt.bold} onClick={() => exec("bold")}>
+          <Bold size={ICON.md} {...ICON_PROPS} />
         </IconButton>
         <IconButton
           label="Italic"
           active={fmt.italic}
           onClick={() => exec("italic")}
-          glyphStyle={{ fontSize: 13, fontStyle: "italic" }}
         >
-          I
+          <Italic size={ICON.md} {...ICON_PROPS} />
         </IconButton>
         <IconButton
           label="Underline"
           active={fmt.underline}
           onClick={() => exec("underline")}
-          glyphStyle={{ fontSize: 13, textDecoration: "underline" }}
         >
-          U
+          <Underline size={ICON.md} {...ICON_PROPS} />
         </IconButton>
 
         {divider}
@@ -468,7 +467,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
         <span
           style={{
             fontSize: 11,
-            color: "rgba(255,255,255,0.75)",
+            color: "rgba(42,40,35,0.75)",
             minWidth: 18,
             textAlign: "center",
             fontVariantNumeric: "tabular-nums",
@@ -492,63 +491,14 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
           active={fmt.bullet}
           onClick={() => exec("insertUnorderedList")}
         >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="9" y1="6" x2="20" y2="6" />
-            <line x1="9" y1="12" x2="20" y2="12" />
-            <line x1="9" y1="18" x2="20" y2="18" />
-            <circle cx="4.5" cy="6" r="1.1" fill="currentColor" stroke="none" />
-            <circle cx="4.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
-            <circle cx="4.5" cy="18" r="1.1" fill="currentColor" stroke="none" />
-          </svg>
+          <List size={ICON.md} {...ICON_PROPS} />
         </IconButton>
         <IconButton
           label="Numbered list"
           active={fmt.numbered}
           onClick={() => exec("insertOrderedList")}
         >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="10" y1="6" x2="20" y2="6" />
-            <line x1="10" y1="12" x2="20" y2="12" />
-            <line x1="10" y1="18" x2="20" y2="18" />
-            <text
-              x="2"
-              y="8.5"
-              fontSize="8"
-              fontWeight="700"
-              fill="currentColor"
-              stroke="none"
-            >
-              1
-            </text>
-            <text
-              x="2"
-              y="20.5"
-              fontSize="8"
-              fontWeight="700"
-              fill="currentColor"
-              stroke="none"
-            >
-              2
-            </text>
-          </svg>
+          <ListOrdered size={ICON.md} {...ICON_PROPS} />
         </IconButton>
 
         {divider}
@@ -559,93 +509,40 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
           active={fmt.align === "left"}
           onClick={() => exec("justifyLeft")}
         >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="3" y1="6" x2="15" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="13" y2="18" />
-          </svg>
+          <AlignLeft size={ICON.md} {...ICON_PROPS} />
         </IconButton>
         <IconButton
           label="Align center"
           active={fmt.align === "center"}
           onClick={() => exec("justifyCenter")}
         >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="6" y1="6" x2="18" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="7" y1="18" x2="17" y2="18" />
-          </svg>
+          <AlignCenter size={ICON.md} {...ICON_PROPS} />
         </IconButton>
         <IconButton
           label="Align right"
           active={fmt.align === "right"}
           onClick={() => exec("justifyRight")}
         >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="9" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="11" y1="18" x2="21" y2="18" />
-          </svg>
+          <AlignRight size={ICON.md} {...ICON_PROPS} />
         </IconButton>
 
         {divider}
 
         {/* Color + highlight pickers as circular swatches */}
-        <IconButton
-          label="Text color"
-          swatch={fmt.textColor}
-          onClick={() => openPicker("color")}
-        />
+        <IconButton label="Text color" onClick={() => openPicker("color")}>
+          <Baseline size={ICON.md} {...ICON_PROPS} />
+        </IconButton>
         <IconButton
           label="Highlight"
-          swatch="#C9A876"
           onClick={() => openPicker("backgroundColor")}
-        />
+        >
+          <Highlighter size={ICON.md} {...ICON_PROPS} />
+        </IconButton>
 
         {divider}
 
         <IconButton label="Insert image" onClick={onInsertImage}>
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <polyline points="21 15 16 10 5 21" />
-          </svg>
+          <ImageIcon size={ICON.md} {...ICON_PROPS} />
         </IconButton>
 
         {divider}
@@ -653,18 +550,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
         {/* Collapse back to the compact trigger (only sticks when nothing is
             selected — a live selection keeps the full bar up). */}
         <IconButton label="Hide" onClick={() => setPinned(false)}>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="18 15 12 9 6 15" />
-          </svg>
+          <ChevronUp size={ICON.md} {...ICON_PROPS} />
         </IconButton>
       </div>
       {pickerPortal}

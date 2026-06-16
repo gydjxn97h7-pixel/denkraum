@@ -1,6 +1,21 @@
 "use client";
 import type { CanvasNode } from "../lib/canvas-types";
 import { menuItem, hoverMenu } from "../lib/menu-styles";
+import {
+  Copy,
+  Trash2,
+  Bold,
+  Italic,
+  Underline,
+  Pipette,
+  Eye,
+  EyeOff,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpToLine,
+  ArrowDownToLine,
+} from "lucide-react";
+import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 interface NodeContextMenuProps {
   menu: { x: number; y: number; id: number };
@@ -61,9 +76,9 @@ export function NodeContextMenu({
         left: menu.x,
         top: menu.y,
         background:
-          "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
+          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
         backdropFilter: "blur(24px)",
-        border: "1px solid rgba(255,255,255,0.1)",
+        border: "1px solid rgba(42,40,35,0.1)",
         borderRadius: 12,
         boxShadow:
           "0 8px 24px rgba(0,0,0,0.22)",
@@ -82,13 +97,15 @@ export function NodeContextMenu({
         onMouseLeave={(e) => hoverMenu(e, false)}
         style={menuItem()}
       >
-        <span style={{ width: 22, textAlign: "center", fontSize: 14 }}>⎘</span>
+        <span style={{ width: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Copy size={ICON.sm} {...ICON_PROPS} />
+        </span>
         Copy
       </div>
       <div
         style={{
           height: "1px",
-          background: "rgba(255,255,255,0.10)",
+          background: "rgba(42,40,35,0.10)",
           margin: "4px 0",
         }}
       />
@@ -97,7 +114,7 @@ export function NodeContextMenu({
         <div
           style={{
             fontSize: 11,
-            color: "rgba(255,255,255,0.5)",
+            color: "rgba(42,40,35,0.5)",
             textTransform: "uppercase",
             letterSpacing: "0.08em",
             marginBottom: 8,
@@ -117,7 +134,7 @@ export function NodeContextMenu({
           <span
             style={{
               fontSize: 10,
-              color: "rgba(255,255,255,0.7)",
+              color: "rgba(42,40,35,0.7)",
               flexShrink: 0,
             }}
           >
@@ -137,7 +154,7 @@ export function NodeContextMenu({
           <span
             style={{
               fontSize: 11,
-              color: "rgba(255,255,255,0.85)",
+              color: "rgba(42,40,35,0.85)",
               minWidth: 20,
               textAlign: "right",
               fontVariantNumeric: "tabular-nums",
@@ -151,23 +168,14 @@ export function NodeContextMenu({
         <div style={{ display: "flex", gap: 4 }}>
           {(
             [
-              { field: "bold", label: "B", style: { fontWeight: 600 } },
-              {
-                field: "italic",
-                label: "I",
-                style: { fontStyle: "italic" },
-              },
-              {
-                field: "underline",
-                label: "U",
-                style: { textDecoration: "underline" },
-              },
+              { field: "bold", Icon: Bold },
+              { field: "italic", Icon: Italic },
+              { field: "underline", Icon: Underline },
             ] as {
               field: "bold" | "italic" | "underline";
-              label: string;
-              style: React.CSSProperties;
+              Icon: typeof Bold;
             }[]
-          ).map(({ field, label, style }) => {
+          ).map(({ field, Icon }) => {
             const active = !!n[field];
             return (
               <button
@@ -178,21 +186,21 @@ export function NodeContextMenu({
                   flex: 1,
                   height: 28,
                   border: active
-                    ? "1px solid rgba(255,255,255,0.25)"
-                    : "1px solid rgba(255,255,255,0.08)",
+                    ? "1px solid rgba(42,40,35,0.25)"
+                    : "1px solid rgba(42,40,35,0.08)",
                   borderRadius: 8,
                   background: active
-                    ? "rgba(255,255,255,0.12)"
+                    ? "rgba(42,40,35,0.12)"
                     : "transparent",
-                  color: active ? "#FFFFFF" : "rgba(255,255,255,0.7)",
+                  color: active ? "#2A2823" : "rgba(42,40,35,0.7)",
                   cursor: "pointer",
-                  fontSize: 12,
-                  fontFamily: "inherit",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   transition: "all 0.1s",
-                  ...style,
                 }}
               >
-                {label}
+                <Icon size={ICON.sm} {...ICON_PROPS} />
               </button>
             );
           })}
@@ -211,26 +219,26 @@ export function NodeContextMenu({
               width: 28,
               height: 28,
               borderRadius: 8,
-              background: n.textColor ?? "#FFFFFF",
-              border: "1px solid rgba(255,255,255,0.1)",
+              background: n.textColor ?? "#2A2823",
+              border: "1px solid rgba(42,40,35,0.1)",
               flexShrink: 0,
             }}
           />
           <span
             style={{
               fontSize: 11,
-              color: "rgba(255,255,255,0.7)",
+              color: "rgba(42,40,35,0.7)",
               fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
               flex: 1,
             }}
           >
-            {n.textColor ?? "#FFFFFF"}
+            {n.textColor ?? "#2A2823"}
           </span>
           <div
             onClick={() =>
               openTextColorPicker(
                 menu.id,
-                n.textColor ?? "#FFFFFF",
+                n.textColor ?? "#2A2823",
                 menu.x,
                 menu.y,
               )
@@ -238,23 +246,23 @@ export function NodeContextMenu({
             style={{
               padding: "4px 12px",
               borderRadius: 8,
-              background: "rgba(255,255,255,0.07)",
-              border: "1px solid rgba(255,255,255,0.1)",
+              background: "rgba(42,40,35,0.07)",
+              border: "1px solid rgba(42,40,35,0.1)",
               cursor: "pointer",
               fontSize: 12,
-              color: "rgba(255,255,255,0.85)",
+              color: "rgba(42,40,35,0.85)",
               display: "flex",
               alignItems: "center",
               gap: 4,
             }}
             onMouseEnter={(e) =>
-              (e.currentTarget.style.background = "rgba(255,255,255,0.12)")
+              (e.currentTarget.style.background = "rgba(42,40,35,0.12)")
             }
             onMouseLeave={(e) =>
-              (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
+              (e.currentTarget.style.background = "rgba(42,40,35,0.07)")
             }
           >
-            ···
+            <Pipette size={ICON.sm} {...ICON_PROPS} />
           </div>
         </div>
       </div>
@@ -264,14 +272,14 @@ export function NodeContextMenu({
           <div
             style={{
               height: "1px",
-              background: "rgba(255,255,255,0.10)",
+              background: "rgba(42,40,35,0.10)",
               margin: "4px 0",
             }}
           />
           <div
             style={{
               fontSize: 11,
-              color: "rgba(255,255,255,0.5)",
+              color: "rgba(42,40,35,0.5)",
               padding: "8px 16px 4px",
               textTransform: "uppercase",
               letterSpacing: "0.08em",
@@ -293,14 +301,14 @@ export function NodeContextMenu({
                 height: 28,
                 borderRadius: 8,
                 background: n.color,
-                border: "1px solid rgba(255,255,255,0.1)",
+                border: "1px solid rgba(42,40,35,0.1)",
                 flexShrink: 0,
               }}
             />
             <span
               style={{
                 fontSize: 11,
-                color: "rgba(255,255,255,0.7)",
+                color: "rgba(42,40,35,0.7)",
                 fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
                 flex: 1,
               }}
@@ -312,23 +320,23 @@ export function NodeContextMenu({
               style={{
                 padding: "4px 12px",
                 borderRadius: 8,
-                background: "rgba(255,255,255,0.07)",
-                border: "1px solid rgba(255,255,255,0.1)",
+                background: "rgba(42,40,35,0.07)",
+                border: "1px solid rgba(42,40,35,0.1)",
                 cursor: "pointer",
                 fontSize: 12,
-                color: "rgba(255,255,255,0.85)",
+                color: "rgba(42,40,35,0.85)",
                 display: "flex",
                 alignItems: "center",
                 gap: 4,
               }}
               onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "rgba(255,255,255,0.12)")
+                (e.currentTarget.style.background = "rgba(42,40,35,0.12)")
               }
               onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "rgba(255,255,255,0.07)")
+                (e.currentTarget.style.background = "rgba(42,40,35,0.07)")
               }
             >
-              ···
+              <Pipette size={ICON.sm} {...ICON_PROPS} />
             </div>
           </div>
         </>
@@ -337,14 +345,14 @@ export function NodeContextMenu({
       <div
         style={{
           height: "1px",
-          background: "rgba(255,255,255,0.10)",
+          background: "rgba(42,40,35,0.10)",
           margin: "4px 0",
         }}
       />
       <div
         style={{
           fontSize: 11,
-          color: "rgba(255,255,255,0.55)",
+          color: "rgba(42,40,35,0.55)",
           padding: "8px 16px 4px",
           textTransform: "uppercase",
           letterSpacing: "0.08em",
@@ -356,26 +364,26 @@ export function NodeContextMenu({
         [
           {
             label: "Bring to Front",
-            icon: "⤒",
+            Icon: ArrowUpToLine,
             action: () => arrangeBringToFront(menu.id),
           },
           {
             label: "Bring Forward",
-            icon: "↑",
+            Icon: ArrowUp,
             action: () => arrangeBringForward(menu.id),
           },
           {
             label: "Send Backward",
-            icon: "↓",
+            Icon: ArrowDown,
             action: () => arrangeSendBackward(menu.id),
           },
           {
             label: "Send to Back",
-            icon: "⤓",
+            Icon: ArrowDownToLine,
             action: () => arrangeSendToBack(menu.id),
           },
         ] as const
-      ).map(({ label, icon, action }) => (
+      ).map(({ label, Icon, action }) => (
         <div
           key={label}
           onClick={() => {
@@ -389,12 +397,12 @@ export function NodeContextMenu({
           <span
             style={{
               width: 22,
-              textAlign: "center",
-              fontSize: 14,
-              fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            {icon}
+            <Icon size={ICON.sm} {...ICON_PROPS} />
           </span>
           {label}
         </div>
@@ -403,7 +411,7 @@ export function NodeContextMenu({
       <div
         style={{
           height: "1px",
-          background: "rgba(255,255,255,0.10)",
+          background: "rgba(42,40,35,0.10)",
           margin: "4px 0",
         }}
       />
@@ -417,8 +425,12 @@ export function NodeContextMenu({
         onMouseLeave={(e) => hoverMenu(e, false)}
         style={menuItem()}
       >
-        <span style={{ width: 22, textAlign: "center", fontSize: 13 }}>
-          {n.excludeFromPresentation ? "▷" : "⊘"}
+        <span style={{ width: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {n.excludeFromPresentation ? (
+            <Eye size={ICON.sm} {...ICON_PROPS} />
+          ) : (
+            <EyeOff size={ICON.sm} {...ICON_PROPS} />
+          )}
         </span>
         {n.excludeFromPresentation
           ? "Include in presentation"
@@ -427,7 +439,7 @@ export function NodeContextMenu({
       <div
         style={{
           height: "1px",
-          background: "rgba(255,255,255,0.10)",
+          background: "rgba(42,40,35,0.10)",
           margin: "4px 0",
         }}
       />
@@ -440,7 +452,9 @@ export function NodeContextMenu({
         onMouseLeave={(e) => hoverMenu(e, false, true)}
         style={menuItem(true)}
       >
-        <span style={{ width: 22, textAlign: "center", fontSize: 14 }}>✕</span>
+        <span style={{ width: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Trash2 size={ICON.sm} {...ICON_PROPS} />
+        </span>
         Delete
       </div>
     </div>

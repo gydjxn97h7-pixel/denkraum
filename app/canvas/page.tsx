@@ -456,7 +456,7 @@ export default function Canvas() {
         label: autoLabel,
         body: "",
         type,
-        color: isText ? "transparent" : "#1D5C50",
+        color: isText ? "transparent" : "#FCFBF8",
         fontSize: isText ? 15 : 13,
       };
       const newNodes = [...nodesRef.current, newNode];
@@ -525,7 +525,7 @@ export default function Canvas() {
             label: `Image ${maxIdx + 1}`,
             body: "",
             type: "image",
-            color: "#1D5C50",
+            color: "#FCFBF8",
             imageUrl,
           };
           const newNodes = [...nodesRef.current, imgNode];
@@ -584,7 +584,7 @@ export default function Canvas() {
           label: fileName,
           body: "",
           type: "textfile",
-          color: "#1D5C50",
+          color: "#FCFBF8",
           fontSize: 13,
           textFileContent,
           textFileName: fileName,
@@ -1185,7 +1185,7 @@ export default function Canvas() {
         label: cleanTitle || "Document",
         body: "",
         type: "textfile",
-        color: "#1D5C50",
+        color: "#FCFBF8",
         fontSize: 13,
         textFileContent: plain,
         ...(keepRich && { docRich: keepRich }),
@@ -1260,7 +1260,7 @@ export default function Canvas() {
         overflow: "hidden",
         position: "relative",
         fontFamily:
-          "var(--font-geist-sans), system-ui, sans-serif",
+          "var(--font-geist-mono), ui-monospace, monospace",
       }}
       onClick={() => setContextMenu(null)}
     >
@@ -1298,12 +1298,12 @@ export default function Canvas() {
       >
         <defs>
           <linearGradient id="gShapeN" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#265048" />
-            <stop offset="100%" stopColor="#143F38" />
+            <stop offset="0%" stopColor="#FCFBF8" />
+            <stop offset="100%" stopColor="#E8DEC8" />
           </linearGradient>
           <linearGradient id="gShapeA" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3A3120" />
-            <stop offset="100%" stopColor="#28231A" />
+            <stop offset="0%" stopColor="#C56B47" />
+            <stop offset="100%" stopColor="#A8553A" />
           </linearGradient>
         </defs>
       </svg>
@@ -1412,7 +1412,7 @@ export default function Canvas() {
               height={20 * zoom}
               patternUnits="userSpaceOnUse"
             >
-              <circle cx={1} cy={1} r={0.9} fill="rgba(20,71,56,0.18)" />
+              <circle cx={1} cy={1} r={0.9} fill="rgba(42,40,35,0.12)" />
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#dots)" />
@@ -1484,7 +1484,7 @@ export default function Canvas() {
                 width: marqueeRect.w,
                 height: marqueeRect.h,
                 border: `1px solid ${ACCENT}`,
-                background: "rgba(201,168,118,0.08)",
+                background: "rgba(197,107,71,0.10)",
                 pointerEvents: "none",
                 zIndex: 999,
               }}
@@ -1528,7 +1528,7 @@ export default function Canvas() {
             inset: 0,
             pointerEvents: "none",
             boxShadow:
-              "inset 0 0 60px rgba(20,40,33,0.13), inset 0 0 180px rgba(20,40,33,0.08)",
+              "inset 0 0 60px rgba(58,48,38,0.10), inset 0 0 180px rgba(58,48,38,0.06)",
           }}
         />
       </div>
@@ -1542,7 +1542,7 @@ export default function Canvas() {
             top: 0,
             width: 1,
             height: "100%",
-            background: "rgba(201,168,118,0.6)",
+            background: "rgba(197,107,71,0.6)",
             pointerEvents: "none",
             zIndex: 50,
           }}
@@ -1556,7 +1556,7 @@ export default function Canvas() {
             top: Math.round(snapGuides.y * zoom + pan.y),
             width: "100%",
             height: 1,
-            background: "rgba(201,168,118,0.6)",
+            background: "rgba(197,107,71,0.6)",
             pointerEvents: "none",
             zIndex: 50,
           }}
@@ -1673,13 +1673,13 @@ export default function Canvas() {
           bottom: 24,
           left: "50%",
           transform: "translateX(-50%)",
-          background: "rgba(22,64,56,0.88)",
+          background: "rgba(252,251,248,0.9)",
           backdropFilter: "blur(12px)",
-          border: "1px solid rgba(255,255,255,0.07)",
+          border: "1px solid rgba(42,40,35,0.1)",
           borderRadius: 12,
           padding: "8px 16px",
           fontSize: 11,
-          color: "rgba(255,255,255,0.55)",
+          color: "rgba(42,40,35,0.55)",
           letterSpacing: "-0.1px",
           whiteSpace: "nowrap",
           zIndex: 100,
@@ -1707,10 +1707,11 @@ export default function Canvas() {
       <div className="mobile-fallback">
         <span
           style={{
-            color: "#C9A876",
+            color: "#C56B47",
             fontSize: 22,
             fontWeight: 600,
             letterSpacing: "0.12em",
+            fontFamily: "var(--font-clash), system-ui, sans-serif",
           }}
         >
           DNKRM
@@ -1719,7 +1720,7 @@ export default function Canvas() {
           style={{
             width: 32,
             height: 2,
-            background: "#C9A876",
+            background: "#C56B47",
             borderRadius: 1,
             margin: "20px 0 24px",
           }}

@@ -19,7 +19,8 @@ export function PanelSectionLabel({
         fontWeight: 600,
         letterSpacing: "0.08em",
         textTransform: "uppercase",
-        color: "rgba(255,255,255,0.4)",
+        color: "rgba(42,40,35,0.4)",
+        fontFamily: "var(--font-clash), system-ui, sans-serif",
         padding: "0 16px",
         marginTop: first ? 0 : 24,
         marginBottom: 8,
@@ -50,7 +51,7 @@ export function StatusRow({
         justifyContent: "space-between",
         padding: "0 16px",
         fontSize: 12,
-        color: "rgba(255,255,255,0.55)",
+        color: "rgba(42,40,35,0.55)",
       }}
     >
       <span>{label}</span>
@@ -59,7 +60,7 @@ export function StatusRow({
           display: "flex",
           alignItems: "center",
           gap: 8,
-          color: "rgba(255,255,255,0.85)",
+          color: "rgba(42,40,35,0.85)",
           fontWeight: 600,
         }}
       >

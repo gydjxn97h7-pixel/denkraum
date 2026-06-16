@@ -1,5 +1,7 @@
 "use client";
 import { MIN_ZOOM, MAX_ZOOM } from "../lib/canvas-types";
+import { Minus, Plus } from "lucide-react";
+import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 interface ZoomControlsProps {
   zoom: number;
@@ -21,15 +23,15 @@ export function ZoomControls({
         position: "fixed",
         bottom: 24,
         right: 24,
-        background: "rgba(22,64,56,0.92)",
+        background: "rgba(252,251,248,0.92)",
         backdropFilter: "blur(12px)",
-        border: "1px solid rgba(255,255,255,0.1)",
+        border: "1px solid rgba(42,40,35,0.1)",
         borderRadius: 16,
         padding: "8px 12px",
         display: isPresenting ? "none" : "flex",
         gap: 8,
         alignItems: "center",
-        boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
+        boxShadow: "0 4px 12px rgba(58,48,38,0.10), 0 16px 44px rgba(58,48,38,0.20)",
         zIndex: 100,
       }}
     >
@@ -40,18 +42,18 @@ export function ZoomControls({
         style={{
           border: "none",
           background: "none",
-          fontSize: 18,
           cursor: "pointer",
-          color: "rgba(255,255,255,0.85)",
-          lineHeight: 1,
+          color: "rgba(42,40,35,0.85)",
+          display: "flex",
+          alignItems: "center",
         }}
       >
-        −
+        <Minus size={ICON.md} {...ICON_PROPS} />
       </button>
       <span
         style={{
           fontSize: 11,
-          color: "rgba(255,255,255,0.7)",
+          color: "rgba(42,40,35,0.7)",
           minWidth: 38,
           textAlign: "center",
         }}
@@ -65,19 +67,19 @@ export function ZoomControls({
         style={{
           border: "none",
           background: "none",
-          fontSize: 18,
           cursor: "pointer",
-          color: "rgba(255,255,255,0.85)",
-          lineHeight: 1,
+          color: "rgba(42,40,35,0.85)",
+          display: "flex",
+          alignItems: "center",
         }}
       >
-        +
+        <Plus size={ICON.md} {...ICON_PROPS} />
       </button>
       <div
         style={{
           width: "1px",
           height: 16,
-          background: "rgba(255,255,255,0.1)",
+          background: "rgba(42,40,35,0.1)",
         }}
       />
       <button
@@ -89,12 +91,12 @@ export function ZoomControls({
           height: 24,
           padding: "0 12px",
           borderRadius: 999,
-          border: "1px solid rgba(255,255,255,0.12)",
+          border: "1px solid rgba(42,40,35,0.12)",
           background: "none",
           fontSize: 11,
           fontWeight: 600,
           cursor: "pointer",
-          color: "rgba(255,255,255,0.7)",
+          color: "rgba(42,40,35,0.7)",
         }}
       >
         Reset

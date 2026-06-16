@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -10,6 +11,19 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Clash Grotesk (Fontshare) — the display voice for titles/headlines.
+// Self-hosted via next/font/local so it preloads with a metric-matched
+// fallback (no layout shift) and carries no runtime CDN dependency.
+const clashGrotesk = localFont({
+  variable: "--font-clash",
+  display: "swap",
+  src: [
+    { path: "./fonts/ClashGrotesk-Regular.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/ClashGrotesk-Medium.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/ClashGrotesk-Semibold.woff2", weight: "600", style: "normal" },
+  ],
 });
 
 export const metadata: Metadata = {
@@ -25,7 +39,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${clashGrotesk.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

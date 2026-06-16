@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CanvasNode, RichText } from "../lib/canvas-types";
 import { TrafficDot } from "./ColorPickerWindow";
+import { FileText, X, Minus, Maximize2, Minimize2 } from "lucide-react";
+import { ICON, ICON_PROPS } from "../lib/design-tokens";
 import { DocToolbar } from "./DocToolbar";
 import { RADIUS } from "../lib/design-tokens";
 import {
@@ -33,7 +35,7 @@ interface DocEditorPanelProps {
   getOriginRect: () => OriginRect | null;
 }
 
-const NODE_GREEN = "#1D5C50";
+const HEADER_CLAY = "#B0795E"; // document header — clay accent (the node, expanded)
 const SHEET_SHADOW =
   "0 24px 70px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.30)";
 type Mode = "standard" | "min" | "full";
@@ -240,36 +242,29 @@ export function DocEditorPanel({
             maxWidth: 280,
             padding: "0 16px",
             borderRadius: RADIUS.pill,
-            background: NODE_GREEN,
-            border: "1px solid rgba(255,255,255,0.12)",
+            background: HEADER_CLAY,
+            border: "1px solid rgba(252,251,248,0.18)",
             boxShadow: "0 8px 24px rgba(0,0,0,0.30)",
             display: "flex",
             alignItems: "center",
             gap: 10,
             cursor: "pointer",
             zIndex: 220,
-            fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
+            fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
           }}
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="rgba(201,168,118,0.85)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+          <FileText
+            size={ICON.sm}
+            {...ICON_PROPS}
+            color="rgba(252,251,248,0.8)"
             style={{ flexShrink: 0 }}
-          >
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
+          />
           <span
             style={{
               fontSize: 12,
               fontWeight: 600,
-              color: "rgba(255,255,255,0.85)",
+              color: "rgba(252,251,248,0.9)",
+              fontFamily: "var(--font-clash), system-ui, sans-serif",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -333,7 +328,7 @@ export function DocEditorPanel({
           overflow: "hidden",
           boxShadow: SHEET_SHADOW,
           willChange: "transform, opacity",
-          fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
+          fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
         }}
       >
         {/* ── Green header (the node, expanded): traffic lights + title ── */}
@@ -341,7 +336,7 @@ export function DocEditorPanel({
           style={{
             flexShrink: 0,
             height: 52,
-            background: NODE_GREEN,
+            background: HEADER_CLAY,
             display: "flex",
             alignItems: "center",
             gap: 14,
@@ -352,19 +347,22 @@ export function DocEditorPanel({
             style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}
           >
             <TrafficDot
-              color="#ff5f57"
+              color="#C0492E"
               title="Save and close"
               onClick={beginClose}
+              Icon={X}
             />
             <TrafficDot
-              color="#febc2e"
+              color="#D4A04A"
               title="Minimize"
               onClick={() => setMode("min")}
+              Icon={Minus}
             />
             <TrafficDot
-              color="#28c840"
+              color="#7C7A4E"
               title={mode === "full" ? "Exit fullscreen" : "Fullscreen"}
               onClick={() => setMode(mode === "full" ? "standard" : "full")}
+              Icon={mode === "full" ? Minimize2 : Maximize2}
             />
           </div>
           <input
@@ -382,10 +380,10 @@ export function DocEditorPanel({
               background: "transparent",
               border: "none",
               outline: "none",
-              color: "#FFFFFF",
+              color: "#FCFBF8",
               fontSize: 16,
               fontWeight: 600,
-              fontFamily: "inherit",
+              fontFamily: "var(--font-clash), system-ui, sans-serif",
               letterSpacing: "-0.2px",
             }}
           />
@@ -400,7 +398,7 @@ export function DocEditorPanel({
             position: "relative",
             flex: 1,
             minHeight: 0,
-            background: "#FDFCF9",
+            background: "#FCFBF8",
             display: "flex",
             flexDirection: "column",
             cursor: "text",
@@ -441,12 +439,12 @@ export function DocEditorPanel({
               outline: "none",
               fontSize: 15,
               lineHeight: 1.75,
-              color: "#243029",
+              color: "#2A2823",
               whiteSpace: "pre-wrap",
               overflowWrap: "break-word",
               wordBreak: "break-word",
               userSelect: "text",
-              caretColor: "#A1834B",
+              caretColor: "#C56B47",
               cursor: "text",
             }}
           />
@@ -455,13 +453,13 @@ export function DocEditorPanel({
           <div
             style={{
               flexShrink: 0,
-              borderTop: "1px solid rgba(20,40,33,0.08)",
+              borderTop: "1px solid rgba(42,40,35,0.08)",
               padding: "10px 20px",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               gap: 12,
-              background: "#FDFCF9",
+              background: "#FCFBF8",
             }}
           >
             <span
@@ -474,10 +472,10 @@ export function DocEditorPanel({
                 fontSize: 11,
                 fontVariantNumeric: "tabular-nums",
                 color: atLimit
-                  ? "#C0392B"
+                  ? "#B0432B"
                   : nearLimit
-                    ? "#A1834B"
-                    : "rgba(20,40,33,0.4)",
+                    ? "#D4A04A"
+                    : "rgba(42,40,35,0.4)",
               }}
             >
               {charCount.toLocaleString("en-US")} /{" "}
@@ -492,8 +490,8 @@ export function DocEditorPanel({
                 padding: "0 16px",
                 borderRadius: RADIUS.pill,
                 border: "none",
-                background: "#C9A876",
-                color: "#0C2018",
+                background: "#C56B47",
+                color: "#FCFBF8",
                 fontSize: 12,
                 fontWeight: 600,
                 fontFamily: "inherit",

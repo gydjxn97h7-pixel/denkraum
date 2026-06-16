@@ -1,5 +1,7 @@
 "use client";
 import type { CanvasNode } from "../lib/canvas-types";
+import { Eye, EyeOff, ChevronUp, ChevronDown, Play } from "lucide-react";
+import { ICON, ICON_PROPS } from "../lib/design-tokens";
 import { PanelSectionLabel } from "./panel-ui";
 
 interface PresentationPanelProps {
@@ -39,7 +41,7 @@ export function PresentationPanel({
             style={{
               padding: "8px 20px",
               fontSize: 12,
-              color: "rgba(255,255,255,0.4)",
+              color: "rgba(42,40,35,0.4)",
             }}
           >
             No nodes yet
@@ -75,8 +77,8 @@ export function PresentationPanel({
                     style={{
                       fontSize: 11,
                       color: excluded
-                        ? "rgba(255,255,255,0.4)"
-                        : "rgba(255,255,255,0.3)",
+                        ? "rgba(42,40,35,0.4)"
+                        : "rgba(42,40,35,0.3)",
                       flexShrink: 0,
                       width: 16,
                       textAlign: "right",
@@ -92,8 +94,8 @@ export function PresentationPanel({
                       flex: 1,
                       fontSize: 12,
                       color: excluded
-                        ? "rgba(255,255,255,0.5)"
-                        : "rgba(255,255,255,0.8)",
+                        ? "rgba(42,40,35,0.5)"
+                        : "rgba(42,40,35,0.8)",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
@@ -119,8 +121,8 @@ export function PresentationPanel({
                       borderRadius: 8,
                       background: "transparent",
                       color: excluded
-                        ? "rgba(255,255,255,0.4)"
-                        : "rgba(157,200,141,0.7)",
+                        ? "rgba(42,40,35,0.4)"
+                        : "rgba(216,201,168,0.7)",
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
@@ -130,50 +132,25 @@ export function PresentationPanel({
                     }}
                     onMouseEnter={(e) => {
                       (e.currentTarget as HTMLElement).style.background =
-                        "rgba(255,255,255,0.06)";
+                        "rgba(42,40,35,0.06)";
                       (e.currentTarget as HTMLElement).style.color = excluded
-                        ? "rgba(255,255,255,0.75)"
-                        : "#9DC88D";
+                        ? "rgba(42,40,35,0.75)"
+                        : "#7C7A4E";
                     }}
                     onMouseLeave={(e) => {
                       (e.currentTarget as HTMLElement).style.background =
                         "transparent";
                       (e.currentTarget as HTMLElement).style.color = excluded
-                        ? "rgba(255,255,255,0.4)"
-                        : "rgba(157,200,141,0.7)";
+                        ? "rgba(42,40,35,0.4)"
+                        : "rgba(216,201,168,0.7)";
                     }}
                   >
                     {excluded ? (
                       /* eye-off: slash through eye */
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                        <line x1="1" y1="1" x2="23" y2="23" />
-                      </svg>
+                      <EyeOff size={ICON.sm} {...ICON_PROPS} />
                     ) : (
                       /* eye: visible */
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
+                      <Eye size={ICON.sm} {...ICON_PROPS} />
                     )}
                   </button>
 
@@ -190,8 +167,8 @@ export function PresentationPanel({
                         borderRadius: 8,
                         background: "transparent",
                         color: isFirst
-                          ? "rgba(255,255,255,0.15)"
-                          : "rgba(255,255,255,0.55)",
+                          ? "rgba(42,40,35,0.15)"
+                          : "rgba(42,40,35,0.55)",
                         cursor: isFirst ? "default" : "pointer",
                         display: "flex",
                         alignItems: "center",
@@ -201,27 +178,14 @@ export function PresentationPanel({
                       onMouseEnter={(e) => {
                         if (!isFirst)
                           (e.currentTarget as HTMLElement).style.background =
-                            "rgba(255,255,255,0.06)";
+                            "rgba(42,40,35,0.06)";
                       }}
                       onMouseLeave={(e) => {
                         (e.currentTarget as HTMLElement).style.background =
                           "transparent";
                       }}
                     >
-                      <svg
-                        width="10"
-                        height="10"
-                        viewBox="0 0 10 10"
-                        fill="none"
-                      >
-                        <path
-                          d="M2 7L5 3L8 7"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                      <ChevronUp size={ICON.sm} {...ICON_PROPS} />
                     </button>
                     <button
                       onClick={() => movePresentationNodeDown(id)}
@@ -234,8 +198,8 @@ export function PresentationPanel({
                         borderRadius: 8,
                         background: "transparent",
                         color: isLast
-                          ? "rgba(255,255,255,0.15)"
-                          : "rgba(255,255,255,0.55)",
+                          ? "rgba(42,40,35,0.15)"
+                          : "rgba(42,40,35,0.55)",
                         cursor: isLast ? "default" : "pointer",
                         display: "flex",
                         alignItems: "center",
@@ -245,27 +209,14 @@ export function PresentationPanel({
                       onMouseEnter={(e) => {
                         if (!isLast)
                           (e.currentTarget as HTMLElement).style.background =
-                            "rgba(255,255,255,0.06)";
+                            "rgba(42,40,35,0.06)";
                       }}
                       onMouseLeave={(e) => {
                         (e.currentTarget as HTMLElement).style.background =
                           "transparent";
                       }}
                     >
-                      <svg
-                        width="10"
-                        height="10"
-                        viewBox="0 0 10 10"
-                        fill="none"
-                      >
-                        <path
-                          d="M2 3L5 7L8 3"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                      <ChevronDown size={ICON.sm} {...ICON_PROPS} />
                     </button>
                   </div>
                 </div>
@@ -280,7 +231,7 @@ export function PresentationPanel({
         style={{
           padding: "12px 16px",
           flexShrink: 0,
-          borderTop: "1px solid rgba(255,255,255,0.06)",
+          borderTop: "1px solid rgba(42,40,35,0.06)",
         }}
       >
         <button
@@ -293,15 +244,19 @@ export function PresentationPanel({
             border: "none",
             background:
               presentActiveSeqLength === 0
-                ? "rgba(201,168,118,0.35)"
-                : "#C9A876",
-            color: "#0C2018",
+                ? "rgba(197,107,71,0.35)"
+                : "#C56B47",
+            color: "#FCFBF8",
             fontSize: 13,
             fontWeight: 600,
             fontFamily: "inherit",
             cursor: presentActiveSeqLength === 0 ? "default" : "pointer",
             letterSpacing: "-0.1px",
             transition: "opacity 0.15s",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
           }}
           onMouseEnter={(e) => {
             if (presentActiveSeqLength > 0)
@@ -311,6 +266,7 @@ export function PresentationPanel({
             (e.currentTarget as HTMLElement).style.opacity = "1";
           }}
         >
+          <Play size={ICON.md} {...ICON_PROPS} />
           Present
         </button>
       </div>

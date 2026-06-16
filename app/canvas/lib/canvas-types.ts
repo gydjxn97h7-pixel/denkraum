@@ -1,4 +1,4 @@
-export const ACCENT = "#C9A876";
+export const ACCENT = "#C56B47"; // terracotta — primary interactive accent
 
 export type NodeType =
   | "block"
@@ -94,26 +94,18 @@ export type AssetRecord = {
 };
 
 export const PRESET_COLORS = [
-  "#0C2018",
-  "#1D5C50",
-  "#4D774E",
-  "#9DC88D",
-  "#F1B24A",
-  "#FFFFFF",
-  "#f5f4f0",
-  "#F0EDE8",
-  "#FFF3CD",
-  "#D4EDDA",
-  "#D1ECF1",
-  "#F8D7DA",
-  "#E2D9F3",
-  "#FCE4D6",
-  "#C8A847",
-  "#6c757d",
-  "#343a40",
-  "#2C3E50",
-  "#1A1A2E",
-  "#0a0a0a",
+  "#2A2823",
+  "#5A5346",
+  "#8A7E6A",
+  "#C56B47",
+  "#B0795E",
+  "#D4A04A",
+  "#7C7A4E",
+  "#A8553A",
+  "#D8C9A8",
+  "#EBE8E1",
+  "#FCFBF8",
+  "#9C8F75",
 ];
 
 export const SIDEBAR_W = 220;
@@ -144,7 +136,7 @@ export const DEFAULT_NODES: CanvasNode[] = [
     title: "Project Idea",
     body: "Capture your thoughts here",
     type: "block",
-    color: "#1D5C50",
+    color: "#FCFBF8",
     fontSize: 13,
   },
   {
@@ -156,7 +148,7 @@ export const DEFAULT_NODES: CanvasNode[] = [
     title: "Concept",
     body: "Connect your ideas",
     type: "block",
-    color: "#1D5C50",
+    color: "#FCFBF8",
     fontSize: 13,
   },
   {
@@ -168,7 +160,7 @@ export const DEFAULT_NODES: CanvasNode[] = [
     title: "Next Steps",
     body: "",
     type: "block",
-    color: "#1D5C50",
+    color: "#FCFBF8",
     fontSize: 13,
   },
 ];

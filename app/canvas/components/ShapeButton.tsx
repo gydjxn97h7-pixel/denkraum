@@ -1,207 +1,80 @@
 "use client";
 import { useState } from "react";
+import {
+  Square,
+  Squircle,
+  Circle,
+  Diamond,
+  Type,
+  Image as ImageIcon,
+  FileText,
+} from "lucide-react";
+import { ICON, ICON_STROKE } from "../lib/design-tokens";
 
 // ── Toolbar helpers ───────────────────────────────────────────────────────────
 
-export function renderShapeIcon(
-  type: string,
-  stroke: string,
-  active: boolean,
-): React.ReactNode {
-  const fid = active ? "gShapeA" : "gShapeN";
+// Lucide has no ellipse; this matches the Lucide grid (24 viewBox) and the same
+// absolute stroke weight as the rest of the set. Used wherever the "oval" node
+// type needs a glyph (toolbar, context menu, sidebar list).
+export function OvalIcon({
+  size = ICON.lg,
+  color = "currentColor",
+}: {
+  size?: number;
+  color?: string;
+}) {
   return (
-    <svg width="20" height="20" viewBox="0 0 20 20">
-      {type === "block" && (
-        <>
-          <rect
-            x="1"
-            y="1"
-            width="18"
-            height="18"
-            rx="1.5"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <rect
-            x="2"
-            y="2"
-            width="16"
-            height="4"
-            rx="1"
-            fill="rgba(255,255,255,0.07)"
-          />
-        </>
-      )}
-      {type === "rounded" && (
-        <>
-          <rect
-            x="1"
-            y="1"
-            width="18"
-            height="18"
-            rx="6"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <rect
-            x="2"
-            y="2"
-            width="16"
-            height="4"
-            rx="2"
-            fill="rgba(255,255,255,0.07)"
-          />
-        </>
-      )}
-      {type === "circle" && (
-        <>
-          <circle
-            cx="10"
-            cy="10"
-            r="9"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <ellipse
-            cx="7"
-            cy="6"
-            rx="4"
-            ry="2.5"
-            fill="rgba(255,255,255,0.07)"
-          />
-        </>
-      )}
-      {type === "oval" && (
-        <>
-          <ellipse
-            cx="10"
-            cy="10"
-            rx="9"
-            ry="6"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <ellipse cx="7" cy="7" rx="4" ry="2" fill="rgba(255,255,255,0.07)" />
-        </>
-      )}
-      {type === "diamond" && (
-        <>
-          <polygon
-            points="10,1 19,10 10,19 1,10"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-            strokeLinejoin="miter"
-          />
-          <polygon
-            points="10,1 19,10 10,10 1,10"
-            fill="rgba(255,255,255,0.05)"
-            stroke="none"
-          />
-          <line
-            x1="10"
-            y1="1"
-            x2="10"
-            y2="19"
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth="0.8"
-          />
-        </>
-      )}
-      {type === "text" && (
-        <>
-          <rect
-            x="1"
-            y="1"
-            width="18"
-            height="18"
-            rx="1.5"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <rect
-            x="3"
-            y="5"
-            width="14"
-            height="3.5"
-            rx="0.5"
-            fill="rgba(255,255,255,0.82)"
-          />
-          <rect
-            x="8.5"
-            y="5"
-            width="3"
-            height="11"
-            rx="0.5"
-            fill="rgba(255,255,255,0.82)"
-          />
-        </>
-      )}
-      {type === "image" && (
-        <>
-          <rect
-            x="1"
-            y="1"
-            width="18"
-            height="18"
-            rx="1.5"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-          <circle cx="5.5" cy="5.5" r="2.5" fill="rgba(255,255,255,0.55)" />
-          <polyline
-            points="1,14 6,9 10,13 14,8 19,14"
-            fill="none"
-            stroke="rgba(255,255,255,0.8)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </>
-      )}
-      {type === "textfile" && (
-        <>
-          <path
-            d="M3 1 L13 1 L19 7 L19 19 L3 19 Z"
-            fill={`url(#${fid})`}
-            stroke={stroke}
-            strokeWidth="2"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M13 1 L13 7 L19 7"
-            fill="none"
-            stroke={stroke}
-            strokeWidth="2"
-            strokeLinejoin="round"
-          />
-          <rect
-            x="6"
-            y="10"
-            width="9"
-            height="2"
-            rx="1"
-            fill="rgba(255,255,255,0.55)"
-          />
-          <rect
-            x="6"
-            y="14"
-            width="7"
-            height="2"
-            rx="1"
-            fill="rgba(255,255,255,0.35)"
-          />
-        </>
-      )}
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={(ICON_STROKE * 24) / size}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <ellipse cx="12" cy="12" rx="10" ry="7" />
     </svg>
   );
 }
+
+// Shape-tool glyphs from the single Lucide set. Oval has no Lucide match, so it
+// keeps a custom ellipse drawn at the same absolute stroke weight as the rest.
+export function renderShapeIcon(
+  type: string,
+  stroke: string,
+  _active: boolean,
+): React.ReactNode {
+  const size = ICON.lg;
+  const common = {
+    size,
+    strokeWidth: ICON_STROKE,
+    absoluteStrokeWidth: true,
+    color: stroke,
+  } as const;
+  switch (type) {
+    case "block":
+      return <Square {...common} />;
+    case "rounded":
+      return <Squircle {...common} />;
+    case "circle":
+      return <Circle {...common} />;
+    case "oval":
+      return <OvalIcon size={size} color={stroke} />;
+    case "diamond":
+      return <Diamond {...common} />;
+    case "text":
+      return <Type {...common} />;
+    case "image":
+      return <ImageIcon {...common} />;
+    case "textfile":
+      return <FileText {...common} />;
+    default:
+      return null;
+  }
+}
+
 
 export function ShapeButton({
   label,
@@ -216,10 +89,10 @@ export function ShapeButton({
 }) {
   const [hovered, setHovered] = useState(false);
   const stroke = isActive
-    ? "#8E6F3F"
+    ? "#C56B47"
     : hovered
-      ? "rgba(255,255,255,1)"
-      : "rgba(255,255,255,0.8)";
+      ? "rgba(42,40,35,1)"
+      : "rgba(42,40,35,0.8)";
   return (
     <button
       title={label}
@@ -230,7 +103,7 @@ export function ShapeButton({
         width: 36,
         height: 36,
         border: "none",
-        background: isActive ? "rgba(201,168,118,0.06)" : "transparent",
+        background: isActive ? "rgba(197,107,71,0.06)" : "transparent",
         cursor: "pointer",
         display: "flex",
         alignItems: "center",

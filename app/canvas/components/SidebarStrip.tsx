@@ -1,5 +1,7 @@
 "use client";
 import type { PanelSection } from "../lib/canvas-types";
+import { LayoutDashboard, Workflow, Play, FolderOpen, Keyboard } from "lucide-react";
+import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 interface SidebarStripProps {
   isPresenting: boolean;
@@ -22,19 +24,19 @@ export function SidebarStrip({
         height: "calc(100vh - 24px)",
         width: 52,
         background:
-          "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
+          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
         borderRadius: 16,
         boxShadow:
-          "0 8px 24px rgba(0,0,0,0.22)",
+          "0 4px 12px rgba(58,48,38,0.10), 0 16px 44px rgba(58,48,38,0.20)",
         zIndex: 151,
         display: isPresenting ? "none" : "flex",
         flexDirection: "column",
         alignItems: "center",
         padding: "16px 0",
         fontFamily:
-          "var(--font-geist-sans), system-ui, sans-serif",
+          "var(--font-geist-mono), ui-monospace, monospace",
       }}
     >
       {/* Logo mark — decorative, not clickable */}
@@ -51,7 +53,7 @@ export function SidebarStrip({
           width="21"
           height="21"
           rx="5"
-          stroke="rgba(201,168,118,0.3)"
+          stroke="rgba(197,107,71,0.3)"
           strokeWidth="1"
         />
         <rect
@@ -60,7 +62,7 @@ export function SidebarStrip({
           width="14"
           height="14"
           rx="3"
-          fill="rgba(201,168,118,0.12)"
+          fill="rgba(197,107,71,0.12)"
         />
         <rect
           x="7"
@@ -68,7 +70,7 @@ export function SidebarStrip({
           width="8"
           height="8"
           rx="2"
-          fill="rgba(201,168,118,0.45)"
+          fill="rgba(197,107,71,0.45)"
         />
       </svg>
 
@@ -82,99 +84,35 @@ export function SidebarStrip({
             section: "board" as const,
             title: "Board",
             icon: (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <line x1="3" y1="9" x2="21" y2="9" />
-              </svg>
+              <LayoutDashboard size={ICON.lg} {...ICON_PROPS} />
             ),
           },
           {
             section: "nodes" as const,
             title: "Nodes",
             icon: (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="6" cy="6" r="2.5" />
-                <circle cx="18" cy="18" r="2.5" />
-                <line x1="8" y1="8" x2="16" y2="16" />
-              </svg>
+              <Workflow size={ICON.lg} {...ICON_PROPS} />
             ),
           },
           {
             section: "presentation" as const,
             title: "Presentation",
             icon: (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polygon points="5,3 19,12 5,21" />
-              </svg>
+              <Play size={ICON.lg} {...ICON_PROPS} />
             ),
           },
           {
             section: "saveload" as const,
             title: "Save / Load",
             icon: (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
+              <FolderOpen size={ICON.lg} {...ICON_PROPS} />
             ),
           },
           {
             section: "shortcuts" as const,
             title: "Shortcuts",
             icon: (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="2" y="6" width="20" height="12" rx="2" />
-                <line x1="6" y1="10" x2="6.01" y2="10" />
-                <line x1="10" y1="10" x2="10.01" y2="10" />
-                <line x1="14" y1="10" x2="14.01" y2="10" />
-                <line x1="8" y1="14" x2="16" y2="14" />
-              </svg>
+              <Keyboard size={ICON.lg} {...ICON_PROPS} />
             ),
           },
         ] as {
@@ -198,33 +136,33 @@ export function SidebarStrip({
               borderRadius: 8,
               marginBottom: 16,
               border: isActive
-                ? "1px solid rgba(201,168,118,0.35)"
-                : "1px solid rgba(255,255,255,0.07)",
+                ? "1px solid rgba(197,107,71,0.35)"
+                : "1px solid rgba(42,40,35,0.07)",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: isActive ? "#C9A876" : "rgba(255,255,255,0.75)",
+              color: isActive ? "#C56B47" : "rgba(42,40,35,0.75)",
               background: isActive
-                ? "rgba(201,168,118,0.14)"
-                : "rgba(255,255,255,0.04)",
+                ? "rgba(197,107,71,0.14)"
+                : "rgba(42,40,35,0.04)",
               flexShrink: 0,
               transition: "color 0.12s, background 0.12s, border-color 0.12s",
             }}
             onMouseEnter={(e) => {
               if (!isActive) {
                 (e.currentTarget as HTMLElement).style.color =
-                  "rgba(255,255,255,0.95)";
+                  "rgba(42,40,35,0.95)";
                 (e.currentTarget as HTMLElement).style.background =
-                  "rgba(255,255,255,0.09)";
+                  "rgba(42,40,35,0.09)";
               }
             }}
             onMouseLeave={(e) => {
               if (!isActive) {
                 (e.currentTarget as HTMLElement).style.color =
-                  "rgba(255,255,255,0.75)";
+                  "rgba(42,40,35,0.75)";
                 (e.currentTarget as HTMLElement).style.background =
-                  "rgba(255,255,255,0.04)";
+                  "rgba(42,40,35,0.04)";
               }
             }}
           >
@@ -242,14 +180,14 @@ export function SidebarStrip({
           width: 30,
           height: 30,
           borderRadius: "50%",
-          background: "rgba(255,255,255,0.06)",
-          border: "1px solid rgba(255,255,255,0.1)",
+          background: "rgba(42,40,35,0.06)",
+          border: "1px solid rgba(42,40,35,0.1)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           fontSize: 12,
           fontWeight: 600,
-          color: "rgba(255,255,255,0.4)",
+          color: "rgba(42,40,35,0.4)",
           flexShrink: 0,
         }}
       >

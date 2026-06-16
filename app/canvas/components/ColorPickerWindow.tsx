@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState, useCallback, useEffect, useLayoutEffect } from "react";
 import { ACCENT, PRESET_COLORS } from "../lib/canvas-types";
+import { X, Maximize2, Minimize2 } from "lucide-react";
 import type { ColorPicker } from "../lib/canvas-types";
 import {
   hexToHsv,
@@ -16,10 +17,13 @@ export function TrafficDot({
   color,
   title,
   onClick,
+  Icon,
 }: {
   color: string;
   title: string;
   onClick: () => void;
+  // Lucide glyph revealed on hover (macOS-style window controls).
+  Icon?: typeof X;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -34,11 +38,18 @@ export function TrafficDot({
         borderRadius: "50%",
         background: color,
         cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         transition: "transform 0.1s, filter 0.1s",
         transform: hovered ? "scale(1.15)" : "scale(1)",
-        filter: hovered ? "brightness(0.88)" : "brightness(1)",
+        filter: hovered ? "brightness(0.92)" : "brightness(1)",
       }}
-    />
+    >
+      {Icon && hovered && (
+        <Icon size={8} strokeWidth={2} absoluteStrokeWidth color="rgba(20,15,10,0.65)" />
+      )}
+    </div>
   );
 }
 
@@ -199,9 +210,9 @@ export function ColorPickerWindow({
         left: 0,
         top: 0,
         width: W,
-        background: "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.97)",
+        background: "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
         backdropFilter: "blur(28px)",
-        border: "1px solid rgba(255,255,255,0.1)",
+        border: "1px solid rgba(42,40,35,0.1)",
         borderRadius: 16,
         boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 500,
@@ -224,26 +235,27 @@ export function ColorPickerWindow({
           alignItems: "center",
           justifyContent: "space-between",
           cursor: "grab",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          background: "rgba(255,255,255,0.04)",
+          borderBottom: "1px solid rgba(42,40,35,0.06)",
+          background: "rgba(42,40,35,0.04)",
         }}
       >
         <span
           style={{
             fontSize: 12,
             fontWeight: 600,
-            color: "rgba(255,255,255,0.65)",
+            color: "rgba(42,40,35,0.65)",
             letterSpacing: "-0.1px",
           }}
         >
           Color
         </span>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <TrafficDot color="#ff5f57" title="Close" onClick={onClose} />
+          <TrafficDot color="#C0492E" title="Close" onClick={onClose} Icon={X} />
           <TrafficDot
-            color="#28c840"
+            color="#7C7A4E"
             title={isFullscreen ? "Shrink" : "Fullscreen"}
             onClick={() => setIsFullscreen((f) => !f)}
+            Icon={isFullscreen ? Minimize2 : Maximize2}
           />
         </div>
       </div>
@@ -255,7 +267,7 @@ export function ColorPickerWindow({
             height: 44,
             borderRadius: 12,
             marginBottom: 12,
-            border: "1px solid rgba(255,255,255,0.1)",
+            border: "1px solid rgba(42,40,35,0.1)",
             overflow: "hidden",
             position: "relative",
             boxShadow: "inset 0 1px 4px rgba(0,0,0,0.07)",
@@ -300,7 +312,7 @@ export function ColorPickerWindow({
             background: pureHueHex,
             cursor: "crosshair",
             marginBottom: 12,
-            border: "1px solid rgba(255,255,255,0.1)",
+            border: "1px solid rgba(42,40,35,0.1)",
             overflow: "hidden",
             flexShrink: 0,
             transition: "height 0.2s ease",
@@ -310,7 +322,7 @@ export function ColorPickerWindow({
             style={{
               position: "absolute",
               inset: 0,
-              background: "linear-gradient(to right, #fff, transparent)",
+              background: "linear-gradient(to right, #2A2823, transparent)",
             }}
           />
           <div
@@ -329,7 +341,7 @@ export function ColorPickerWindow({
               width: 14,
               height: 14,
               borderRadius: "50%",
-              border: "2px solid #fff",
+              border: "2px solid #2A2823",
               boxShadow:
                 "0 0 0 1px rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.3)",
               pointerEvents: "none",
@@ -350,7 +362,7 @@ export function ColorPickerWindow({
               borderRadius: 8,
               background:
                 "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)",
-              border: "1px solid rgba(255,255,255,0.1)",
+              border: "1px solid rgba(42,40,35,0.1)",
               pointerEvents: "none",
             }}
           />
@@ -364,7 +376,7 @@ export function ColorPickerWindow({
               height: 16,
               borderRadius: "50%",
               background: pureHueHex,
-              border: "2px solid #fff",
+              border: "2px solid #2A2823",
               boxShadow:
                 "0 0 0 1px rgba(0,0,0,0.18), 0 2px 4px rgba(0,0,0,0.22)",
               pointerEvents: "none",
@@ -394,10 +406,10 @@ export function ColorPickerWindow({
             display: "flex",
             alignItems: "center",
             gap: 8,
-            background: "rgba(255,255,255,0.06)",
+            background: "rgba(42,40,35,0.06)",
             borderRadius: 8,
             padding: "8px 8px",
-            border: "1px solid rgba(255,255,255,0.1)",
+            border: "1px solid rgba(42,40,35,0.1)",
             marginBottom: 8,
           }}
         >
@@ -407,7 +419,7 @@ export function ColorPickerWindow({
               height: 14,
               borderRadius: 8,
               background: currentHex,
-              border: "1px solid rgba(255,255,255,0.12)",
+              border: "1px solid rgba(42,40,35,0.12)",
               flexShrink: 0,
             }}
           />
@@ -426,7 +438,7 @@ export function ColorPickerWindow({
               background: "transparent",
               fontSize: 11,
               fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
-              color: "#FFFFFF",
+              color: "#2A2823",
               outline: "none",
               minWidth: 0,
               letterSpacing: "0.08em",
@@ -447,15 +459,16 @@ export function ColorPickerWindow({
             <span
               style={{
                 fontSize: 10,
-                color: "rgba(255,255,255,0.45)",
+                color: "rgba(42,40,35,0.45)",
                 letterSpacing: "0.08em",
+                fontFamily: "var(--font-clash), system-ui, sans-serif",
                 textTransform: "uppercase",
               }}
             >
               Opacity
             </span>
             <span
-              style={{ fontSize: 10, color: "rgba(255,255,255,0.65)", fontFamily: "var(--font-geist-mono), ui-monospace, monospace" }}
+              style={{ fontSize: 10, color: "rgba(42,40,35,0.65)", fontFamily: "var(--font-geist-mono), ui-monospace, monospace" }}
             >
               {Math.round(alpha * 100)}%
             </span>
@@ -471,7 +484,7 @@ export function ColorPickerWindow({
                 transform: "translateY(-50%)",
                 borderRadius: 8,
                 overflow: "hidden",
-                border: "1px solid rgba(255,255,255,0.1)",
+                border: "1px solid rgba(42,40,35,0.1)",
                 pointerEvents: "none",
               }}
             >
@@ -503,7 +516,7 @@ export function ColorPickerWindow({
                 height: 16,
                 borderRadius: "50%",
                 background: currentHex,
-                border: "2px solid #fff",
+                border: "2px solid #2A2823",
                 boxShadow:
                   "0 0 0 1px rgba(0,0,0,0.18), 0 2px 4px rgba(0,0,0,0.22)",
                 pointerEvents: "none",
@@ -586,12 +599,12 @@ export function ColorPickerWindow({
                   width: "100%",
                   boxSizing: "border-box",
                   textAlign: "center",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(42,40,35,0.1)",
+                  background: "rgba(42,40,35,0.06)",
                   borderRadius: 8,
                   padding: "4px 4px",
                   fontSize: 11,
-                  color: "#FFFFFF",
+                  color: "#2A2823",
                   outline: "none",
                   fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
                 }}
@@ -599,7 +612,7 @@ export function ColorPickerWindow({
               <span
                 style={{
                   fontSize: 10,
-                  color: "rgba(255,255,255,0.45)",
+                  color: "rgba(42,40,35,0.45)",
                   letterSpacing: "0.08em",
                   fontWeight: 600,
                 }}
@@ -614,8 +627,9 @@ export function ColorPickerWindow({
           <div
             style={{
               fontSize: 10,
-              color: "rgba(255,255,255,0.45)",
+              color: "rgba(42,40,35,0.45)",
               letterSpacing: "0.08em",
+              fontFamily: "var(--font-clash), system-ui, sans-serif",
               textTransform: "uppercase",
               marginBottom: 8,
             }}
@@ -641,7 +655,7 @@ export function ColorPickerWindow({
                     background: c,
                     border: active
                       ? `2px solid ${ACCENT}`
-                      : "1px solid rgba(255,255,255,0.08)",
+                      : "1px solid rgba(42,40,35,0.08)",
                     cursor: "pointer",
                     transition: "transform 0.1s",
                     boxShadow: active ? `0 0 0 3px ${ACCENT}30` : "none",

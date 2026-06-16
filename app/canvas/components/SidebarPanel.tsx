@@ -3,6 +3,8 @@ import type { CanvasNode, PanelSection } from "../lib/canvas-types";
 import { SidebarNodeItem } from "./SidebarNodeItem";
 import { PresentationPanel } from "./PresentationPanel";
 import { PanelSectionLabel, StatusRow } from "./panel-ui";
+import { LayoutDashboard, Save, FolderOpen, X } from "lucide-react";
+import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 interface SidebarPanelProps {
   activePanel: PanelSection | null;
@@ -72,18 +74,18 @@ export function SidebarPanel({
         height: "calc(100vh - 24px)",
         width: 220,
         background:
-          "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(30,74,65,0.97)",
+          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
         backdropFilter: "blur(24px)",
         WebkitBackdropFilter: "blur(24px)",
         borderRadius: 16,
         boxShadow:
-          "0 8px 24px rgba(0,0,0,0.22)",
+          "0 4px 12px rgba(58,48,38,0.10), 0 16px 44px rgba(58,48,38,0.20)",
         zIndex: 149,
         display: panelOpen && !isPresenting ? "flex" : "none",
         flexDirection: "column",
         overflow: "hidden",
         fontFamily:
-          "var(--font-geist-sans), system-ui, sans-serif",
+          "var(--font-geist-mono), ui-monospace, monospace",
       }}
     >
       {/* ── Panel Header (dynamic title) ── */}
@@ -92,7 +94,7 @@ export function SidebarPanel({
           height: 52,
           flexShrink: 0,
           background: "rgba(0,0,0,0.15)",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          borderBottom: "1px solid rgba(42,40,35,0.05)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -104,7 +106,8 @@ export function SidebarPanel({
             fontSize: 11,
             fontWeight: 600,
             letterSpacing: "0.1em",
-            color: "#FFFFFF",
+            color: "#2A2823",
+            fontFamily: "var(--font-clash), system-ui, sans-serif",
           }}
         >
           {activePanel === "board" && "BOARD"}
@@ -118,23 +121,25 @@ export function SidebarPanel({
           style={{
             border: "none",
             background: "transparent",
-            color: "rgba(255,255,255,0.7)",
+            color: "rgba(42,40,35,0.7)",
             fontSize: 13,
             cursor: "pointer",
             padding: "4px 8px",
             lineHeight: 1,
             borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
           }}
           onMouseEnter={(e) => {
             (e.currentTarget as HTMLElement).style.color =
-              "rgba(255,255,255,0.8)";
+              "rgba(42,40,35,0.8)";
           }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLElement).style.color =
-              "rgba(255,255,255,0.7)";
+              "rgba(42,40,35,0.7)";
           }}
         >
-          ✕
+          <X size={ICON.md} {...ICON_PROPS} />
         </button>
       </div>
 
@@ -158,8 +163,8 @@ export function SidebarPanel({
             ] as string[]
           ).map((id) => (
             <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#265048" />
-              <stop offset="100%" stopColor="#143F38" />
+              <stop offset="0%" stopColor="#FCFBF8" />
+              <stop offset="100%" stopColor="#E8DEC8" />
             </linearGradient>
           ))}
         </defs>
@@ -186,7 +191,7 @@ export function SidebarPanel({
               alignItems: "center",
               cursor: "text",
               background:
-                "linear-gradient(to right, rgba(201,168,118,0.07), transparent)",
+                "linear-gradient(to right, rgba(197,107,71,0.07), transparent)",
               justifyContent: "flex-start",
             }}
           >
@@ -198,7 +203,7 @@ export function SidebarPanel({
                 top: 0,
                 width: 2.5,
                 height: 40,
-                background: "#C9A876",
+                background: "#C56B47",
                 borderRadius: "0 1px 1px 0",
               }}
             />
@@ -212,31 +217,7 @@ export function SidebarPanel({
                 alignItems: "center",
               }}
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-                style={{ display: "block" }}
-              >
-                <rect
-                  x="0.7"
-                  y="0.7"
-                  width="12.6"
-                  height="12.6"
-                  rx="2"
-                  stroke="rgba(255,255,255,0.6)"
-                  strokeWidth="1.6"
-                />
-                <rect
-                  x="0.7"
-                  y="0.7"
-                  width="12.6"
-                  height="3.5"
-                  rx="2"
-                  fill="rgba(255,255,255,0.10)"
-                />
-              </svg>
+              <LayoutDashboard size={ICON.sm} {...ICON_PROPS} color="rgba(42,40,35,0.6)" />
             </div>
 
             {editingBoardName ? (
@@ -268,12 +249,12 @@ export function SidebarPanel({
                   marginRight: 12,
                   fontSize: 12,
                   fontFamily: "inherit",
-                  background: "rgba(255,255,255,0.07)",
+                  background: "rgba(42,40,35,0.07)",
                   border: "none",
-                  outline: "1px solid rgba(201,168,118,0.4)",
+                  outline: "1px solid rgba(197,107,71,0.4)",
                   borderRadius: 8,
                   padding: "0 4px",
-                  color: "#FFFFFF",
+                  color: "#2A2823",
                   minWidth: 0,
                 }}
               />
@@ -285,7 +266,8 @@ export function SidebarPanel({
                     marginLeft: 12,
                     fontSize: 12,
                     fontWeight: 600,
-                    color: "#FFFFFF",
+                    color: "#2A2823",
+                    fontFamily: "var(--font-clash), system-ui, sans-serif",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -300,8 +282,8 @@ export function SidebarPanel({
                   viewBox="0 0 16 16"
                   style={{ marginRight: 20, flexShrink: 0 }}
                 >
-                  <circle cx="8" cy="8" r="6" fill="rgba(201,168,118,0.12)" />
-                  <circle cx="8" cy="8" r="3.5" fill="#C9A876" />
+                  <circle cx="8" cy="8" r="6" fill="rgba(197,107,71,0.12)" />
+                  <circle cx="8" cy="8" r="3.5" fill="#C56B47" />
                 </svg>
               </>
             )}
@@ -314,7 +296,7 @@ export function SidebarPanel({
           <StatusRow
             label="Autosave"
             value={saveState === "saving" ? "Saving…" : "Saved"}
-            dotColor={saveState === "saving" ? "#C9A876" : "#86EFAC"}
+            dotColor={saveState === "saving" ? "#D4A04A" : "#7C7A4E"}
           />
         </div>
       )}
@@ -335,7 +317,7 @@ export function SidebarPanel({
               style={{
                 padding: "8px 20px",
                 fontSize: 12,
-                color: "rgba(255,255,255,0.4)",
+                color: "rgba(42,40,35,0.4)",
               }}
             >
               No nodes yet
@@ -406,34 +388,20 @@ export function SidebarPanel({
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLElement).style.background =
-                "rgba(255,255,255,0.03)";
+                "rgba(42,40,35,0.03)";
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLElement).style.background =
                 "transparent";
             }}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              style={{ flexShrink: 0, color: "rgba(255,255,255,0.75)" }}
-            >
-              <path
-                d="M2 12h10M7 2v7M4 6l3 3 3-3"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <Save size={ICON.sm} {...ICON_PROPS} color="rgba(42,40,35,0.75)" style={{ flexShrink: 0 }} />
             <span
               style={{
                 flex: 1,
                 textAlign: "left",
                 fontSize: 12,
-                color: "rgba(255,255,255,0.85)",
+                color: "rgba(42,40,35,0.85)",
               }}
             >
               Save board
@@ -441,9 +409,9 @@ export function SidebarPanel({
             <kbd
               style={{
                 fontSize: 11,
-                color: "rgba(255,255,255,0.55)",
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.07)",
+                color: "rgba(42,40,35,0.55)",
+                background: "rgba(42,40,35,0.04)",
+                border: "1px solid rgba(42,40,35,0.07)",
                 borderRadius: 8,
                 padding: "4px 8px",
                 fontFamily: "inherit",
@@ -474,34 +442,20 @@ export function SidebarPanel({
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLElement).style.background =
-                "rgba(255,255,255,0.03)";
+                "rgba(42,40,35,0.03)";
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLElement).style.background =
                 "transparent";
             }}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              style={{ flexShrink: 0, color: "rgba(255,255,255,0.6)" }}
-            >
-              <path
-                d="M2 12h10M7 9V2M4 5l3-3 3 3"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <FolderOpen size={ICON.sm} {...ICON_PROPS} color="rgba(42,40,35,0.6)" style={{ flexShrink: 0 }} />
             <span
               style={{
                 flex: 1,
                 textAlign: "left",
                 fontSize: 12,
-                color: "rgba(255,255,255,0.55)",
+                color: "rgba(42,40,35,0.55)",
               }}
             >
               Load board
@@ -553,9 +507,9 @@ export function SidebarPanel({
               <kbd
                 style={{
                   fontSize: 11,
-                  color: "rgba(255,255,255,0.7)",
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.07)",
+                  color: "rgba(42,40,35,0.7)",
+                  background: "rgba(42,40,35,0.04)",
+                  border: "1px solid rgba(42,40,35,0.07)",
                   borderRadius: 8,
                   padding: "4px 8px",
                   fontFamily: "inherit",
@@ -567,7 +521,7 @@ export function SidebarPanel({
               <span
                 style={{
                   fontSize: 11,
-                  color: "rgba(255,255,255,0.4)",
+                  color: "rgba(42,40,35,0.4)",
                 }}
               >
                 {desc}

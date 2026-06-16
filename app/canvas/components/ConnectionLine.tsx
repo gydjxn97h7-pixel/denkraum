@@ -101,7 +101,7 @@ export const ConnectionLine = memo(function ConnectionLine({
     >
       <path
         d={d}
-        stroke={isHovered ? "rgba(20,71,56,0.85)" : "rgba(20,71,56,0.55)"}
+        stroke={isHovered ? "rgba(42,40,35,0.92)" : "rgba(42,40,35,0.6)"}
         strokeWidth={isHovered ? 2.5 / zoom : 1.5 / zoom}
         fill="none"
         strokeLinecap="round"

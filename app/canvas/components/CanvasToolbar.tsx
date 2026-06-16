@@ -2,6 +2,8 @@
 import { ACCENT } from "../lib/canvas-types";
 import type { NodeType } from "../lib/canvas-types";
 import { ShapeButton, renderShapeIcon } from "./ShapeButton";
+import { FileDown, FileText, FilePlus, Network, Search } from "lucide-react";
+import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 interface CanvasToolbarProps {
   panelOpen: boolean;
@@ -25,7 +27,7 @@ interface CanvasToolbarProps {
 
 // Shared glass background for each floating cluster.
 const CLUSTER_BG =
-  "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.92)";
+  "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.92)";
 
 // Each related group of actions lives in its own pill-shaped floating cluster;
 // the wrapper just positions them in a row with gaps between groups.
@@ -33,13 +35,13 @@ const cluster: React.CSSProperties = {
   background: CLUSTER_BG,
   backdropFilter: "blur(20px)",
   WebkitBackdropFilter: "blur(20px)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  border: "1px solid rgba(42,40,35,0.1)",
   borderRadius: 16,
   padding: "8px 16px",
   display: "flex",
   alignItems: "center",
   gap: 4,
-  boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
+  boxShadow: "0 4px 12px rgba(58,48,38,0.10), 0 16px 44px rgba(58,48,38,0.20)",
 };
 
 // ── Export Toolbar ──
@@ -86,7 +88,7 @@ export function CanvasToolbar({
     fontFamily: "inherit",
     cursor: disabled ? "default" : "pointer",
     background: "transparent",
-    color: disabled ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.85)",
+    color: disabled ? "rgba(42,40,35,0.4)" : "rgba(42,40,35,0.85)",
     transition: "color 0.15s, background 0.15s",
     display: "flex",
     alignItems: "center",
@@ -106,10 +108,10 @@ export function CanvasToolbar({
     borderRadius: 8,
     background: active ? `${ACCENT}22` : "transparent",
     color: !enabled
-      ? "rgba(255,255,255,0.25)"
+      ? "rgba(42,40,35,0.25)"
       : active && accent
         ? ACCENT
-        : "rgba(255,255,255,0.85)",
+        : "rgba(42,40,35,0.85)",
     cursor: enabled ? "pointer" : "default",
     display: "flex",
     alignItems: "center",
@@ -135,7 +137,7 @@ export function CanvasToolbar({
         alignItems: "center",
         gap: 12,
         zIndex: 201,
-        fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
+        fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
       }}
     >
       {/* ── Cluster: Shapes ── */}
@@ -196,26 +198,7 @@ export function CanvasToolbar({
           onClick={onNewDocument}
         >
           {(stroke) => (
-            <svg width="20" height="20" viewBox="0 0 20 20">
-              <path
-                d="M3 1 L13 1 L19 7 L19 19 L3 19 Z"
-                fill="url(#gShapeN)"
-                stroke={stroke}
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M13 1 L13 7 L19 7"
-                fill="none"
-                stroke={stroke}
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M7 14.5 L12.5 9 L14.5 11 L9 16.5 L6.5 17 Z"
-                fill="rgba(255,255,255,0.65)"
-              />
-            </svg>
+            <FilePlus size={ICON.lg} {...ICON_PROPS} color={stroke} />
           )}
         </ShapeButton>
       </div>
@@ -228,28 +211,15 @@ export function CanvasToolbar({
           style={exportBtn(nodeCount === 0)}
           onMouseEnter={(e) => {
             if (nodeCount > 0)
-              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
+              (e.currentTarget as HTMLElement).style.color = "#2A2823";
           }}
           onMouseLeave={(e) => {
             if (nodeCount > 0)
               (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.85)";
+                "rgba(42,40,35,0.85)";
           }}
         >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
+          <FileDown size={ICON.sm} {...ICON_PROPS} />
           Export PDF
         </button>
 
@@ -259,29 +229,15 @@ export function CanvasToolbar({
           style={exportBtn(nodeCount === 0)}
           onMouseEnter={(e) => {
             if (nodeCount > 0)
-              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
+              (e.currentTarget as HTMLElement).style.color = "#2A2823";
           }}
           onMouseLeave={(e) => {
             if (nodeCount > 0)
               (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.85)";
+                "rgba(42,40,35,0.85)";
           }}
         >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
-          </svg>
+          <FileText size={ICON.sm} {...ICON_PROPS} />
           Export MD
         </button>
       </div>
@@ -295,35 +251,20 @@ export function CanvasToolbar({
           style={iconBtn(false, nodeCount > 1)}
           onMouseEnter={(e) => {
             if (nodeCount > 1) {
-              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
+              (e.currentTarget as HTMLElement).style.color = "#2A2823";
               (e.currentTarget as HTMLElement).style.background =
-                "rgba(255,255,255,0.07)";
+                "rgba(42,40,35,0.07)";
             }
           }}
           onMouseLeave={(e) => {
             if (nodeCount > 1) {
               (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.85)";
+                "rgba(42,40,35,0.85)";
               (e.currentTarget as HTMLElement).style.background = "transparent";
             }
           }}
         >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="5" cy="5" r="2" />
-            <circle cx="19" cy="5" r="2" />
-            <circle cx="12" cy="19" r="2" />
-            <line x1="5" y1="7" x2="12" y2="17" />
-            <line x1="19" y1="7" x2="12" y2="17" />
-          </svg>
+          <Network size={ICON.lg} {...ICON_PROPS} />
         </button>
 
         <button
@@ -332,32 +273,20 @@ export function CanvasToolbar({
           style={iconBtn(filterOpen, true, true)}
           onMouseEnter={(e) => {
             if (!filterOpen) {
-              (e.currentTarget as HTMLElement).style.color = "#FFFFFF";
+              (e.currentTarget as HTMLElement).style.color = "#2A2823";
               (e.currentTarget as HTMLElement).style.background =
-                "rgba(255,255,255,0.07)";
+                "rgba(42,40,35,0.07)";
             }
           }}
           onMouseLeave={(e) => {
             if (!filterOpen) {
               (e.currentTarget as HTMLElement).style.color =
-                "rgba(255,255,255,0.85)";
+                "rgba(42,40,35,0.85)";
               (e.currentTarget as HTMLElement).style.background = "transparent";
             }
           }}
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
+          <Search size={ICON.lg} {...ICON_PROPS} />
         </button>
       </div>
     </div>

@@ -1,6 +1,8 @@
 "use client";
 import { ACCENT } from "../lib/canvas-types";
 import type { NodeType } from "../lib/canvas-types";
+import { Search, X } from "lucide-react";
+import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 interface FilterBarProps {
   filterInputRef: React.RefObject<HTMLInputElement | null>;
@@ -34,16 +36,16 @@ export function FilterBar({
         left: "50%",
         transform: "translateX(-50%)",
         background:
-          "linear-gradient(180deg, rgba(157,200,141,0.04) 0%, rgba(157,200,141,0) 100%), rgba(22,64,56,0.95)",
+          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.95)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
-        border: "1px solid rgba(255,255,255,0.1)",
+        border: "1px solid rgba(42,40,35,0.1)",
         borderRadius: 16,
         padding: "8px 12px",
         display: "flex",
         flexDirection: "column",
         gap: 8,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
+        boxShadow: "0 4px 12px rgba(58,48,38,0.10), 0 16px 44px rgba(58,48,38,0.20)",
         zIndex: 202,
         minWidth: 420,
       }}
@@ -51,20 +53,12 @@ export function FilterBar({
     >
       {/* Search row */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="rgba(255,255,255,0.7)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <Search
+          size={ICON.sm}
+          {...ICON_PROPS}
+          color="rgba(42,40,35,0.7)"
           style={{ flexShrink: 0 }}
-        >
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
+        />
         <input
           ref={filterInputRef}
           value={filterText}
@@ -83,7 +77,7 @@ export function FilterBar({
             background: "transparent",
             border: "none",
             outline: "none",
-            color: "#FFFFFF",
+            color: "#2A2823",
             fontSize: 13,
             fontFamily: "inherit",
             caretColor: ACCENT,
@@ -92,7 +86,7 @@ export function FilterBar({
         <span
           style={{
             fontSize: 11,
-            color: "rgba(255,255,255,0.7)",
+            color: "rgba(42,40,35,0.7)",
             whiteSpace: "nowrap",
             flexShrink: 0,
           }}
@@ -108,10 +102,8 @@ export function FilterBar({
           style={{
             border: "none",
             background: "transparent",
-            color: "rgba(255,255,255,0.7)",
+            color: "rgba(42,40,35,0.7)",
             cursor: "pointer",
-            fontSize: 14,
-            lineHeight: 1,
             padding: 4,
             borderRadius: 8,
             flexShrink: 0,
@@ -121,14 +113,14 @@ export function FilterBar({
           }}
           onMouseEnter={(e) =>
             ((e.currentTarget as HTMLElement).style.color =
-              "rgba(255,255,255,0.85)")
+              "rgba(42,40,35,0.85)")
           }
           onMouseLeave={(e) =>
             ((e.currentTarget as HTMLElement).style.color =
-              "rgba(255,255,255,0.7)")
+              "rgba(42,40,35,0.7)")
           }
         >
-          ✕
+          <X size={ICON.sm} {...ICON_PROPS} />
         </button>
       </div>
 
@@ -157,9 +149,9 @@ export function FilterBar({
                 borderRadius: 999,
                 border: active
                   ? `1px solid ${ACCENT}66`
-                  : "1px solid rgba(255,255,255,0.07)",
+                  : "1px solid rgba(42,40,35,0.07)",
                 background: active ? `${ACCENT}22` : "transparent",
-                color: active ? ACCENT : "rgba(255,255,255,0.7)",
+                color: active ? ACCENT : "rgba(42,40,35,0.7)",
                 fontSize: 11,
                 fontWeight: 600,
                 fontFamily: "inherit",
@@ -169,17 +161,17 @@ export function FilterBar({
               onMouseEnter={(e) => {
                 if (!active) {
                   (e.currentTarget as HTMLElement).style.color =
-                    "rgba(255,255,255,0.85)";
+                    "rgba(42,40,35,0.85)";
                   (e.currentTarget as HTMLElement).style.borderColor =
-                    "rgba(255,255,255,0.15)";
+                    "rgba(42,40,35,0.15)";
                 }
               }}
               onMouseLeave={(e) => {
                 if (!active) {
                   (e.currentTarget as HTMLElement).style.color =
-                    "rgba(255,255,255,0.7)";
+                    "rgba(42,40,35,0.7)";
                   (e.currentTarget as HTMLElement).style.borderColor =
-                    "rgba(255,255,255,0.07)";
+                    "rgba(42,40,35,0.07)";
                 }
               }}
             >

@@ -256,7 +256,7 @@ export function useKeyboardShortcuts({
           const tabNode: CanvasNode = {
             id: newId, x: n.x + n.w + 80, y: n.y, w: 200, h: 80,
             title: "", label: `Block ${maxBlockIdx1 + 1}`, body: "",
-            type: "block", color: "#1D5C50", fontSize: 13,
+            type: "block", color: "#FCFBF8", fontSize: 13,
           };
           const tabNodes = [...nodesRef.current, tabNode];
           const tabConns = [...connectionsRef.current, { from: selId, to: newId }];
@@ -302,7 +302,7 @@ export function useKeyboardShortcuts({
           const enterNode: CanvasNode = {
             id: newId, x: n.x, y: n.y + n.h + 40, w: 200, h: 80,
             title: "", label: `Block ${maxBlockIdx2 + 1}`, body: "",
-            type: "block", color: "#1D5C50", fontSize: 13,
+            type: "block", color: "#FCFBF8", fontSize: 13,
           };
           const enterNodes = [...nodesRef.current, enterNode];
           const enterOrder = [...presentationOrderRef.current, newId];

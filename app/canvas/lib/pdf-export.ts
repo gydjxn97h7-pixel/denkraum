@@ -2,7 +2,7 @@ import type { CanvasNode, Connection, RichText } from "./canvas-types";
 import { plainToRich, lineRuns } from "./rich-text";
 
 // Canvas background in RGB — used to composite rgba node colors into solid values.
-const PDF_BG_RGB: [number, number, number] = [12, 32, 24]; // #0C2018
+const PDF_BG_RGB: [number, number, number] = [235, 232, 225]; // #EBE8E1
 
 // Parses any color format nodes can store (hex, rgb, rgba) into [r,g,b] integers
 // for jsPDF, which has no alpha channel on fill colors. rgba colors are composited
@@ -42,7 +42,7 @@ function parseColorForPdf(color: string): [number, number, number] {
   } catch {
     // fall through to default
   }
-  return [29, 92, 80]; // #1D5C50
+  return [252, 251, 248]; // #FCFBF8
 }
 
 // ── Vector PDF export (jsPDF direct) ────────────────────────────────────────
@@ -83,14 +83,14 @@ export async function exportBoardPdf(
   const py = (wy: number) => (wy - minY) * exportScale;
 
   // Background fill.
-  const [bgR, bgG, bgB] = parseColorForPdf("#0C2018");
+  const [bgR, bgG, bgB] = parseColorForPdf("#EBE8E1");
   doc.setFillColor(bgR, bgG, bgB);
   doc.rect(0, 0, pdfW, pdfH, "F");
 
   // ── 1. Connection lines (drawn first so they sit behind nodes) ─────────────
   // Geometry replicates ConnectionLine exactly: axis-dominant edge selection,
   // cpOffset = max(40, dist*0.4), cubic bezier tangent perpendicular to edge.
-  // On-screen stroke is rgba(255,255,255,0.7) on #0C2018.
+  // On-screen stroke is a warm-dark hairline on the cream node surface.
   // Blended opaque equivalent: rgb(182,188,186) — used here since jsPDF has no alpha.
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
   doc.setDrawColor(182, 188, 186);
@@ -169,7 +169,7 @@ export async function exportBoardPdf(
   // synchronous for data URLs, so all images are embedded before doc.save().
   for (const n of nodes) {
     if (n.type === "text") continue;
-    const [r, g, b] = parseColorForPdf(n.color || "#1D5C50");
+    const [r, g, b] = parseColorForPdf("#FCFBF8");
     doc.setFillColor(r, g, b);
     const nx = px(n.x),
       ny = py(n.y);
@@ -462,7 +462,7 @@ export async function exportBoardPdf(
   for (const n of nodes) {
     if (n.type === "image") continue;
     try {
-      const [fr, fg, fb] = parseColorForPdf(n.color || "#1D5C50");
+      const [fr, fg, fb] = parseColorForPdf("#FCFBF8");
       const isDark = (0.299 * fr + 0.587 * fg + 0.114 * fb) / 255 < 0.45;
       const nx = px(n.x),
         ny = py(n.y);
@@ -483,7 +483,7 @@ export async function exportBoardPdf(
 
       // Title color
       const [tcR, tcG, tcB] = parseColorForPdf(
-        n.textColor ?? (isDark ? "#FFFFFF" : "#111111"),
+        n.textColor ?? "#2A2823",
       );
 
       // Body color — matches NodeView: n.textColor+"bb" (≈73% alpha) or rgba(255,255,255,0.82)
@@ -499,7 +499,7 @@ export async function exportBoardPdf(
         bG = Math.round(0.82 * 255 + 0.18 * bgG);
         bB = Math.round(0.82 * 255 + 0.18 * bgB);
       } else {
-        bR = bG = bB = 136; // #888
+        bR = 137; bG = 135; bB = 131; // warm grey
       }
 
       const title = (n.title ?? "").trim();
@@ -511,7 +511,7 @@ export async function exportBoardPdf(
 
       if (n.type === "text") {
         if (!titleSrc) continue;
-        const [cr, cg, cb] = parseColorForPdf(n.textColor ?? "#FFFFFF");
+        const [cr, cg, cb] = parseColorForPdf(n.textColor ?? "#2A2823");
         const maxW = Math.max(10, nw - 24 * exportScale);
         const laid = layoutField(titleSrc, maxW, fs, 1.2, base);
         const startY = ny + nh / 2 - fieldHeight(laid) / 2;
@@ -532,12 +532,8 @@ export async function exportBoardPdf(
         const maxW = Math.max(10, nw - 2 * padH);
         // Canvas colors: title rgba(255,255,255,0.9), content
         // rgba(255,255,255,0.55) — composited over the node fill.
-        const dtR = Math.round(0.9 * 255 + 0.1 * fr);
-        const dtG = Math.round(0.9 * 255 + 0.1 * fg);
-        const dtB = Math.round(0.9 * 255 + 0.1 * fb);
-        const dcR = Math.round(0.55 * 255 + 0.45 * fr);
-        const dcG = Math.round(0.55 * 255 + 0.45 * fg);
-        const dcB = Math.round(0.55 * 255 + 0.45 * fb);
+        const dtR = 42, dtG = 40, dtB = 35;
+        const dcR = 137, dcG = 135, dcB = 131;
         let curY = ny + padTop;
         if (docTitle) {
           const titleLaid = layoutField(plainToRich(docTitle), maxW, fs, 1.2, {
