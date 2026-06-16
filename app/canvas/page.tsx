@@ -1496,9 +1496,10 @@ export default function Canvas() {
             <NodeView
               key={n.id}
               n={n}
-              selected={selected}
-              connectDrag={connectDrag}
-              hoveredId={hoveredId}
+              isSelected={selected === n.id}
+              isHovered={hoveredId === n.id}
+              isConnectSource={connectDrag?.fromId === n.id}
+              connecting={connectDrag !== null}
               editingNodeIdRef={editingNodeIdRef}
               connectDragRef={connectDragRef}
               onNodeMouseDown={onNodeMouseDown}

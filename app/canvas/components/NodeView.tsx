@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { ACCENT } from "../lib/canvas-types";
 import { NODE_SHADOW, ICON, ICON_PROPS } from "../lib/design-tokens";
 import { FileText, Grip } from "lucide-react";
@@ -8,9 +8,13 @@ import { setEditableContent, editableRichText } from "../lib/rich-text";
 
 interface NodeViewProps {
   n: CanvasNode;
-  selected: number | null;
-  connectDrag: ConnectDrag;
-  hoveredId: number | null;
+  // Pre-computed per-node state (instead of the global selected/hovered/connect
+  // scalars) so React.memo holds for every node a change doesn't actually touch —
+  // hovering or selecting one node no longer re-renders the whole board.
+  isSelected: boolean;
+  isHovered: boolean;
+  isConnectSource: boolean; // this node is the source of an in-progress connect
+  connecting: boolean; // a connect drag is in progress (any source)
   editingNodeIdRef: React.RefObject<number | null>;
   connectDragRef: React.RefObject<ConnectDrag>;
   onNodeMouseDown: (e: React.MouseEvent, id: number) => void;
@@ -29,9 +33,10 @@ interface NodeViewProps {
 
 export const NodeView = React.memo(function NodeView({
   n,
-  selected,
-  connectDrag,
-  hoveredId,
+  isSelected,
+  isHovered,
+  isConnectSource,
+  connecting,
   editingNodeIdRef,
   connectDragRef,
   onNodeMouseDown,
@@ -47,7 +52,7 @@ export const NodeView = React.memo(function NodeView({
   isMultiSelected,
   zoom,
 }: NodeViewProps) {
-  const isSel = selected === n.id;
+  const isSel = isSelected;
   const isText = n.type === "text";
   const isCircle = n.type === "circle" || n.type === "oval";
   const isDiamond = n.type === "diamond";
@@ -74,13 +79,33 @@ export const NodeView = React.memo(function NodeView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isPotentialTarget =
-    connectDrag !== null && n.id !== connectDrag.fromId && !isText;
+  // Stable contenteditable ref callbacks. Inline `ref={(el) => …}` get a fresh
+  // identity every render, so React detach/re-attaches them and re-runs the DOM
+  // sync on EVERY render. Keying these to the content fields means the DOM is
+  // only re-written when the content actually changes (or on mount) — not on
+  // every hover/select re-render. editingNodeIdRef is stable (a ref).
+  const titleRef = useCallback(
+    (el: HTMLElement | null) => {
+      if (el && editingNodeIdRef.current !== n.id)
+        setEditableContent(el, n.titleRich, n.title);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [n.id, n.titleRich, n.title],
+  );
+  const bodyRef = useCallback(
+    (el: HTMLElement | null) => {
+      if (el && editingNodeIdRef.current !== n.id)
+        setEditableContent(el, n.bodyRich, n.body);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [n.id, n.bodyRich, n.body],
+  );
+
+  const isPotentialTarget = connecting && !isConnectSource && !isText;
 
   const hostBg = isDiamond || isText || isImage ? "transparent" : "#FCFBF8";
   // Borderless cards — the soft drop shadow does the separation now.
   const hostBorder = "none";
-  const isHovered = hoveredId === n.id;
   // Elevation by state: selected/dragged sits highest, hover lifts slightly.
   const elevation = isSel
     ? NODE_SHADOW.active
@@ -97,11 +122,9 @@ export const NodeView = React.memo(function NodeView({
         : elevation;
   const hostRadius = isCircle ? "50%" : isRounded ? 16 : 12;
 
-  const showResize = (hoveredId === n.id || isSel) && !isText;
-  const isSource = connectDrag?.fromId === n.id;
-  const showDots =
-    !isText &&
-    ((hoveredId === n.id && !connectDrag) || isSource);
+  const showResize = (isHovered || isSel) && !isText;
+  const isSource = isConnectSource;
+  const showDots = !isText && ((isHovered && !connecting) || isSource);
 
   return (
     <div
@@ -165,9 +188,7 @@ export const NodeView = React.memo(function NodeView({
               ? 0
               : "12px 16px",
         cursor:
-          connectDrag !== null && n.id !== connectDrag.fromId
-            ? "crosshair"
-            : "default",
+          connecting && !isConnectSource ? "crosshair" : "default",
         userSelect: "none",
         outline: isSource
           ? "1.5px solid rgba(197,107,71,0.6)"
@@ -250,10 +271,7 @@ export const NodeView = React.memo(function NodeView({
             }}
           >
             <div
-              ref={(el) => {
-                if (el && editingNodeIdRef.current !== n.id)
-                  setEditableContent(el, n.titleRich, n.title);
-              }}
+              ref={titleRef}
               contentEditable={isEditing}
               suppressContentEditableWarning
               data-placeholder="Diamond"
@@ -292,10 +310,7 @@ export const NodeView = React.memo(function NodeView({
             />
             {n.body && (
               <div
-                ref={(el) => {
-                  if (el && editingNodeIdRef.current !== n.id)
-                    setEditableContent(el, n.bodyRich, n.body);
-                }}
+                ref={bodyRef}
                 contentEditable={isEditing}
                 suppressContentEditableWarning
                 onMouseDown={(e) => e.stopPropagation()}
@@ -461,10 +476,7 @@ export const NodeView = React.memo(function NodeView({
       {!isText && !isDiamond && !isImage && !isTextFile && (
         <>
           <div
-            ref={(el) => {
-              if (el && editingNodeIdRef.current !== n.id)
-                setEditableContent(el, n.titleRich, n.title);
-            }}
+            ref={titleRef}
             contentEditable={isEditing}
             suppressContentEditableWarning
             data-placeholder={
@@ -512,10 +524,7 @@ export const NodeView = React.memo(function NodeView({
             }}
           />
           <div
-            ref={(el) => {
-              if (el && editingNodeIdRef.current !== n.id)
-                setEditableContent(el, n.bodyRich, n.body);
-            }}
+            ref={bodyRef}
             contentEditable={isEditing}
             suppressContentEditableWarning
             onMouseDown={(e) => e.stopPropagation()}
@@ -562,10 +571,7 @@ export const NodeView = React.memo(function NodeView({
       {/* Free text */}
       {isText && (
         <div
-          ref={(el) => {
-            if (el && editingNodeIdRef.current !== n.id)
-              setEditableContent(el, n.titleRich, n.title);
-          }}
+          ref={titleRef}
           contentEditable
           suppressContentEditableWarning
           onMouseDown={(e) => e.stopPropagation()}
@@ -610,7 +616,7 @@ export const NodeView = React.memo(function NodeView({
       )}
 
       {/* Move handle — text nodes only, top-left, visible on hover/select */}
-      {isText && (hoveredId === n.id || isSel) && (
+      {isText && (isHovered || isSel) && (
         <div
           data-role="move-handle"
           onMouseDown={(e) => {
@@ -739,7 +745,7 @@ export const NodeView = React.memo(function NodeView({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            opacity: hoveredId === n.id || isSel ? 1 : 0,
+            opacity: isHovered || isSel ? 1 : 0,
             transition:
               "opacity 0.15s ease, box-shadow 0.15s ease, background 0.1s ease",
           }}
