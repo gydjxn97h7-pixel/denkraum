@@ -672,6 +672,7 @@ export default function Canvas() {
     setPresentationOrder,
     setPan,
     setZoom,
+    onError: (msg) => setToast({ msg, variant: "error" }),
   });
 
   // Push initial history snapshot once after the board has hydrated

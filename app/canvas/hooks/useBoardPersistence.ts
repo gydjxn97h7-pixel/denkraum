@@ -30,6 +30,9 @@ interface BoardPersistenceArgs {
   setPresentationOrder: React.Dispatch<React.SetStateAction<number[]>>;
   setPan: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
   setZoom: React.Dispatch<React.SetStateAction<number>>;
+  // Surfaced (deduped) when a save fails — storage quota, IndexedDB write error,
+  // etc. — so silent data loss becomes visible to the user.
+  onError?: (msg: string) => void;
 }
 
 // Hydrates the board from localStorage + IndexedDB on mount, then debounce-saves
@@ -48,11 +51,24 @@ export function useBoardPersistence({
   setPresentationOrder,
   setPan,
   setZoom,
+  onError,
 }: BoardPersistenceArgs): { hydrated: boolean; saveState: "saved" | "saving" } {
   const [hydrated, setHydrated] = useState(false);
   // Reflects the debounce-autosave: "saving" while a write is pending, "saved"
   // once board data has been flushed to localStorage / IndexedDB.
   const [saveState, setSaveState] = useState<"saved" | "saving">("saved");
+  // Mirror onError into a ref so the save effect can call the latest callback
+  // without taking it as a dependency. Cooldown so a failing burst of asset
+  // writes surfaces one notification, not dozens.
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const lastErrorAtRef = useRef(0);
+  const notifyError = (msg: string) => {
+    const now = Date.now();
+    if (now - lastErrorAtRef.current < 8000) return;
+    lastErrorAtRef.current = now;
+    onErrorRef.current?.(msg);
+  };
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks which node IDs currently have an entry in IndexedDB so we can
@@ -234,6 +250,10 @@ export function useBoardPersistence({
           console.warn(
             "[dnkrm] localStorage quota exceeded — canvas not saved.",
           );
+          notifyError("Storage is full — recent changes weren’t saved.");
+        } else {
+          console.error("[dnkrm] save failed:", err);
+          notifyError("Couldn’t save the board — recent changes may be lost.");
         }
       }
 
@@ -258,7 +278,12 @@ export function useBoardPersistence({
             prev.imageUrl !== record.imageUrl ||
             prev.docRich !== record.docRich
           ) {
-            setAsset(n.id, record).catch(() => {});
+            setAsset(n.id, record).catch((e) => {
+              console.error("[dnkrm] asset write failed:", e);
+              notifyError(
+                "Couldn’t save an image or document — storage may be full.",
+              );
+            });
           }
         }
       }
