@@ -187,6 +187,21 @@ export default function Canvas() {
   const presentActiveSeqRef = useRef(presentActiveSeq);
   presentActiveSeqRef.current = presentActiveSeq;
 
+  // The node currently spotlighted in presentation mode (centered on screen).
+  // Passed per-node as a boolean so only the entering/leaving node re-renders.
+  const presentationFocusId =
+    isPresenting && presentActiveSeq.length > 0
+      ? presentActiveSeq[
+          Math.min(presentationIndex, presentActiveSeq.length - 1)
+        ]
+      : null;
+  // During presentation the focused node is lifted out of the (blurred + dimmed)
+  // world into a sharp top layer, so the spotlight backdrop never touches it.
+  const focusedNode =
+    presentationFocusId != null
+      ? (nodeMap.get(presentationFocusId) ?? null)
+      : null;
+
   const filterActive = filterText !== "" || filterType !== "all";
   const matchedNodeIds = useMemo(() => {
     if (filterText === "" && filterType === "all") return new Set<number>();
@@ -1519,15 +1534,82 @@ export default function Canvas() {
             />
           )}
 
-          {/* Nodes */}
-          {nodes.map((n) => (
+          {/* Nodes — the presentation-focused node is rendered separately in
+              the sharp spotlight layer below, so skip it here. */}
+          {nodes.map((n) => {
+            if (n.id === presentationFocusId) return null;
+            return (
+              <NodeView
+                key={n.id}
+                n={n}
+                isSelected={selected === n.id}
+                isHovered={hoveredId === n.id}
+                isConnectSource={connectDrag?.fromId === n.id}
+                connecting={connectDrag !== null}
+                editingNodeIdRef={editingNodeIdRef}
+                connectDragRef={connectDragRef}
+                onNodeMouseDown={onNodeMouseDown}
+                onNodeContextMenu={onNodeContextMenu}
+                onNodeClick={onNodeClick}
+                onOpenDocument={openDocument}
+                setHoveredId={setHoveredId}
+                commitNodeText={commitNodeText}
+                startNodeDrag={startNodeDrag}
+                onDotClick={onDotClick}
+                onResizeMouseDown={onResizeMouseDown}
+                dimmed={filterActive && !matchedNodeIds.has(n.id)}
+                isMultiSelected={selectedIds.has(n.id)}
+                zoom={zoom}
+              />
+            );
+          })}
+        </div>
+
+        {/* ── Presentation spotlight backdrop ──
+            Blurs + dims the entire canvas (dot grid, connections, every other
+            node) so the focused node reads as lifted onto a stage. The dim is a
+            translucent warm-dark wash — it never recolors nodes, it just pushes
+            the backdrop back. Sits above the world but below the sharp focused
+            node layer, so the focused node itself is never touched. */}
+        {isPresenting && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              zIndex: 200,
+              background: "rgba(24,18,12,0.46)",
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+            }}
+          />
+        )}
+
+        {/* Sharp focused-node layer — mirrors the world transform so the node
+            sits exactly where it would on the canvas, but renders above the
+            spotlight backdrop and is therefore left completely untouched. */}
+        {isPresenting && focusedNode && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: "0 0",
+              width: 0,
+              height: 0,
+              zIndex: 201,
+              pointerEvents: "none",
+            }}
+          >
             <NodeView
-              key={n.id}
-              n={n}
-              isSelected={selected === n.id}
-              isHovered={hoveredId === n.id}
-              isConnectSource={connectDrag?.fromId === n.id}
-              connecting={connectDrag !== null}
+              key={focusedNode.id}
+              n={focusedNode}
+              isSelected={false}
+              isHovered={false}
+              isConnectSource={false}
+              connecting={false}
               editingNodeIdRef={editingNodeIdRef}
               connectDragRef={connectDragRef}
               onNodeMouseDown={onNodeMouseDown}
@@ -1539,12 +1621,13 @@ export default function Canvas() {
               startNodeDrag={startNodeDrag}
               onDotClick={onDotClick}
               onResizeMouseDown={onResizeMouseDown}
-              dimmed={filterActive && !matchedNodeIds.has(n.id)}
-              isMultiSelected={selectedIds.has(n.id)}
+              dimmed={false}
+              isMultiSelected={false}
+              onStage
               zoom={zoom}
             />
-          ))}
-        </div>
+          </div>
+        )}
 
         {/* Edge vignette — a soft inner shadow at the viewport edges so the
             dot-grid canvas reads as slightly recessed within the frame. Sits

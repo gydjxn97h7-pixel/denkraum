@@ -28,6 +28,8 @@ interface NodeViewProps {
   onResizeMouseDown: (e: React.MouseEvent, id: number) => void;
   dimmed?: boolean;
   isMultiSelected?: boolean;
+  // This is the presentation-focused node — give it the "on stage" elevation.
+  onStage?: boolean;
   zoom: number;
 }
 
@@ -50,6 +52,7 @@ export const NodeView = React.memo(function NodeView({
   onResizeMouseDown,
   dimmed,
   isMultiSelected,
+  onStage,
   zoom,
 }: NodeViewProps) {
   const isSel = isSelected;
@@ -117,9 +120,11 @@ export const NodeView = React.memo(function NodeView({
   const hostShadow =
     isDiamond || isText
       ? "none"
-      : isPotentialTarget
-        ? `0 0 0 2px rgba(197,107,71,0.5), ${elevation}`
-        : elevation;
+      : onStage
+        ? NODE_SHADOW.stage
+        : isPotentialTarget
+          ? `0 0 0 2px rgba(197,107,71,0.5), ${elevation}`
+          : elevation;
   const hostRadius = isCircle ? "50%" : isRounded ? 16 : 12;
 
   const showResize = (isHovered || isSel) && !isText;

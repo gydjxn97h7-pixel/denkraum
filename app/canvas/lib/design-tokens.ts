@@ -114,6 +114,10 @@ export const NODE_SHADOW = {
   rest: "0 2px 6px rgba(58,48,38,0.10), 0 12px 30px rgba(58,48,38,0.17)",
   hover: "0 5px 12px rgba(58,48,38,0.13), 0 18px 40px rgba(58,48,38,0.21)",
   active: "0 10px 22px rgba(58,48,38,0.17), 0 30px 60px rgba(58,48,38,0.27)",
+  // Presentation-focused node: a deeper drop shadow + a faint cream halo so the
+  // node reads as lit "on stage" against the blurred, dimmed backdrop.
+  stage:
+    "0 16px 40px rgba(58,48,38,0.26), 0 48px 104px rgba(58,48,38,0.34), 0 0 72px rgba(252,251,248,0.12)",
 } as const;
 
 // ── Reusable style fragments ────────────────────────────────────────────────
