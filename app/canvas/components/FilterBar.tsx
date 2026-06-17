@@ -32,7 +32,10 @@ export function FilterBar({
     <div
       style={{
         position: "fixed",
-        top: 68,
+        // Sits a full cluster-gap (12px) below the toolbar's bottom edge
+        // (toolbar top 20 + 52px cluster height = 72) so it reads as a
+        // separate bar, matching the spacing between the toolbar clusters.
+        top: 84,
         left: "50%",
         transform: "translateX(-50%)",
         background:

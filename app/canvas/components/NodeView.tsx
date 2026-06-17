@@ -30,6 +30,8 @@ interface NodeViewProps {
   isMultiSelected?: boolean;
   // This is the presentation-focused node — give it the "on stage" elevation.
   onStage?: boolean;
+  // Matches the active text search — draw a positive accent highlight.
+  searchHit?: boolean;
   zoom: number;
 }
 
@@ -53,6 +55,7 @@ export const NodeView = React.memo(function NodeView({
   dimmed,
   isMultiSelected,
   onStage,
+  searchHit,
   zoom,
 }: NodeViewProps) {
   const isSel = isSelected;
@@ -117,6 +120,9 @@ export const NodeView = React.memo(function NodeView({
       : NODE_SHADOW.rest;
   // Diamond casts its shadow via an SVG filter; text floats via a glyph
   // drop-shadow (see below) — neither uses a box shadow on the host.
+  // Positive search highlight: a solid accent ring + soft accent glow so a
+  // text match clearly pops, beyond the surrounding nodes merely dimming.
+  const searchRing = `0 0 0 2px ${ACCENT}, 0 0 16px rgba(197,107,71,0.40)`;
   const hostShadow =
     isDiamond || isText
       ? "none"
@@ -124,7 +130,9 @@ export const NodeView = React.memo(function NodeView({
         ? NODE_SHADOW.stage
         : isPotentialTarget
           ? `0 0 0 2px rgba(197,107,71,0.5), ${elevation}`
-          : elevation;
+          : searchHit
+            ? `${searchRing}, ${elevation}`
+            : elevation;
   const hostRadius = isCircle ? "50%" : isRounded ? 16 : 12;
 
   const showResize = (isHovered || isSel) && !isText;
@@ -201,9 +209,13 @@ export const NodeView = React.memo(function NodeView({
             ? `2px solid ${ACCENT}`
             : isEditing
               ? "1.5px solid rgba(42,40,35,0.18)"
-              : isText && (isSel || n.title === "")
-                ? "1.5px dashed rgba(176,121,94,0.5)"
-                : "none",
+              : // Diamond/text carry no box-shadow, so the search highlight
+                // rides on the outline instead.
+                searchHit && (isDiamond || isText)
+                ? `2px solid ${ACCENT}`
+                : isText && (isSel || n.title === "")
+                  ? "1.5px dashed rgba(176,121,94,0.5)"
+                  : "none",
         opacity: dimmed ? 0.15 : 1,
         pointerEvents: dimmed ? "none" : undefined,
         transition:
