@@ -1,20 +1,26 @@
-import {
-  forceSimulation,
-  forceManyBody,
-  forceLink,
-  forceCenter,
-  forceCollide,
-  forceX,
-  forceY,
-} from "d3-force";
 import type { CanvasNode, Connection } from "./canvas-types";
 
 // Runs a d3 force simulation to completion and returns the new top-left
 // position for each node, re-centered on the previous layout's centroid.
-export function computeForceLayout(
+//
+// d3-force is dynamically imported so it stays out of the main bundle — it's
+// only needed for this one "auto-arrange" action. The 300-tick loop yields to
+// the event loop whenever it has run for >8ms, so large graphs (200+ nodes)
+// no longer freeze the tab while solving.
+export async function computeForceLayout(
   sourceNodes: CanvasNode[],
   sourceConnections: Connection[],
-): Array<{ id: number; newX: number; newY: number }> {
+): Promise<Array<{ id: number; newX: number; newY: number }>> {
+  const {
+    forceSimulation,
+    forceManyBody,
+    forceLink,
+    forceCenter,
+    forceCollide,
+    forceX,
+    forceY,
+  } = await import("d3-force");
+
   const oldCx =
     sourceNodes.reduce((s, n) => s + n.x + n.w / 2, 0) / sourceNodes.length;
   const oldCy =
@@ -52,7 +58,17 @@ export function computeForceLayout(
     )
     .stop();
 
-  for (let i = 0; i < 300; i++) sim.tick();
+  let lastYield = performance.now();
+  for (let i = 0; i < 300; i++) {
+    sim.tick();
+    // Keep the main thread responsive on large graphs: hand control back to the
+    // browser whenever a continuous run of ticks has exceeded ~8ms. Small boards
+    // finish well under that and never yield (one synchronous pass).
+    if (performance.now() - lastYield > 8) {
+      await new Promise((r) => setTimeout(r, 0));
+      lastYield = performance.now();
+    }
+  }
 
   const newCxRaw = simNodes.reduce((s, n) => s + n.x, 0) / simNodes.length;
   const newCyRaw = simNodes.reduce((s, n) => s + n.y, 0) / simNodes.length;

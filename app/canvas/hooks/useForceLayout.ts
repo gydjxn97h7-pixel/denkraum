@@ -23,6 +23,8 @@ export function useForceLayout({
   const layoutFromRef = useRef<Map<number, { x: number; y: number }> | null>(
     null,
   );
+  // Guards against overlapping solves (the compute is now async / chunked).
+  const busyRef = useRef(false);
 
   // Cancel any in-flight rAF loop when the component unmounts so we don't
   // call setState after unmount (wasted work; React 18 silences the warning
@@ -34,15 +36,24 @@ export function useForceLayout({
     };
   }, []);
 
-  const runForceLayout = useCallback(() => {
+  const runForceLayout = useCallback(async () => {
     // Read current state from refs — avoids capturing nodes/connections as
     // closure deps, which would cause this callback to be recreated on every
     // drag frame and every animation frame.
+    if (busyRef.current) return; // a solve is already in progress
     const currentNodes = Array.from(nodeMapRef.current.values());
     const currentConnections = connectionsRef.current;
     if (currentNodes.length <= 1) return;
 
-    const targets = computeForceLayout(currentNodes, currentConnections);
+    // The d3 solve is async (lazy-loaded + chunked so it doesn't block the
+    // main thread); ignore re-clicks until it resolves.
+    busyRef.current = true;
+    let targets: Array<{ id: number; newX: number; newY: number }>;
+    try {
+      targets = await computeForceLayout(currentNodes, currentConnections);
+    } finally {
+      busyRef.current = false;
+    }
     const targetMap = new Map(targets.map((t) => [t.id, t]));
 
     // Capture starting positions (current interpolated state if mid-animation)
