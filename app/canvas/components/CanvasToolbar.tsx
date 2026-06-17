@@ -1,4 +1,5 @@
 "use client";
+import { memo } from "react";
 import { ACCENT } from "../lib/canvas-types";
 import type { NodeType } from "../lib/canvas-types";
 import { ShapeButton, renderShapeIcon } from "./ShapeButton";
@@ -49,7 +50,7 @@ const cluster: React.CSSProperties = {
 // Export · View) so the bar reads as distinct groups rather than one long rail.
 // The wrapper centers within the space to the right of the sidebar so the
 // clusters never overlap the strip or panel on narrow viewports.
-export function CanvasToolbar({
+function CanvasToolbarImpl({
   panelOpen,
   isPresenting,
   canvasRef,
@@ -292,3 +293,5 @@ export function CanvasToolbar({
     </div>
   );
 }
+
+export const CanvasToolbar = memo(CanvasToolbarImpl);

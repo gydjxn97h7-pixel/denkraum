@@ -1,4 +1,5 @@
 "use client";
+import { memo } from "react";
 import type { PanelSection } from "../lib/canvas-types";
 import { LayoutDashboard, Workflow, Play, FolderOpen, Keyboard } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
@@ -10,7 +11,7 @@ interface SidebarStripProps {
 }
 
 // ── Sidebar Strip (always visible, 52px) ──
-export function SidebarStrip({
+function SidebarStripImpl({
   isPresenting,
   activePanel,
   setActivePanel,
@@ -196,3 +197,5 @@ export function SidebarStrip({
     </div>
   );
 }
+
+export const SidebarStrip = memo(SidebarStripImpl);

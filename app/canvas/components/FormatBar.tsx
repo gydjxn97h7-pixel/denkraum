@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, memo } from "react";
 import { applyFontSizeToSelection, FONT_SIZE_LADDER } from "../lib/rich-text";
 import { Bold, Italic, Underline } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
@@ -19,7 +19,7 @@ type BarState = {
 // this bar deliberately ignores selections inside [data-doc-editor].
 // Buttons preventDefault on mousedown so the editable keeps focus and
 // selection while formatting is applied.
-export function FormatBar() {
+function FormatBarImpl() {
   const [bar, setBar] = useState<BarState | null>(null);
 
   const refresh = useCallback(() => {
@@ -204,3 +204,5 @@ export function FormatBar() {
     </div>
   );
 }
+
+export const FormatBar = memo(FormatBarImpl);

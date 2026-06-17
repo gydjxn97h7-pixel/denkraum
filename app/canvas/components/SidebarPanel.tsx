@@ -1,4 +1,5 @@
 "use client";
+import { memo } from "react";
 import type { CanvasNode, PanelSection } from "../lib/canvas-types";
 import { SidebarNodeItem } from "./SidebarNodeItem";
 import { PresentationPanel } from "./PresentationPanel";
@@ -38,7 +39,7 @@ interface SidebarPanelProps {
 }
 
 // ── Sidebar Panel (220px, shown when panel open) ──
-export function SidebarPanel({
+function SidebarPanelImpl({
   activePanel,
   setActivePanel,
   isPresenting,
@@ -533,3 +534,5 @@ export function SidebarPanel({
     </div>
   );
 }
+
+export const SidebarPanel = memo(SidebarPanelImpl);

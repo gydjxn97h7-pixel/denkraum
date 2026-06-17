@@ -1,11 +1,12 @@
 "use client";
+import { memo } from "react";
 
 interface ToastProps {
   toast: { msg: string; variant: "success" | "error" } | null;
 }
 
 // ── Toast ── (transient save/load feedback, bottom-left)
-export function Toast({ toast }: ToastProps) {
+function ToastImpl({ toast }: ToastProps) {
   if (!toast) return null;
   return (
     <div
@@ -46,3 +47,5 @@ export function Toast({ toast }: ToastProps) {
     </div>
   );
 }
+
+export const Toast = memo(ToastImpl);

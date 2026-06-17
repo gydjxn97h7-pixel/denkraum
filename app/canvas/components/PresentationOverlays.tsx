@@ -1,4 +1,5 @@
 "use client";
+import { memo } from "react";
 
 interface PresentationOverlaysProps {
   isPresenting: boolean;
@@ -8,7 +9,7 @@ interface PresentationOverlaysProps {
 }
 
 // Presentation-mode chrome: viewport frame, entry overlay, and bottom HUD.
-export function PresentationOverlays({
+function PresentationOverlaysImpl({
   isPresenting,
   showPresentOverlay,
   presentationIndex,
@@ -114,3 +115,5 @@ export function PresentationOverlays({
     </>
   );
 }
+
+export const PresentationOverlays = memo(PresentationOverlaysImpl);

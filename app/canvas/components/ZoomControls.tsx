@@ -1,4 +1,5 @@
 "use client";
+import { memo } from "react";
 import { MIN_ZOOM, MAX_ZOOM } from "../lib/canvas-types";
 import { Minus, Plus } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
@@ -11,7 +12,7 @@ interface ZoomControlsProps {
 }
 
 // ── Zoom controls ── (bottom-right − / % / + / Reset cluster)
-export function ZoomControls({
+function ZoomControlsImpl({
   zoom,
   setZoom,
   setPan,
@@ -104,3 +105,5 @@ export function ZoomControls({
     </div>
   );
 }
+
+export const ZoomControls = memo(ZoomControlsImpl);

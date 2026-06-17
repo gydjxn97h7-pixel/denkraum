@@ -119,6 +119,8 @@ export default function Canvas() {
   const copiedNodeRef = useRef<CanvasNode | null>(null);
   const connectionsRef = useRef(connections);
   const nodesRef = useRef(nodes); // mirrors nodes state; kept current in the sync block below
+  const boardNameRef = useRef(boardName);
+  boardNameRef.current = boardName;
 
   // ── rAF-based interaction refs ────────────────────────────────────────────────
   // Mirror latest state into refs so mouse handlers never capture stale closures
@@ -247,6 +249,23 @@ export default function Canvas() {
 
   const saveBoard = useCallback(() => {
     try {
+      // Read live values from refs so this callback stays referentially stable
+      // (it's passed to the memoized sidebar and bound to a keyboard shortcut).
+      const boardName = boardNameRef.current;
+      const payload = JSON.stringify(
+        {
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          boardName,
+          pan: panRef.current,
+          zoom: zoomRef.current,
+          nodes: nodesRef.current,
+          connections: connectionsRef.current,
+          presentationOrder: presentationOrderRef.current,
+        },
+        null,
+        2,
+      );
       const slug =
         boardName
           .toLowerCase()
@@ -254,20 +273,6 @@ export default function Canvas() {
           .replace(/[^a-z0-9-]/g, "")
           .slice(0, 40) || "untitled-board";
       const date = new Date().toISOString().slice(0, 10);
-      const payload = JSON.stringify(
-        {
-          version: 1,
-          exportedAt: new Date().toISOString(),
-          boardName,
-          pan,
-          zoom,
-          nodes,
-          connections,
-          presentationOrder,
-        },
-        null,
-        2,
-      );
       const blob = new Blob([payload], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -283,9 +288,14 @@ export default function Canvas() {
     } catch {
       setToast({ msg: "Save failed", variant: "error" });
     }
-  }, [nodes, connections, boardName, presentationOrder, pan, zoom]);
+  }, []);
 
   saveBoardRef.current = saveBoard;
+
+  const onLoadBoardClick = useCallback(
+    () => denkraumFileInputRef.current?.click(),
+    [],
+  );
 
   const onDenkraumFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1133,14 +1143,24 @@ export default function Canvas() {
   });
 
   // ── Vector PDF export (jsPDF direct) ────────────────────────────────────────
+  // Read from refs so these stay stable for the memoized toolbar.
   const exportPdfVector = useCallback(async () => {
-    await exportBoardPdf(nodes, connections, boardName);
-  }, [nodes, connections, boardName]);
+    await exportBoardPdf(
+      nodesRef.current,
+      connectionsRef.current,
+      boardNameRef.current,
+    );
+  }, []);
 
   // ── Markdown export ─────────────────────────────────────────────────────────
   const exportMarkdown = useCallback(() => {
-    exportBoardMarkdown(nodes, connections, presentationOrder, boardName);
-  }, [nodes, connections, presentationOrder, boardName]);
+    exportBoardMarkdown(
+      nodesRef.current,
+      connectionsRef.current,
+      presentationOrderRef.current,
+      boardNameRef.current,
+    );
+  }, []);
 
   // ── Document editor ─────────────────────────────────────────────────────────
   const openDocument = useCallback((nodeId: number) => {
@@ -1234,8 +1254,9 @@ export default function Canvas() {
     }
   }, [nodeMap, docEditor]);
 
-  const startPresentation = () => {
-    if (presentActiveSeq.length === 0) return;
+  const startPresentation = useCallback(() => {
+    const seq = presentActiveSeqRef.current;
+    if (seq.length === 0) return;
     prePresentStateRef.current = {
       pan: panRef.current,
       zoom: zoomRef.current,
@@ -1247,8 +1268,9 @@ export default function Canvas() {
     setContextMenu(null);
     setColorPicker(null);
     setTextColorPicker(null);
-    centerNodeForPresentation(presentActiveSeq[0]);
-  };
+    centerNodeForPresentation(seq[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerNodeForPresentation]);
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const panelOpen = activePanel !== null;
@@ -1260,8 +1282,7 @@ export default function Canvas() {
         background: "#E8EBE6",
         overflow: "hidden",
         position: "relative",
-        fontFamily:
-          "var(--font-geist-mono), ui-monospace, monospace",
+        fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
       }}
       onClick={() => setContextMenu(null)}
     >
@@ -1339,7 +1360,7 @@ export default function Canvas() {
         movePresentationNodeDown={movePresentationNodeDown}
         onPresent={startPresentation}
         saveBoard={saveBoard}
-        onLoadBoardClick={() => denkraumFileInputRef.current?.click()}
+        onLoadBoardClick={onLoadBoardClick}
       />
 
       <CanvasToolbar
