@@ -15,15 +15,16 @@ export function PanelSectionLabel({
   return (
     <div
       style={{
-        fontSize: 11,
+        fontSize: 16,
         fontWeight: 600,
-        letterSpacing: "0.08em",
+        letterSpacing: "0.04em",
+        lineHeight: 1.1,
         textTransform: "uppercase",
-        color: "rgba(42,40,35,0.4)",
+        color: "rgba(42,40,35,0.55)",
         fontFamily: "var(--font-clash), system-ui, sans-serif",
         padding: "0 16px",
         marginTop: first ? 0 : 24,
-        marginBottom: 8,
+        marginBottom: 10,
       }}
     >
       {children}

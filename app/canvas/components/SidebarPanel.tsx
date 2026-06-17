@@ -104,9 +104,10 @@ function SidebarPanelImpl({
       >
         <span
           style={{
-            fontSize: 11,
+            fontSize: 20,
             fontWeight: 600,
-            letterSpacing: "0.1em",
+            letterSpacing: "0.02em",
+            lineHeight: 1,
             color: "#2A2823",
             fontFamily: "var(--font-clash), system-ui, sans-serif",
           }}
