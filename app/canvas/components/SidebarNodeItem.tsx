@@ -6,11 +6,16 @@ import {
   Squircle,
   Circle,
   Diamond,
+  Triangle,
+  Star,
+  StickyNote,
+  ListChecks,
+  Link,
   Type,
   Image as ImageIcon,
   FileText,
 } from "lucide-react";
-import { OvalIcon } from "./ShapeButton";
+import { OvalIcon, PolygonGlyph } from "./ShapeButton";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 interface SidebarNodeItemProps {
@@ -31,17 +36,30 @@ const TYPE_LABELS: Record<NodeType, string> = {
   circle: "Circle",
   oval: "Oval",
   diamond: "Diamond",
+  triangle: "Triangle",
+  star: "Star",
+  arrow: "Arrow",
+  parallelogram: "Parallelogram",
+  sticky: "Sticky Note",
+  checklist: "Checklist",
+  link: "Link",
   text: "Text",
   image: "Image",
   textfile: "File",
 };
 
-// Node-type glyphs from the shared Lucide set (oval has no Lucide match).
+// Node-type glyphs from the shared Lucide set (oval / arrow / parallelogram have
+// no Lucide match and use custom glyphs in NodeIcon below).
 const TYPE_ICON: Partial<Record<NodeType, typeof Square>> = {
   block: Square,
   rounded: Squircle,
   circle: Circle,
   diamond: Diamond,
+  triangle: Triangle,
+  star: Star,
+  sticky: StickyNote,
+  checklist: ListChecks,
+  link: Link,
   text: Type,
   image: ImageIcon,
   textfile: FileText,
@@ -50,6 +68,8 @@ const TYPE_ICON: Partial<Record<NodeType, typeof Square>> = {
 function NodeIcon({ type, active }: { type: NodeType; active: boolean }) {
   const color = active ? "#C56B47" : "rgba(42,40,35,0.6)";
   if (type === "oval") return <OvalIcon size={ICON.sm} color={color} />;
+  if (type === "arrow" || type === "parallelogram")
+    return <PolygonGlyph type={type} size={ICON.sm} color={color} />;
   const Icon = TYPE_ICON[type] ?? Square;
   return (
     <Icon

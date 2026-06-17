@@ -1,6 +1,7 @@
 "use client";
-import { memo } from "react";
+import { Fragment, memo } from "react";
 import type { CanvasNode, PanelSection } from "../lib/canvas-types";
+import type { PresentationStep } from "../lib/presentation";
 import { SidebarNodeItem } from "./SidebarNodeItem";
 import { PresentationPanel } from "./PresentationPanel";
 import { PanelSectionLabel, StatusRow } from "./panel-ui";
@@ -26,12 +27,16 @@ interface SidebarPanelProps {
   focusNode: (id: number) => void;
   updateNodeLabel: (id: number, label: string) => void;
   // Presentation section
-  presentationOrder: number[];
+  presentSteps: PresentationStep[];
   nodeMap: Map<number, CanvasNode>;
   presentActiveSeqLength: number;
   toggleExcludeFromPresentation: (id: number, toExclude: boolean) => void;
-  movePresentationNodeUp: (id: number) => void;
-  movePresentationNodeDown: (id: number) => void;
+  movePresentationStep: (stepIndex: number, dir: -1 | 1) => void;
+  moveGroupMember: (groupId: string, memberId: number, dir: -1 | 1) => void;
+  groupNodes: (ids: number[]) => void;
+  addNodeToGroup: (nodeId: number, groupId: string) => void;
+  removeNodeFromGroup: (nodeId: number) => void;
+  dissolveGroup: (groupId: string) => void;
   onPresent: () => void;
   // Save / Load section
   saveBoard: () => void;
@@ -55,12 +60,16 @@ function SidebarPanelImpl({
   setEditingSidebarNodeId,
   focusNode,
   updateNodeLabel,
-  presentationOrder,
+  presentSteps,
   nodeMap,
   presentActiveSeqLength,
   toggleExcludeFromPresentation,
-  movePresentationNodeUp,
-  movePresentationNodeDown,
+  movePresentationStep,
+  moveGroupMember,
+  groupNodes,
+  addNodeToGroup,
+  removeNodeFromGroup,
+  dissolveGroup,
   onPresent,
   saveBoard,
   onLoadBoardClick,
@@ -73,7 +82,7 @@ function SidebarPanelImpl({
         top: 12,
         left: 76,
         height: "calc(100vh - 24px)",
-        width: 220,
+        width: 340,
         background:
           "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
         backdropFilter: "blur(24px)",
@@ -85,8 +94,7 @@ function SidebarPanelImpl({
         display: panelOpen && !isPresenting ? "flex" : "none",
         flexDirection: "column",
         overflow: "hidden",
-        fontFamily:
-          "var(--font-geist-mono), ui-monospace, monospace",
+        fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
       }}
     >
       {/* ── Panel Header (dynamic title) ── */}
@@ -133,12 +141,10 @@ function SidebarPanelImpl({
             alignItems: "center",
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.color =
-              "rgba(42,40,35,0.8)";
+            (e.currentTarget as HTMLElement).style.color = "rgba(42,40,35,0.8)";
           }}
           onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.color =
-              "rgba(42,40,35,0.7)";
+            (e.currentTarget as HTMLElement).style.color = "rgba(42,40,35,0.7)";
           }}
         >
           <X size={ICON.md} {...ICON_PROPS} />
@@ -219,7 +225,11 @@ function SidebarPanelImpl({
                 alignItems: "center",
               }}
             >
-              <LayoutDashboard size={ICON.sm} {...ICON_PROPS} color="rgba(42,40,35,0.6)" />
+              <LayoutDashboard
+                size={ICON.sm}
+                {...ICON_PROPS}
+                color="rgba(42,40,35,0.6)"
+              />
             </div>
 
             {editingBoardName ? (
@@ -313,7 +323,9 @@ function SidebarPanelImpl({
             paddingTop: 16,
           }}
         >
-          <PanelSectionLabel first>All Nodes · {nodes.length}</PanelSectionLabel>
+          <PanelSectionLabel first>
+            All Nodes · {nodes.length}
+          </PanelSectionLabel>
           {nodes.length === 0 ? (
             <div
               style={{
@@ -349,12 +361,16 @@ function SidebarPanelImpl({
       {/* ── PRESENTATION section ── */}
       {activePanel === "presentation" && (
         <PresentationPanel
-          presentationOrder={presentationOrder}
+          presentSteps={presentSteps}
           nodeMap={nodeMap}
           presentActiveSeqLength={presentActiveSeqLength}
           toggleExcludeFromPresentation={toggleExcludeFromPresentation}
-          movePresentationNodeUp={movePresentationNodeUp}
-          movePresentationNodeDown={movePresentationNodeDown}
+          movePresentationStep={movePresentationStep}
+          moveGroupMember={moveGroupMember}
+          groupNodes={groupNodes}
+          addNodeToGroup={addNodeToGroup}
+          removeNodeFromGroup={removeNodeFromGroup}
+          dissolveGroup={dissolveGroup}
           onPresent={onPresent}
         />
       )}
@@ -393,11 +409,15 @@ function SidebarPanelImpl({
                 "rgba(42,40,35,0.03)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background =
-                "transparent";
+              (e.currentTarget as HTMLElement).style.background = "transparent";
             }}
           >
-            <Save size={ICON.sm} {...ICON_PROPS} color="rgba(42,40,35,0.75)" style={{ flexShrink: 0 }} />
+            <Save
+              size={ICON.sm}
+              {...ICON_PROPS}
+              color="rgba(42,40,35,0.75)"
+              style={{ flexShrink: 0 }}
+            />
             <span
               style={{
                 flex: 1,
@@ -447,11 +467,15 @@ function SidebarPanelImpl({
                 "rgba(42,40,35,0.03)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background =
-                "transparent";
+              (e.currentTarget as HTMLElement).style.background = "transparent";
             }}
           >
-            <FolderOpen size={ICON.sm} {...ICON_PROPS} color="rgba(42,40,35,0.6)" style={{ flexShrink: 0 }} />
+            <FolderOpen
+              size={ICON.sm}
+              {...ICON_PROPS}
+              color="rgba(42,40,35,0.6)"
+              style={{ flexShrink: 0 }}
+            />
             <span
               style={{
                 flex: 1,
@@ -477,59 +501,69 @@ function SidebarPanelImpl({
           }}
         >
           <PanelSectionLabel first>Keyboard</PanelSectionLabel>
-          {(
-            [
-              { kbd: "⌫  Delete", desc: "Delete selected" },
-              { kbd: "⌘ C", desc: "Copy node" },
-              { kbd: "⌘ V", desc: "Paste node" },
-              { kbd: "⌘ S", desc: "Save board" },
-              { kbd: "Tab", desc: "Add child node" },
-              { kbd: "Enter", desc: "Add sibling node" },
-              { kbd: "Double-click", desc: "Edit node text" },
-              { kbd: "F", desc: "Toggle filter" },
-              { kbd: "↓ / ↑", desc: "Cycle filter results" },
-              { kbd: "Esc", desc: "Cancel / close" },
-              { kbd: "⌃ Scroll", desc: "Zoom in / out" },
-              { kbd: "Right-click", desc: "Insert shape" },
-              { kbd: "Click dot →", desc: "Connect nodes" },
-              { kbd: "→ / Space", desc: "Next slide" },
-              { kbd: "←", desc: "Prev slide" },
-            ] as { kbd: string; desc: string }[]
-          ).map(({ kbd, desc }) => (
-            <div
-              key={kbd}
-              style={{
-                height: 28,
-                display: "flex",
-                alignItems: "center",
-                padding: "0 16px",
-                gap: 12,
-              }}
-            >
-              <kbd
-                style={{
-                  fontSize: 11,
-                  color: "rgba(42,40,35,0.7)",
-                  background: "rgba(42,40,35,0.04)",
-                  border: "1px solid rgba(42,40,35,0.07)",
-                  borderRadius: 8,
-                  padding: "4px 8px",
-                  fontFamily: "inherit",
-                  flexShrink: 0,
-                }}
-              >
-                {kbd}
-              </kbd>
-              <span
-                style={{
-                  fontSize: 11,
-                  color: "rgba(42,40,35,0.4)",
-                }}
-              >
-                {desc}
-              </span>
-            </div>
-          ))}
+          {/* Two-column grid: fixed badge column + flexible description column.
+              gridAutoRows minmax(28px, auto) keeps the row rhythm but lets a row
+              grow when its description wraps, so text never bleeds downward. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "100px 1fr",
+              columnGap: 10,
+              rowGap: 6,
+              gridAutoRows: "minmax(28px, auto)",
+              alignItems: "center",
+              padding: "4px 14px 12px",
+            }}
+          >
+            {(
+              [
+                { kbd: "⌫  Delete", desc: "Delete selected" },
+                { kbd: "⌘ C", desc: "Copy node" },
+                { kbd: "⌘ V", desc: "Paste node" },
+                { kbd: "⌘ S", desc: "Save board" },
+                { kbd: "Tab", desc: "Add child node" },
+                { kbd: "Enter", desc: "Add sibling node" },
+                { kbd: "Double-click", desc: "Edit node text" },
+                { kbd: "F", desc: "Toggle filter" },
+                { kbd: "↓ / ↑", desc: "Cycle filter results" },
+                { kbd: "Esc", desc: "Cancel / close" },
+                { kbd: "⌃ Scroll", desc: "Zoom in / out" },
+                { kbd: "Right-click", desc: "Insert shape" },
+                { kbd: "Click dot →", desc: "Connect nodes" },
+                { kbd: "Drag → Group", desc: "Add node to group (Story Path)" },
+                { kbd: "Drag out", desc: "Remove node from group" },
+                { kbd: "→ / Space", desc: "Next slide" },
+                { kbd: "←", desc: "Prev slide" },
+              ] as { kbd: string; desc: string }[]
+            ).map(({ kbd, desc }) => (
+              <Fragment key={kbd}>
+                <kbd
+                  style={{
+                    fontSize: 11,
+                    color: "rgba(42,40,35,0.7)",
+                    background: "rgba(42,40,35,0.04)",
+                    border: "1px solid rgba(42,40,35,0.07)",
+                    borderRadius: 8,
+                    padding: "4px 8px",
+                    fontFamily: "inherit",
+                    justifySelf: "start",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {kbd}
+                </kbd>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "rgba(42,40,35,0.4)",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {desc}
+                </span>
+              </Fragment>
+            ))}
+          </div>
         </div>
       )}
     </div>

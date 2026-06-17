@@ -7,8 +7,18 @@ export type NodeType =
   | "oval"
   | "diamond"
   | "rounded"
+  | "triangle"
+  | "star"
+  | "arrow"
+  | "parallelogram"
+  | "sticky"
+  | "checklist"
+  | "link"
   | "image"
   | "textfile";
+
+// One row of a checklist node. `id` is unique within its node only.
+export type ChecklistItem = { id: number; text: string; checked: boolean };
 
 // Inline rich text: a field is a list of lines, each line a list of styled
 // runs. Marks are additive overrides on top of the node's base style
@@ -58,7 +68,17 @@ export type CanvasNode = {
   textFileContent?: string;
   textFileName?: string;
   label?: string;
+  // Rows for "checklist" nodes — toggled on-canvas, edited in edit mode.
+  checklistItems?: ChecklistItem[];
+  // "link" nodes: the target URL and its cached favicon URL. The fetched page
+  // title is stored in `title` (so search/exports pick it up for free).
+  linkUrl?: string;
+  linkFavicon?: string;
   excludeFromPresentation?: boolean;
+  // Nodes sharing a presentationGroupId form one presentation step (the camera
+  // zooms to fit all of them at once). Members are kept contiguous in
+  // presentationOrder; see lib/presentation.ts.
+  presentationGroupId?: string;
   // Present only when the field carries inline formatting; `title` / `body`
   // always hold the derived plain text.
   titleRich?: RichText;

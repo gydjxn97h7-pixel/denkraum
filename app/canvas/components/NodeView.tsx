@@ -1,10 +1,560 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ACCENT } from "../lib/canvas-types";
-import { NODE_SHADOW, ICON, ICON_PROPS } from "../lib/design-tokens";
-import { FileText, Grip } from "lucide-react";
-import type { CanvasNode, ConnectDrag, RichText } from "../lib/canvas-types";
+import { NODE_SHADOW, ICON, ICON_PROPS, STICKY_FILL } from "../lib/design-tokens";
+import {
+  FileText,
+  Grip,
+  Square,
+  CheckSquare,
+  Plus,
+  X,
+  ChevronUp,
+  ChevronDown,
+  Globe,
+} from "lucide-react";
+import { domainOf } from "../lib/link-preview";
+import type {
+  CanvasNode,
+  ChecklistItem,
+  ConnectDrag,
+  RichText,
+  NodeType,
+} from "../lib/canvas-types";
 import { setEditableContent, editableRichText } from "../lib/rich-text";
+import {
+  polygonPoints,
+  pointsAttr,
+  isPolygonType,
+} from "../lib/shape-geometry";
+
+// Empty-state placeholder text shown in each polygon shape's editable label.
+const POLY_PLACEHOLDER: Partial<Record<NodeType, string>> = {
+  diamond: "Diamond",
+  triangle: "Triangle",
+  star: "Star",
+  arrow: "Arrow",
+  parallelogram: "Parallelogram",
+};
+
+// ── Checklist node interior ────────────────────────────────────────────────────
+// Renders an editable title plus a list of toggleable todo rows. Checkboxes
+// toggle on the canvas without entering edit mode; double-clicking the node opens
+// edit mode where rows can be retyped, added, removed and reordered.
+//
+// All mutations are computed here and committed as a whole new items array via
+// `commitChecklist` (one discrete change = one undo entry). In-progress row text
+// lives in the DOM (contentEditable) and is read back with `readItems()` at the
+// moment of any mutation or on edit exit, so a toggle/add never discards a
+// half-typed row.
+function ChecklistView({
+  node,
+  isEditing,
+  isSelected,
+  editingNodeIdRef,
+  onExitEdit,
+  commitNodeText,
+  commitChecklist,
+  onEditablePaste,
+  fontSize,
+}: {
+  node: CanvasNode;
+  isEditing: boolean;
+  isSelected: boolean;
+  editingNodeIdRef: React.RefObject<number | null>;
+  onExitEdit: () => void;
+  commitNodeText: (id: number, field: "title" | "body", rich: RichText) => void;
+  commitChecklist?: (id: number, items: ChecklistItem[]) => void;
+  onEditablePaste: (e: React.ClipboardEvent) => void;
+  fontSize: number;
+}) {
+  const items = node.checklistItems ?? [];
+  const itemFs = Math.max(11, fontSize - 1);
+
+  // Read the current rows, taking each row's text from the live DOM (so edits in
+  // flight are preserved) and its checked state from props.
+  const readItems = (): ChecklistItem[] =>
+    items.map((it) => {
+      const el = document.querySelector<HTMLElement>(
+        `[data-node-id="${node.id}"] [data-cl-item="${it.id}"] .cl-text`,
+      );
+      return {
+        id: it.id,
+        checked: it.checked,
+        text: el ? (el.textContent ?? "") : it.text,
+      };
+    });
+
+  const commit = (next: ChecklistItem[]) => commitChecklist?.(node.id, next);
+  const commitIfChanged = (next: ChecklistItem[]) => {
+    if (JSON.stringify(next) !== JSON.stringify(items)) commit(next);
+  };
+  const nextId = () => items.reduce((m, it) => Math.max(m, it.id), 0) + 1;
+
+  const toggle = (id: number) =>
+    commit(
+      readItems().map((it) =>
+        it.id === id ? { ...it, checked: !it.checked } : it,
+      ),
+    );
+  const removeItem = (id: number) =>
+    commit(readItems().filter((it) => it.id !== id));
+  const moveItem = (id: number, dir: -1 | 1) => {
+    const arr = readItems();
+    const i = arr.findIndex((it) => it.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= arr.length) return;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    commit(arr);
+  };
+  const addItem = () => {
+    const id = nextId();
+    commit([...readItems(), { id, text: "", checked: false }]);
+    setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(
+        `[data-node-id="${node.id}"] [data-cl-item="${id}"] .cl-text`,
+      );
+      el?.focus();
+    }, 0);
+  };
+
+  // Leave edit mode (committing any in-flight row text) once the node is no
+  // longer selected — i.e. the user clicked elsewhere. Internal controls all
+  // stopPropagation, so they never deselect the node and thus never trip this.
+  useEffect(() => {
+    if (isEditing && !isSelected) {
+      commitIfChanged(readItems());
+      onExitEdit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, isSelected]);
+
+  // Stop a control button from starting a node drag or stealing edit focus in a
+  // way that would clobber the in-flight row text.
+  const swallow = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  const miniBtn: React.CSSProperties = {
+    width: 18,
+    height: 18,
+    border: "none",
+    background: "transparent",
+    color: "rgba(42,40,35,0.4)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 0,
+    flexShrink: 0,
+  };
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        height: "100%",
+        gap: 6,
+        overflow: "hidden",
+      }}
+    >
+      {/* Title */}
+      <div
+        ref={(el) => {
+          if (el && editingNodeIdRef.current !== node.id)
+            setEditableContent(el, node.titleRich, node.title);
+        }}
+        contentEditable={isEditing}
+        suppressContentEditableWarning
+        data-placeholder="Checklist"
+        onMouseDown={(e) => e.stopPropagation()}
+        onPaste={onEditablePaste}
+        onFocus={() => {
+          editingNodeIdRef.current = node.id;
+        }}
+        onBlur={(e) =>
+          commitNodeText(
+            node.id,
+            "title",
+            editableRichText(e.target as HTMLElement),
+          )
+        }
+        style={{
+          fontSize,
+          fontWeight: node.bold ? 700 : 600,
+          fontStyle: node.italic ? "italic" : "normal",
+          color: node.textColor ?? "#2A2823",
+          fontFamily: "var(--font-clash), system-ui, sans-serif",
+          outline: "none",
+          letterSpacing: "-0.2px",
+          whiteSpace: "pre-wrap",
+          overflowWrap: "break-word",
+          wordBreak: "break-word",
+          overflow: "hidden",
+          flexShrink: 0,
+          pointerEvents: isEditing ? "auto" : "none",
+          cursor: isEditing ? "text" : "default",
+        }}
+      />
+
+      {/* Items */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 3,
+          overflow: "hidden",
+          flex: 1,
+        }}
+      >
+        {items.map((it, i) => (
+          <div
+            key={it.id}
+            data-cl-item={it.id}
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 6,
+              minWidth: 0,
+            }}
+          >
+            <button
+              type="button"
+              aria-label={it.checked ? "Uncheck item" : "Check item"}
+              onMouseDown={swallow}
+              onDoubleClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle(it.id);
+              }}
+              style={{
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                padding: 0,
+                marginTop: 1,
+                flexShrink: 0,
+                display: "flex",
+                color: it.checked
+                  ? "rgba(42,40,35,0.45)"
+                  : "rgba(42,40,35,0.7)",
+              }}
+            >
+              {it.checked ? (
+                <CheckSquare size={ICON.sm} {...ICON_PROPS} />
+              ) : (
+                <Square size={ICON.sm} {...ICON_PROPS} />
+              )}
+            </button>
+
+            <div
+              className="cl-text"
+              contentEditable={isEditing}
+              suppressContentEditableWarning
+              ref={(el) => {
+                if (el && editingNodeIdRef.current !== node.id)
+                  el.textContent = it.text;
+              }}
+              data-placeholder="Item"
+              onMouseDown={(e) => {
+                if (isEditing) e.stopPropagation();
+              }}
+              onPaste={onEditablePaste}
+              onFocus={() => {
+                editingNodeIdRef.current = node.id;
+              }}
+              style={{
+                flex: 1,
+                fontSize: itemFs,
+                lineHeight: 1.4,
+                color: it.checked
+                  ? "rgba(42,40,35,0.45)"
+                  : (node.textColor ?? "rgba(42,40,35,0.85)"),
+                textDecoration: it.checked ? "line-through" : "none",
+                outline: "none",
+                whiteSpace: "pre-wrap",
+                overflowWrap: "break-word",
+                wordBreak: "break-word",
+                overflow: "hidden",
+                minWidth: 0,
+                pointerEvents: isEditing ? "auto" : "none",
+                cursor: isEditing ? "text" : "default",
+              }}
+            />
+
+            {isEditing && (
+              <div style={{ display: "flex", gap: 1, flexShrink: 0 }}>
+                <button
+                  type="button"
+                  title="Move up"
+                  disabled={i === 0}
+                  onMouseDown={swallow}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    moveItem(it.id, -1);
+                  }}
+                  style={{ ...miniBtn, opacity: i === 0 ? 0.3 : 1 }}
+                >
+                  <ChevronUp size={14} {...ICON_PROPS} />
+                </button>
+                <button
+                  type="button"
+                  title="Move down"
+                  disabled={i === items.length - 1}
+                  onMouseDown={swallow}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    moveItem(it.id, 1);
+                  }}
+                  style={{
+                    ...miniBtn,
+                    opacity: i === items.length - 1 ? 0.3 : 1,
+                  }}
+                >
+                  <ChevronDown size={14} {...ICON_PROPS} />
+                </button>
+                <button
+                  type="button"
+                  title="Remove item"
+                  onMouseDown={swallow}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeItem(it.id);
+                  }}
+                  style={miniBtn}
+                >
+                  <X size={14} {...ICON_PROPS} />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {isEditing && (
+          <button
+            type="button"
+            onMouseDown={swallow}
+            onClick={(e) => {
+              e.stopPropagation();
+              addItem();
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              border: "none",
+              background: "transparent",
+              color: ACCENT,
+              cursor: "pointer",
+              padding: "2px 0",
+              marginTop: 2,
+              fontSize: itemFs,
+              fontFamily: "inherit",
+              fontWeight: 600,
+              flexShrink: 0,
+            }}
+          >
+            <Plus size={14} {...ICON_PROPS} />
+            Add item
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Link node interior ─────────────────────────────────────────────────────────
+// Shows favicon + domain + (fetched) title + full URL. Single click opens the
+// URL in a new tab; double-click opens a URL input. The two are disambiguated
+// with a short timer: a real double-click cancels the pending open, while the
+// open still fires inside the browser's transient-activation window so it isn't
+// popup-blocked.
+function LinkView({
+  node,
+  isEditing,
+  onExitEdit,
+  commitLinkUrl,
+  onOpenLink,
+  fontSize,
+}: {
+  node: CanvasNode;
+  isEditing: boolean;
+  onExitEdit: () => void;
+  commitLinkUrl: (id: number, rawUrl: string) => void;
+  onOpenLink: (url: string) => void;
+  fontSize: number;
+}) {
+  const url = node.linkUrl ?? "";
+  const [faviconError, setFaviconError] = useState(false);
+  const openTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (openTimerRef.current) clearTimeout(openTimerRef.current);
+    },
+    [],
+  );
+
+  if (isEditing) {
+    return (
+      <input
+        autoFocus
+        defaultValue={url}
+        placeholder="https://example.com"
+        spellCheck={false}
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            commitLinkUrl(node.id, (e.target as HTMLInputElement).value);
+            onExitEdit();
+          } else if (e.key === "Escape") {
+            onExitEdit();
+          }
+        }}
+        onBlur={(e) => {
+          commitLinkUrl(node.id, e.target.value);
+          onExitEdit();
+        }}
+        style={{
+          width: "100%",
+          fontSize: Math.max(11, fontSize - 1),
+          fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+          color: "#2A2823",
+          background: "rgba(42,40,35,0.05)",
+          border: "1px solid rgba(197,107,71,0.4)",
+          borderRadius: 8,
+          padding: "8px 10px",
+          outline: "none",
+          boxSizing: "border-box",
+        }}
+      />
+    );
+  }
+
+  if (!url) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          height: "100%",
+          color: "rgba(42,40,35,0.4)",
+          fontSize: Math.max(11, fontSize - 1),
+        }}
+      >
+        <Globe size={ICON.md} {...ICON_PROPS} />
+        Double-click to add a link
+      </div>
+    );
+  }
+
+  const domain = domainOf(url);
+  const title = (node.title ?? "").trim();
+  const showFavicon = !!node.linkFavicon && !faviconError;
+
+  return (
+    <div
+      onClick={(e) => {
+        e.stopPropagation();
+        if (openTimerRef.current) clearTimeout(openTimerRef.current);
+        openTimerRef.current = window.setTimeout(() => {
+          openTimerRef.current = null;
+          onOpenLink(url);
+        }, 240);
+      }}
+      onDoubleClick={() => {
+        // Cancel the pending single-click open; the event bubbles up to the
+        // node's generic double-click handler, which enters edit mode.
+        if (openTimerRef.current) {
+          clearTimeout(openTimerRef.current);
+          openTimerRef.current = null;
+        }
+      }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 3,
+        height: "100%",
+        overflow: "hidden",
+        cursor: "pointer",
+        minWidth: 0,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        {showFavicon ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={node.linkFavicon}
+            alt=""
+            width={16}
+            height={16}
+            draggable={false}
+            onError={() => setFaviconError(true)}
+            style={{ flexShrink: 0, borderRadius: 3, pointerEvents: "none" }}
+          />
+        ) : (
+          <Globe
+            size={16}
+            {...ICON_PROPS}
+            color="rgba(42,40,35,0.55)"
+            style={{ flexShrink: 0 }}
+          />
+        )}
+        <span
+          style={{
+            fontSize,
+            fontWeight: 600,
+            color: "#2A2823",
+            fontFamily: "var(--font-clash), system-ui, sans-serif",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            letterSpacing: "-0.1px",
+            minWidth: 0,
+          }}
+        >
+          {domain}
+        </span>
+      </div>
+
+      {title && (
+        <span
+          style={{
+            fontSize: Math.max(11, fontSize - 1),
+            color: "rgba(42,40,35,0.8)",
+            lineHeight: 1.4,
+            overflow: "hidden",
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflowWrap: "break-word",
+            wordBreak: "break-word",
+          }}
+        >
+          {title}
+        </span>
+      )}
+
+      <span
+        style={{
+          fontSize: Math.max(10, fontSize - 3),
+          color: "rgba(42,40,35,0.45)",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0,
+          marginTop: "auto",
+        }}
+      >
+        {url}
+      </span>
+    </div>
+  );
+}
 
 interface NodeViewProps {
   n: CanvasNode;
@@ -23,6 +573,9 @@ interface NodeViewProps {
   onOpenDocument: (nodeId: number) => void;
   setHoveredId: React.Dispatch<React.SetStateAction<number | null>>;
   commitNodeText: (id: number, field: "title" | "body", rich: RichText) => void;
+  commitChecklist?: (id: number, items: ChecklistItem[]) => void;
+  commitLinkUrl?: (id: number, rawUrl: string) => void;
+  onOpenLink?: (url: string) => void;
   startNodeDrag: (e: React.MouseEvent, id: number) => void;
   onDotClick: (e: React.MouseEvent, id: number) => void;
   onResizeMouseDown: (e: React.MouseEvent, id: number) => void;
@@ -49,6 +602,9 @@ export const NodeView = React.memo(function NodeView({
   onOpenDocument,
   setHoveredId,
   commitNodeText,
+  commitChecklist,
+  commitLinkUrl,
+  onOpenLink,
   startNodeDrag,
   onDotClick,
   onResizeMouseDown,
@@ -61,8 +617,14 @@ export const NodeView = React.memo(function NodeView({
   const isSel = isSelected;
   const isText = n.type === "text";
   const isCircle = n.type === "circle" || n.type === "oval";
-  const isDiamond = n.type === "diamond";
+  // Polygon shapes (diamond + triangle/star/arrow/parallelogram) share the
+  // SVG-silhouette rendering: transparent host, shadow via SVG filter, text in
+  // a centered overlay — as opposed to the CSS-card shapes (block/rounded/…).
+  const isPoly = isPolygonType(n.type);
   const isRounded = n.type === "rounded";
+  const isSticky = n.type === "sticky";
+  const isChecklist = n.type === "checklist";
+  const isLink = n.type === "link";
   const isImage = n.type === "image";
   const isTextFile = n.type === "textfile";
   const fs = n.fontSize ?? 13;
@@ -109,7 +671,12 @@ export const NodeView = React.memo(function NodeView({
 
   const isPotentialTarget = connecting && !isConnectSource && !isText;
 
-  const hostBg = isDiamond || isText || isImage ? "transparent" : "#FCFBF8";
+  const hostBg =
+    isPoly || isText || isImage
+      ? "transparent"
+      : isSticky
+        ? STICKY_FILL
+        : "#FCFBF8";
   // Borderless cards — the soft drop shadow does the separation now.
   const hostBorder = "none";
   // Elevation by state: selected/dragged sits highest, hover lifts slightly.
@@ -124,7 +691,7 @@ export const NodeView = React.memo(function NodeView({
   // text match clearly pops, beyond the surrounding nodes merely dimming.
   const searchRing = `0 0 0 2px ${ACCENT}, 0 0 16px rgba(197,107,71,0.40)`;
   const hostShadow =
-    isDiamond || isText
+    isPoly || isText
       ? "none"
       : onStage
         ? NODE_SHADOW.stage
@@ -133,7 +700,13 @@ export const NodeView = React.memo(function NodeView({
           : searchHit
             ? `${searchRing}, ${elevation}`
             : elevation;
-  const hostRadius = isCircle ? "50%" : isRounded ? 16 : 12;
+  const hostRadius = isCircle
+    ? "50%"
+    : isRounded
+      ? 16
+      : isSticky
+        ? 4
+        : 12;
 
   const showResize = (isHovered || isSel) && !isText;
   const isSource = isConnectSource;
@@ -195,11 +768,9 @@ export const NodeView = React.memo(function NodeView({
         boxShadow: hostShadow,
         padding: isText
           ? "8px 12px"
-          : isCircle
+          : isCircle || isPoly || isImage
             ? 0
-            : isDiamond
-              ? 0
-              : "12px 16px",
+            : "12px 16px",
         cursor:
           connecting && !isConnectSource ? "crosshair" : "default",
         userSelect: "none",
@@ -209,9 +780,9 @@ export const NodeView = React.memo(function NodeView({
             ? `2px solid ${ACCENT}`
             : isEditing
               ? "1.5px solid rgba(42,40,35,0.18)"
-              : // Diamond/text carry no box-shadow, so the search highlight
+              : // Polygon/text carry no box-shadow, so the search highlight
                 // rides on the outline instead.
-                searchHit && (isDiamond || isText)
+                searchHit && (isPoly || isText)
                 ? `2px solid ${ACCENT}`
                 : isText && (isSel || n.title === "")
                   ? "1.5px dashed rgba(176,121,94,0.5)"
@@ -228,8 +799,8 @@ export const NodeView = React.memo(function NodeView({
         isolation: "isolate",
       }}
     >
-      {/* Diamond */}
-      {isDiamond && (
+      {/* Polygon shapes — diamond / triangle / star / arrow / parallelogram */}
+      {isPoly && (
         <>
           <svg
             style={{
@@ -262,7 +833,7 @@ export const NodeView = React.memo(function NodeView({
               </filter>
             </defs>
             <polygon
-              points={`${n.w / 2},2 ${n.w - 2},${n.h / 2} ${n.w / 2},${n.h - 2} 2,${n.h / 2}`}
+              points={pointsAttr(polygonPoints(n.type, n.w, n.h) ?? [])}
               fill="#FCFBF8"
               stroke={
                 isPotentialTarget
@@ -282,16 +853,29 @@ export const NodeView = React.memo(function NodeView({
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              justifyContent: "center",
+              justifyContent:
+                n.type === "triangle" ? "flex-end" : "center",
               zIndex: 1,
-              padding: "0 28px",
+              // Per-shape inset so the label stays inside the silhouette: the
+              // triangle keeps text near its wide base, the arrow clears its
+              // head, the rest sit centered.
+              padding:
+                n.type === "triangle"
+                  ? "0 16px 10px"
+                  : n.type === "arrow"
+                    ? "0 30% 0 10%"
+                    : n.type === "star"
+                      ? "0 22%"
+                      : n.type === "parallelogram"
+                        ? "0 16%"
+                        : "0 26px",
             }}
           >
             <div
               ref={titleRef}
               contentEditable={isEditing}
               suppressContentEditableWarning
-              data-placeholder="Diamond"
+              data-placeholder={POLY_PLACEHOLDER[n.type] ?? ""}
               onMouseDown={(e) => e.stopPropagation()}
               onPaste={onEditablePaste}
               onFocus={() => {
@@ -489,8 +1073,46 @@ export const NodeView = React.memo(function NodeView({
         </div>
       )}
 
+      {/* Checklist */}
+      {isChecklist && (
+        <ChecklistView
+          node={n}
+          isEditing={isEditing}
+          isSelected={isSel}
+          editingNodeIdRef={editingNodeIdRef}
+          onExitEdit={() => {
+            editingNodeIdRef.current = null;
+            setIsEditing(false);
+          }}
+          commitNodeText={commitNodeText}
+          commitChecklist={commitChecklist}
+          onEditablePaste={onEditablePaste}
+          fontSize={fs}
+        />
+      )}
+
+      {/* Link */}
+      {isLink && (
+        <LinkView
+          node={n}
+          isEditing={isEditing}
+          onExitEdit={() => {
+            editingNodeIdRef.current = null;
+            setIsEditing(false);
+          }}
+          commitLinkUrl={commitLinkUrl ?? (() => {})}
+          onOpenLink={onOpenLink ?? (() => {})}
+          fontSize={fs}
+        />
+      )}
+
       {/* Block / Rounded / Circle */}
-      {!isText && !isDiamond && !isImage && !isTextFile && (
+      {!isText &&
+        !isPoly &&
+        !isImage &&
+        !isTextFile &&
+        !isChecklist &&
+        !isLink && (
         <>
           <div
             ref={titleRef}
@@ -503,7 +1125,9 @@ export const NodeView = React.memo(function NodeView({
                   ? "Oval"
                   : n.type === "rounded"
                     ? "Area"
-                    : "Block"
+                    : n.type === "sticky"
+                      ? "Note"
+                      : "Block"
             }
             onMouseDown={(e) => e.stopPropagation()}
             onPaste={onEditablePaste}

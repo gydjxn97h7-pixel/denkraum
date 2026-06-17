@@ -2,6 +2,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { easeInOutCubic } from "../lib/canvas-helpers";
 import type { CanvasNode } from "../lib/canvas-types";
+import {
+  DEBUG_CAMERA,
+  perfStart,
+  perfFrame,
+  perfEnd,
+} from "../lib/camera-perf";
 
 interface PresentationArgs {
   canvasRef: React.RefObject<HTMLDivElement | null>;
@@ -24,6 +30,11 @@ export function usePresentation({
   const [isPresenting, setIsPresenting] = useState(false);
   const [presentationIndex, setPresentationIndex] = useState(0);
   const [showPresentOverlay, setShowPresentOverlay] = useState(false);
+  // True only while the camera is gliding between steps. The expensive
+  // full-screen backdrop blur is dropped during the glide (it would re-blur the
+  // whole viewport every frame as the world moves under it) and restored once
+  // the camera settles.
+  const [cameraAnimating, setCameraAnimating] = useState(false);
 
   // Mirror latest state into refs so event handlers never capture stale closures
   const isPresentingRef = useRef(isPresenting);
@@ -61,17 +72,38 @@ export function usePresentation({
     return () => clearTimeout(t);
   }, [isPresenting]);
 
-  const centerNodeForPresentation = useCallback((id: number) => {
-    const n = nodeMapRef.current.get(id);
-    if (!n || !canvasRef.current) return;
+  // Animate the camera to fit one or more nodes at once. A single id is the
+  // 1-node case (identical framing to before); a group passes all its member
+  // ids and the camera fits their union bounding box.
+  const centerNodesForPresentation = useCallback((ids: number[]) => {
+    if (ids.length === 0 || !canvasRef.current) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let found = false;
+    for (const id of ids) {
+      const n = nodeMapRef.current.get(id);
+      if (!n) continue;
+      found = true;
+      if (n.x < minX) minX = n.x;
+      if (n.y < minY) minY = n.y;
+      if (n.x + n.w > maxX) maxX = n.x + n.w;
+      if (n.y + n.h > maxY) maxY = n.y + n.h;
+    }
+    if (!found) return;
+    const bw = Math.max(1, maxX - minX);
+    const bh = Math.max(1, maxY - minY);
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
     const r = canvasRef.current.getBoundingClientRect();
     const toZoom = Math.min(
       1.5,
-      Math.max(0.1, Math.min((r.width * 0.8) / n.w, (r.height * 0.8) / n.h)),
+      Math.max(0.1, Math.min((r.width * 0.8) / bw, (r.height * 0.8) / bh)),
     );
     const toPan = {
-      x: r.width / 2 - (n.x + n.w / 2) * toZoom,
-      y: r.height / 2 - (n.y + n.h / 2) * toZoom,
+      x: r.width / 2 - cx * toZoom,
+      y: r.height / 2 - cy * toZoom,
     };
 
     // Cancel in-flight animation; start from the last interpolated position
@@ -86,9 +118,20 @@ export function usePresentation({
 
     const DURATION = 600;
     const startTime = performance.now();
+    let lastFrame = startTime;
+    if (DEBUG_CAMERA)
+      perfStart(
+        `${ids.length === 1 ? "node" : `group×${ids.length}`} zoom ${fromZoom.toFixed(2)}→${toZoom.toFixed(2)} bbox ${Math.round(bw)}×${Math.round(bh)}`,
+      );
+    setCameraAnimating(true);
 
-    function tick(now: number) {
-      const raw = Math.min((now - startTime) / DURATION, 1);
+    function tick() {
+      // Use performance.now() (not the rAF timestamp) so both the inter-frame
+      // delta and the callback duration are measured against the same clock.
+      const frameStart = performance.now();
+      const dFrame = frameStart - lastFrame;
+      lastFrame = frameStart;
+      const raw = Math.min((frameStart - startTime) / DURATION, 1);
       const t = easeInOutCubic(raw);
       const curZoom = fromZoom + (toZoom - fromZoom) * t;
       const curPan = {
@@ -98,11 +141,15 @@ export function usePresentation({
       animCurrentRef.current = { pan: curPan, zoom: curZoom };
       setZoom(curZoom);
       setPan(curPan);
+      if (DEBUG_CAMERA)
+        perfFrame(frameStart, dFrame, performance.now() - frameStart);
       if (raw < 1) {
         animRafRef.current = requestAnimationFrame(tick);
       } else {
         animRafRef.current = null;
         animCurrentRef.current = null;
+        setCameraAnimating(false);
+        if (DEBUG_CAMERA) perfEnd();
       }
     }
 
@@ -110,17 +157,27 @@ export function usePresentation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // If presentation exits mid-glide (Esc cancels the rAF directly), make sure
+  // the animating flag doesn't stay stuck on, and flush any open perf capture.
+  useEffect(() => {
+    if (!isPresenting) {
+      setCameraAnimating(false);
+      if (DEBUG_CAMERA) perfEnd();
+    }
+  }, [isPresenting]);
+
   return {
     isPresenting,
     setIsPresenting,
     presentationIndex,
     setPresentationIndex,
     showPresentOverlay,
+    cameraAnimating,
     isPresentingRef,
     presentationIndexRef,
     prePresentStateRef,
     animRafRef,
     animCurrentRef,
-    centerNodeForPresentation,
+    centerNodesForPresentation,
   };
 }

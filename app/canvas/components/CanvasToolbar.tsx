@@ -1,10 +1,37 @@
 "use client";
-import { memo } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { ACCENT } from "../lib/canvas-types";
 import type { NodeType } from "../lib/canvas-types";
 import { ShapeButton, renderShapeIcon } from "./ShapeButton";
-import { FileDown, FileText, FilePlus, Network, Search } from "lucide-react";
+import {
+  FileDown,
+  FileText,
+  FilePlus,
+  Network,
+  Search,
+  Ellipsis,
+} from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
+
+// Primary shapes live in the toolbar; secondary shapes hide behind the overflow
+// "more shapes" button.
+const PRIMARY_SHAPES: { type: NodeType; label: string }[] = [
+  { type: "block", label: "Block" },
+  { type: "rounded", label: "Area" },
+  { type: "text", label: "Text" },
+  { type: "sticky", label: "Sticky Note" },
+  { type: "checklist", label: "Checklist" },
+  { type: "link", label: "Link" },
+  { type: "triangle", label: "Triangle" },
+  { type: "star", label: "Star" },
+  { type: "arrow", label: "Arrow" },
+  { type: "parallelogram", label: "Parallelogram" },
+];
+const SECONDARY_SHAPES: { type: NodeType; label: string }[] = [
+  { type: "circle", label: "Circle" },
+  { type: "oval", label: "Oval" },
+  { type: "diamond", label: "Diamond" },
+];
 
 interface CanvasToolbarProps {
   panelOpen: boolean;
@@ -79,6 +106,33 @@ function CanvasToolbarImpl({
     };
   };
 
+  const insertShape = (type: NodeType) => {
+    const c = canvasCenter();
+    if (!c) return;
+    setActiveShapeType(type);
+    addNode(c.cx, c.cy, type);
+  };
+
+  // "More shapes" overflow popover (secondary shapes). Closes on outside click
+  // or Escape.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMoreOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [moreOpen]);
+
   const exportBtn = (disabled: boolean): React.CSSProperties => ({
     height: 36,
     padding: "0 14px",
@@ -143,30 +197,73 @@ function CanvasToolbarImpl({
     >
       {/* ── Cluster: Shapes ── */}
       <div style={cluster}>
-        {(
-          [
-            { type: "block" as NodeType, label: "Block" },
-            { type: "rounded" as NodeType, label: "Area" },
-            { type: "circle" as NodeType, label: "Circle" },
-            { type: "oval" as NodeType, label: "Oval" },
-            { type: "diamond" as NodeType, label: "Diamond" },
-            { type: "text" as NodeType, label: "Text" },
-          ] as { type: NodeType; label: string }[]
-        ).map(({ type, label }) => (
+        {PRIMARY_SHAPES.map(({ type, label }) => (
           <ShapeButton
             key={type}
             label={label}
             isActive={activeShapeType === type}
-            onClick={() => {
-              const c = canvasCenter();
-              if (!c) return;
-              setActiveShapeType(type);
-              addNode(c.cx, c.cy, type);
-            }}
+            onClick={() => insertShape(type)}
           >
             {(stroke, active) => renderShapeIcon(type, stroke, active)}
           </ShapeButton>
         ))}
+
+        {/* Overflow: more shapes */}
+        <div ref={moreRef} style={{ position: "relative", display: "flex" }}>
+          <button
+            title="More shapes"
+            aria-label="More shapes"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((o) => !o)}
+            style={iconBtn(moreOpen, true)}
+            onMouseEnter={(e) => {
+              if (!moreOpen) {
+                (e.currentTarget as HTMLElement).style.color = "#2A2823";
+                (e.currentTarget as HTMLElement).style.background =
+                  "rgba(42,40,35,0.07)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!moreOpen) {
+                (e.currentTarget as HTMLElement).style.color =
+                  "rgba(42,40,35,0.85)";
+                (e.currentTarget as HTMLElement).style.background =
+                  "transparent";
+              }
+            }}
+          >
+            <Ellipsis size={ICON.lg} {...ICON_PROPS} />
+          </button>
+
+          {moreOpen && (
+            <div
+              role="menu"
+              style={{
+                position: "absolute",
+                top: "calc(100% + 10px)",
+                left: "50%",
+                transform: "translateX(-50%)",
+                ...cluster,
+                padding: "6px 8px",
+                zIndex: 1,
+              }}
+            >
+              {SECONDARY_SHAPES.map(({ type, label }) => (
+                <ShapeButton
+                  key={type}
+                  label={label}
+                  isActive={activeShapeType === type}
+                  onClick={() => {
+                    insertShape(type);
+                    setMoreOpen(false);
+                  }}
+                >
+                  {(stroke, active) => renderShapeIcon(type, stroke, active)}
+                </ShapeButton>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Cluster: Media ── */}

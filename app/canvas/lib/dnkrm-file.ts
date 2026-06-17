@@ -1,5 +1,24 @@
-import type { CanvasNode, NodeType } from "./canvas-types";
+import type { CanvasNode, ChecklistItem, NodeType } from "./canvas-types";
 import { richHasMarks, richToPlain, sanitizeRichText } from "./rich-text";
+
+// Validate a loaded checklist items array — drop anything malformed; coerce each
+// surviving row to { id, text, checked }. Returns undefined when there's nothing
+// usable so the field stays absent on non-checklist nodes.
+function sanitizeChecklistItems(raw: unknown): ChecklistItem[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const items: ChecklistItem[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    if (typeof o.id !== "number" || !Number.isFinite(o.id)) continue;
+    items.push({
+      id: Math.trunc(o.id),
+      text: typeof o.text === "string" ? o.text : "",
+      checked: o.checked === true,
+    });
+  }
+  return items.length > 0 ? items : undefined;
+}
 
 // ── .dnkrm file validation ────────────────────────────────────────────────────
 
@@ -10,6 +29,13 @@ const VALID_NODE_TYPES = new Set<string>([
   "oval",
   "diamond",
   "rounded",
+  "triangle",
+  "star",
+  "arrow",
+  "parallelogram",
+  "sticky",
+  "checklist",
+  "link",
   "image",
   "textfile",
 ]);
@@ -29,6 +55,7 @@ export function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
   const titleRich = sanitizeRichText(n.titleRich);
   const bodyRich = sanitizeRichText(n.bodyRich);
   const docRich = sanitizeRichText(n.docRich);
+  const checklistItems = sanitizeChecklistItems(n.checklistItems);
   return {
     id: Math.trunc(n.id as number),
     x: n.x as number,
@@ -52,6 +79,9 @@ export function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
     ...(typeof n.fontSize === "number" &&
       Number.isFinite(n.fontSize) && { fontSize: n.fontSize as number }),
     ...(typeof n.label === "string" && { label: n.label }),
+    ...(checklistItems && { checklistItems }),
+    ...(typeof n.linkUrl === "string" && { linkUrl: n.linkUrl }),
+    ...(typeof n.linkFavicon === "string" && { linkFavicon: n.linkFavicon }),
     ...(typeof n.imageUrl === "string" && { imageUrl: n.imageUrl }),
     // Document runs win over the stored plain mirror when both are present.
     ...(docRich
@@ -70,5 +100,9 @@ export function sanitizeLoadedNode(raw: unknown): CanvasNode | null {
     ...(typeof n.excludeFromPresentation === "boolean" && {
       excludeFromPresentation: n.excludeFromPresentation,
     }),
+    ...(typeof n.presentationGroupId === "string" &&
+      n.presentationGroupId && {
+        presentationGroupId: n.presentationGroupId,
+      }),
   };
 }

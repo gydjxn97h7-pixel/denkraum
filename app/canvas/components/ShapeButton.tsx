@@ -5,11 +5,18 @@ import {
   Squircle,
   Circle,
   Diamond,
+  Triangle,
+  Star,
+  StickyNote,
+  ListChecks,
+  Link,
   Type,
   Image as ImageIcon,
   FileText,
 } from "lucide-react";
 import { ICON, ICON_STROKE } from "../lib/design-tokens";
+import { polygonPoints, pointsAttr } from "../lib/shape-geometry";
+import type { NodeType } from "../lib/canvas-types";
 
 // ── Toolbar helpers ───────────────────────────────────────────────────────────
 
@@ -39,8 +46,39 @@ export function OvalIcon({
   );
 }
 
-// Shape-tool glyphs from the single Lucide set. Oval has no Lucide match, so it
-// keeps a custom ellipse drawn at the same absolute stroke weight as the rest.
+// Glyph for a polygon shape type, drawn from the same geometry the canvas node
+// uses (so the toolbar icon is the exact silhouette of the node it inserts).
+// Used for "arrow" and "parallelogram", which have no Lucide match. Drawn at the
+// shared absolute stroke weight to sit consistently in the icon set.
+export function PolygonGlyph({
+  type,
+  size = ICON.lg,
+  color = "currentColor",
+}: {
+  type: NodeType;
+  size?: number;
+  color?: string;
+}) {
+  const pts = polygonPoints(type, 24, 24, 3);
+  if (!pts) return null;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={(ICON_STROKE * 24) / size}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polygon points={pointsAttr(pts)} />
+    </svg>
+  );
+}
+
+// Shape-tool glyphs from the single Lucide set. Oval/arrow/parallelogram have no
+// Lucide match, so they keep custom glyphs at the same absolute stroke weight.
 export function renderShapeIcon(
   type: string,
   stroke: string,
@@ -64,6 +102,20 @@ export function renderShapeIcon(
       return <OvalIcon size={size} color={stroke} />;
     case "diamond":
       return <Diamond {...common} />;
+    case "triangle":
+      return <Triangle {...common} />;
+    case "star":
+      return <Star {...common} />;
+    case "arrow":
+      return <PolygonGlyph type="arrow" size={size} color={stroke} />;
+    case "parallelogram":
+      return <PolygonGlyph type="parallelogram" size={size} color={stroke} />;
+    case "sticky":
+      return <StickyNote {...common} />;
+    case "checklist":
+      return <ListChecks {...common} />;
+    case "link":
+      return <Link {...common} />;
     case "text":
       return <Type {...common} />;
     case "image":

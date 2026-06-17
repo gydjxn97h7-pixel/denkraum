@@ -1,5 +1,6 @@
 import type { CanvasNode, Connection, RichLine } from "./canvas-types";
 import { lineRuns, lineMeta } from "./rich-text";
+import { domainOf } from "./link-preview";
 
 // ── Markdown export ───────────────────────────────────────────────────────────
 // Interprets the directed connection graph as an outline: nodes with no
@@ -112,9 +113,23 @@ export function buildBoardMarkdown(
       return;
     }
     visited.add(id);
-    // Documents contribute their full content; other nodes their body field.
-    const rawLines =
-      n.type === "textfile"
+    // Link nodes export as a real Markdown link, labelled by title or domain.
+    if (n.type === "link" && n.linkUrl) {
+      const label = (n.title ?? "").trim() || domainOf(n.linkUrl);
+      lines.push(`${indent}- [${label}](${n.linkUrl})`);
+      for (const child of childrenOf.get(id) ?? []) {
+        renderSubtree(child, depth + 1);
+      }
+      return;
+    }
+    // Checklists export as nested GitHub task-list items; documents contribute
+    // their full content; other nodes their body field.
+    const isChecklistNode = n.type === "checklist";
+    const rawLines = isChecklistNode
+      ? (n.checklistItems ?? [])
+          .filter((it) => it.text.trim() !== "")
+          .map((it) => `- [${it.checked ? "x" : " "}] ${it.text.trim()}`)
+      : n.type === "textfile"
         ? n.docRich
           ? n.docRich.map(lineToMd)
           : (n.textFileContent ?? "").trim().split("\n")
@@ -123,9 +138,11 @@ export function buildBoardMarkdown(
           : (n.body ?? "").trim().split("\n");
     const bodyLines = rawLines.map((l) => l.trim()).filter((l) => l !== "");
     let bullet = `${indent}- **${nodeText(n)}**${nodeAnnotation(n)}`;
-    if (bodyLines.length === 1) bullet += ` — ${bodyLines[0]}`;
+    // Checklist rows always render as their own nested lines (never inlined).
+    if (!isChecklistNode && bodyLines.length === 1)
+      bullet += ` — ${bodyLines[0]}`;
     lines.push(bullet);
-    if (bodyLines.length > 1) {
+    if (isChecklistNode ? bodyLines.length >= 1 : bodyLines.length > 1) {
       for (const bl of bodyLines) lines.push(`${indent}  ${bl}`);
     }
     for (const child of childrenOf.get(id) ?? []) {

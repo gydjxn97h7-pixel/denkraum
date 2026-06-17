@@ -30,7 +30,9 @@ interface KeyboardShortcutsArgs {
   // Presentation
   isPresentingRef: React.RefObject<boolean>;
   presentationIndexRef: React.RefObject<number>;
-  presentActiveSeqRef: React.RefObject<number[]>;
+  // Each step is the set of node ids the camera fits (one for a node step,
+  // several for a group step).
+  presentActiveSeqRef: React.RefObject<number[][]>;
   prePresentStateRef: React.RefObject<{
     pan: { x: number; y: number };
     zoom: number;
@@ -42,7 +44,7 @@ interface KeyboardShortcutsArgs {
   } | null>;
   setIsPresenting: React.Dispatch<React.SetStateAction<boolean>>;
   setPresentationIndex: React.Dispatch<React.SetStateAction<number>>;
-  centerNodeForPresentation: (id: number) => void;
+  centerNodesForPresentation: (ids: number[]) => void;
   setPan: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
   setZoom: React.Dispatch<React.SetStateAction<number>>;
   // Editing / overlays
@@ -94,7 +96,7 @@ export function useKeyboardShortcuts({
   animCurrentRef,
   setIsPresenting,
   setPresentationIndex,
-  centerNodeForPresentation,
+  centerNodesForPresentation,
   setPan,
   setZoom,
   editingNodeIdRef,
@@ -198,14 +200,14 @@ export function useKeyboardShortcuts({
           const next = Math.min(idx + 1, seq.length - 1);
           if (next !== idx) {
             setPresentationIndex(next);
-            centerNodeForPresentation(seq[next]);
+            centerNodesForPresentation(seq[next]);
           }
         } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
           e.preventDefault();
           const prev = Math.max(idx - 1, 0);
           if (prev !== idx) {
             setPresentationIndex(prev);
-            centerNodeForPresentation(seq[prev]);
+            centerNodesForPresentation(seq[prev]);
           }
         }
         return;
@@ -331,7 +333,7 @@ export function useKeyboardShortcuts({
     copySelected,
     pasteNode,
     focusNode,
-    centerNodeForPresentation,
+    centerNodesForPresentation,
     pushHistory,
   ]);
 }

@@ -6,12 +6,17 @@ import {
   Squircle,
   Circle,
   Diamond,
+  Triangle,
+  Star,
+  StickyNote,
+  ListChecks,
+  Link,
   Type,
   Image as ImageIcon,
   FileText,
   ClipboardPaste,
 } from "lucide-react";
-import { OvalIcon } from "./ShapeButton";
+import { OvalIcon, PolygonGlyph } from "./ShapeButton";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 interface CanvasContextMenuProps {
@@ -113,6 +118,51 @@ export function CanvasContextMenu({
             label: "Diamond",
             icon: (
               <Diamond size={ICON.sm} {...ICON_PROPS} />
+            ),
+          },
+          {
+            type: "triangle" as const,
+            label: "Triangle",
+            icon: (
+              <Triangle size={ICON.sm} {...ICON_PROPS} />
+            ),
+          },
+          {
+            type: "star" as const,
+            label: "Star",
+            icon: (
+              <Star size={ICON.sm} {...ICON_PROPS} />
+            ),
+          },
+          {
+            type: "arrow" as const,
+            label: "Arrow",
+            icon: <PolygonGlyph type="arrow" size={ICON.sm} />,
+          },
+          {
+            type: "parallelogram" as const,
+            label: "Parallelogram",
+            icon: <PolygonGlyph type="parallelogram" size={ICON.sm} />,
+          },
+          {
+            type: "sticky" as const,
+            label: "Sticky Note",
+            icon: (
+              <StickyNote size={ICON.sm} {...ICON_PROPS} />
+            ),
+          },
+          {
+            type: "checklist" as const,
+            label: "Checklist",
+            icon: (
+              <ListChecks size={ICON.sm} {...ICON_PROPS} />
+            ),
+          },
+          {
+            type: "link" as const,
+            label: "Link",
+            icon: (
+              <Link size={ICON.sm} {...ICON_PROPS} />
             ),
           },
           {

@@ -74,6 +74,7 @@ export const SPACE = {
 export const CANVAS_BG = "#EBE8E1"; // warm greige canvas
 export const NODE_SURFACE = "#FCFBF8"; // warm cream/chalk node surface (all types)
 export const NODE_TEXT = "#2A2823"; // warm near-black node text
+export const STICKY_FILL = "#EAD884"; // muted mediterranean yellow — sticky notes
 
 // Accents — UI chrome only (toolbar/sidebar/buttons/active states/connection
 // lines/editor header), never node fills.

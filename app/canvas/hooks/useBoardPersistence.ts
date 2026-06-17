@@ -14,6 +14,7 @@ import type {
 } from "../lib/canvas-types";
 import { stripHtml } from "../lib/color-helpers";
 import { richHasMarks, richToPlain, sanitizeRichText } from "../lib/rich-text";
+import { normalizePresentation } from "../lib/presentation";
 import { setAsset, deleteAsset, getAllAssets } from "../lib/idb";
 
 interface BoardPersistenceArgs {
@@ -171,11 +172,14 @@ export function useBoardPersistence({
               .filter((n) => n.textFileContent != null || n.imageUrl != null)
               .map((n) => n.id),
           );
-          setNodes(loadedNodes);
 
           // ④ presentationOrder — load from localStorage, migrate if needed
           const rawOrder = localStorage.getItem(LS_PRESENTATION_ORDER);
           const loadedIdSet = new Set(loadedNodes.map((n) => n.id));
+          const sortedDefault = [...loadedNodes]
+            .sort((a, b) => a.id - b.id)
+            .map((n) => n.id);
+          let order: number[];
           if (rawOrder) {
             try {
               const parsed: number[] = JSON.parse(rawOrder);
@@ -184,20 +188,20 @@ export function useBoardPersistence({
                 .filter((n) => !parsedSet.has(n.id))
                 .sort((a, b) => a.id - b.id)
                 .map((n) => n.id);
-              setPresentationOrder([
+              order = [
                 ...parsed.filter((id) => loadedIdSet.has(id)),
                 ...missing,
-              ]);
+              ];
             } catch {
-              setPresentationOrder(
-                [...loadedNodes].sort((a, b) => a.id - b.id).map((n) => n.id),
-              );
+              order = sortedDefault;
             }
           } else {
-            setPresentationOrder(
-              [...loadedNodes].sort((a, b) => a.id - b.id).map((n) => n.id),
-            );
+            order = sortedDefault;
           }
+          // Drop singleton groups + restore member contiguity before commit.
+          const norm = normalizePresentation(order, loadedNodes);
+          setNodes(norm.nodes);
+          setPresentationOrder(norm.order);
         }
       } catch {
         // JSON parse error — keep DEFAULT_NODES

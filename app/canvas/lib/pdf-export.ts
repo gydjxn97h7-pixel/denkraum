@@ -1,5 +1,13 @@
 import type { CanvasNode, Connection, RichText } from "./canvas-types";
 import { plainToRich, lineRuns } from "./rich-text";
+import { polygonPoints, isPolygonType } from "./shape-geometry";
+import { STICKY_FILL } from "./design-tokens";
+import { domainOf } from "./link-preview";
+
+// Solid fill hex for a node's surface in the PDF (cream for all types except
+// sticky notes, which keep their warm yellow).
+const nodeFillHex = (type: string) =>
+  type === "sticky" ? STICKY_FILL : "#FCFBF8";
 
 // Canvas background in RGB — used to composite rgba node colors into solid values.
 const PDF_BG_RGB: [number, number, number] = [235, 232, 225]; // #EBE8E1
@@ -169,7 +177,7 @@ export async function exportBoardPdf(
   // synchronous for data URLs, so all images are embedded before doc.save().
   for (const n of nodes) {
     if (n.type === "text") continue;
-    const [r, g, b] = parseColorForPdf("#FCFBF8");
+    const [r, g, b] = parseColorForPdf(nodeFillHex(n.type));
     doc.setFillColor(r, g, b);
     const nx = px(n.x),
       ny = py(n.y);
@@ -192,14 +200,16 @@ export async function exportBoardPdf(
       if (!embedded) doc.rect(nx, ny, nw, nh, "F");
     } else if (n.type === "circle" || n.type === "oval") {
       doc.ellipse(nx + nw / 2, ny + nh / 2, nw / 2, nh / 2, "F");
-    } else if (n.type === "diamond") {
-      const cx = nx + nw / 2,
-        cy = ny + nh / 2;
-      doc.moveTo(cx, ny);
-      doc.lineTo(nx + nw, cy);
-      doc.lineTo(cx, ny + nh);
-      doc.lineTo(nx, cy);
-      doc.fill();
+    } else if (isPolygonType(n.type)) {
+      // diamond / triangle / star / arrow / parallelogram — same silhouette as
+      // the on-screen node, in absolute (inset-free) coordinates.
+      const pts = polygonPoints(n.type, nw, nh, 0) ?? [];
+      if (pts.length > 0) {
+        doc.moveTo(nx + pts[0].x, ny + pts[0].y);
+        for (let i = 1; i < pts.length; i++)
+          doc.lineTo(nx + pts[i].x, ny + pts[i].y);
+        doc.fill();
+      }
     } else if (n.type === "rounded") {
       const cr = Math.min(12 * exportScale, nw / 4, nh / 4);
       doc.roundedRect(nx, ny, nw, nh, cr, cr, "F");
@@ -462,7 +472,7 @@ export async function exportBoardPdf(
   for (const n of nodes) {
     if (n.type === "image") continue;
     try {
-      const [fr, fg, fb] = parseColorForPdf("#FCFBF8");
+      const [fr, fg, fb] = parseColorForPdf(nodeFillHex(n.type));
       const isDark = (0.299 * fr + 0.587 * fg + 0.114 * fb) / 255 < 0.45;
       const nx = px(n.x),
         ny = py(n.y);
@@ -505,9 +515,26 @@ export async function exportBoardPdf(
       const title = (n.title ?? "").trim();
       const body = (n.body ?? "").trim();
       const titleSrc: RichText | null =
-        n.titleRich ?? (title ? plainToRich(title) : null);
+        n.type === "link"
+          ? plainToRich(title || domainOf(n.linkUrl ?? "") || "Link")
+          : (n.titleRich ?? (title ? plainToRich(title) : null));
       const bodySrc: RichText | null =
-        n.bodyRich ?? (body ? plainToRich(body) : null);
+        n.type === "link"
+          ? n.linkUrl
+            ? plainToRich(n.linkUrl)
+            : null
+          : n.type === "checklist"
+          ? (() => {
+              // Render each row as "[x] text" / "[ ] text" (ASCII so the PDF
+              // base font always has the glyphs).
+              const lines = (n.checklistItems ?? [])
+                .map((it) =>
+                  `${it.checked ? "[x]" : "[ ]"} ${it.text}`.trimEnd(),
+                )
+                .filter((l) => l.length > 0);
+              return lines.length > 0 ? plainToRich(lines.join("\n")) : null;
+            })()
+          : (n.bodyRich ?? (body ? plainToRich(body) : null));
 
       if (n.type === "text") {
         if (!titleSrc) continue;
@@ -556,12 +583,11 @@ export async function exportBoardPdf(
           drawField(contentLaid, nx + padH, null, curY, [dcR, dcG, dcB]);
         }
       } else {
-        // diamond / circle / oval — centered; block / rounded — top-left
-        const centered =
-          n.type === "diamond" || n.type === "circle" || n.type === "oval";
-        const padH =
-          (n.type === "diamond" ? 28 : centered ? 16 : 18) * exportScale;
-        const gap = (n.type === "diamond" ? 3 : 5) * exportScale;
+        // polygon shapes / circle / oval — centered; block / rounded — top-left
+        const poly = isPolygonType(n.type);
+        const centered = poly || n.type === "circle" || n.type === "oval";
+        const padH = (poly ? 28 : centered ? 16 : 18) * exportScale;
+        const gap = (poly ? 3 : 5) * exportScale;
         const maxW = Math.max(10, nw - 2 * padH);
         const titleLaid = titleSrc
           ? layoutField(titleSrc, maxW, fs, 1.2, base)

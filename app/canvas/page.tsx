@@ -1,5 +1,12 @@
 "use client";
-import { useRef, useState, useCallback, useEffect, useMemo } from "react";
+import {
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  Profiler,
+} from "react";
 import "./canvas.css";
 import {
   ACCENT,
@@ -26,6 +33,16 @@ import {
   getMaxNodeId,
 } from "./lib/canvas-helpers";
 import { sanitizeLoadedNode } from "./lib/dnkrm-file";
+import { normalizeUrl, faviconUrl, fetchLinkTitle } from "./lib/link-preview";
+import {
+  buildPresentationSteps,
+  flattenSteps,
+  activeStepIds,
+  clusterContiguous,
+  normalizePresentation,
+  newGroupId,
+} from "./lib/presentation";
+import { DEBUG_CAMERA, perfCommit } from "./lib/camera-perf";
 import { exportBoardPdf } from "./lib/pdf-export";
 import { exportBoardMarkdown } from "./lib/md-export";
 import { useUndoRedo } from "./hooks/useUndoRedo";
@@ -161,12 +178,13 @@ export default function Canvas() {
     presentationIndex,
     setPresentationIndex,
     showPresentOverlay,
+    cameraAnimating,
     isPresentingRef,
     presentationIndexRef,
     prePresentStateRef,
     animRafRef,
     animCurrentRef,
-    centerNodeForPresentation,
+    centerNodesForPresentation,
   } = usePresentation({
     canvasRef,
     nodeMapRef,
@@ -176,31 +194,41 @@ export default function Canvas() {
     setZoom,
   });
 
-  // Nodes whose excludeFromPresentation is truthy are skipped from navigation
-  const presentActiveSeq = useMemo(
-    () =>
-      presentationOrder.filter(
-        (id) => !nodeMap.get(id)?.excludeFromPresentation,
-      ),
+  // Story Path steps: each node is its own step unless it shares a
+  // presentationGroupId with its neighbours, in which case the contiguous run
+  // collapses into one group step. Drives both the sidebar list and navigation.
+  const presentSteps = useMemo(
+    () => buildPresentationSteps(presentationOrder, nodeMap),
     [presentationOrder, nodeMap],
+  );
+  // Navigation sequence: one entry per non-empty step, holding the node ids the
+  // camera fits for that step (one for a node, several for a group). Excluded
+  // members are dropped; fully-excluded steps disappear.
+  const presentActiveSeq = useMemo(
+    () => activeStepIds(presentSteps, nodeMap),
+    [presentSteps, nodeMap],
   );
   const presentActiveSeqRef = useRef(presentActiveSeq);
   presentActiveSeqRef.current = presentActiveSeq;
 
-  // The node currently spotlighted in presentation mode (centered on screen).
-  // Passed per-node as a boolean so only the entering/leaving node re-renders.
-  const presentationFocusId =
-    isPresenting && presentActiveSeq.length > 0
-      ? presentActiveSeq[
-          Math.min(presentationIndex, presentActiveSeq.length - 1)
-        ]
-      : null;
-  // During presentation the focused node is lifted out of the (blurred + dimmed)
-  // world into a sharp top layer, so the spotlight backdrop never touches it.
-  const focusedNode =
-    presentationFocusId != null
-      ? (nodeMap.get(presentationFocusId) ?? null)
-      : null;
+  // The node ids in the currently spotlighted step. They are lifted out of the
+  // (blurred + dimmed) world into a sharp top layer, so the spotlight backdrop
+  // never touches the active step. null when not presenting.
+  const focusedIds = useMemo(() => {
+    if (!isPresenting || presentActiveSeq.length === 0) return null;
+    const step =
+      presentActiveSeq[Math.min(presentationIndex, presentActiveSeq.length - 1)];
+    return new Set(step);
+  }, [isPresenting, presentActiveSeq, presentationIndex]);
+  const focusedNodes = useMemo(
+    () =>
+      focusedIds
+        ? [...focusedIds]
+            .map((id) => nodeMap.get(id))
+            .filter((n): n is CanvasNode => !!n)
+        : [],
+    [focusedIds, nodeMap],
+  );
 
   const filterActive = filterText !== "" || filterType !== "all";
   const matchedNodeIds = useMemo(() => {
@@ -213,7 +241,11 @@ export default function Canvas() {
         !q ||
         n.title.toLowerCase().includes(q) ||
         n.body.toLowerCase().includes(q) ||
-        (n.label ?? "").toLowerCase().includes(q);
+        (n.label ?? "").toLowerCase().includes(q) ||
+        (n.linkUrl ?? "").toLowerCase().includes(q) ||
+        (n.checklistItems ?? []).some((it) =>
+          it.text.toLowerCase().includes(q),
+        );
       if (typeOk && textOk) s.add(n.id);
     }
     return s;
@@ -355,7 +387,6 @@ export default function Canvas() {
             loadedConns.push({ from, to });
           }
 
-          setNodes(loadedNodes);
           setConnections(loadedConns);
           setSelected(null);
           setSelectedIds(new Set());
@@ -375,6 +406,7 @@ export default function Canvas() {
             setBoardName(name);
             localStorage.setItem(LS_BOARD_NAME, name);
           }
+          let rawOrder: number[];
           if (Array.isArray(data.presentationOrder)) {
             const parsedSet = new Set<number>(
               data.presentationOrder as number[],
@@ -383,17 +415,22 @@ export default function Canvas() {
               .filter((n) => !parsedSet.has(n.id))
               .sort((a, b) => a.id - b.id)
               .map((n) => n.id);
-            setPresentationOrder([
+            rawOrder = [
               ...(data.presentationOrder as number[]).filter((id: number) =>
                 validNodeIds.has(id),
               ),
               ...missing,
-            ]);
+            ];
           } else {
-            setPresentationOrder(
-              [...loadedNodes].sort((a, b) => a.id - b.id).map((n) => n.id),
-            );
+            rawOrder = [...loadedNodes]
+              .sort((a, b) => a.id - b.id)
+              .map((n) => n.id);
           }
+          // Drop singleton/empty groups and restore member contiguity before
+          // committing the loaded board to state.
+          const norm = normalizePresentation(rawOrder, loadedNodes);
+          setNodes(norm.nodes);
+          setPresentationOrder(norm.order);
           if (
             data.pan &&
             typeof data.pan.x === "number" &&
@@ -427,27 +464,21 @@ export default function Canvas() {
   const addNode = useCallback(
     (cx: number, cy: number, type: NodeType) => {
       const isText = type === "text";
-      const isCircle = type === "circle";
-      const isOval = type === "oval";
-      const isDiamond = type === "diamond";
-      const w = isText
-        ? 160
-        : isCircle
-          ? 100
-          : isOval
-            ? 160
-            : isDiamond
-              ? 130
-              : 200;
-      const h = isText
-        ? 40
-        : isCircle
-          ? 100
-          : isOval
-            ? 100
-            : isDiamond
-              ? 100
-              : 80;
+      // Default insert size per shape; block/rounded/etc. fall back to 200×80.
+      const DEFAULT_SIZE: Partial<Record<NodeType, { w: number; h: number }>> = {
+        text: { w: 160, h: 40 },
+        circle: { w: 100, h: 100 },
+        oval: { w: 160, h: 100 },
+        diamond: { w: 130, h: 100 },
+        triangle: { w: 130, h: 110 },
+        star: { w: 120, h: 120 },
+        arrow: { w: 170, h: 90 },
+        parallelogram: { w: 160, h: 90 },
+        sticky: { w: 150, h: 150 },
+        checklist: { w: 220, h: 170 },
+        link: { w: 240, h: 100 },
+      };
+      const { w, h } = DEFAULT_SIZE[type] ?? { w: 200, h: 80 };
       const maxExistingId = getMaxNodeId(nodeMapRef.current);
       if (idCounterRef.current <= maxExistingId)
         idCounterRef.current = maxExistingId + 1;
@@ -460,6 +491,13 @@ export default function Canvas() {
         circle: "Circle",
         oval: "Oval",
         diamond: "Diamond",
+        triangle: "Triangle",
+        star: "Star",
+        arrow: "Arrow",
+        parallelogram: "Parallelogram",
+        sticky: "Sticky Note",
+        checklist: "Checklist",
+        link: "Link",
         text: "Text",
         image: "Image",
       };
@@ -489,6 +527,15 @@ export default function Canvas() {
         type,
         color: isText ? "transparent" : "#FCFBF8",
         fontSize: isText ? 15 : 13,
+        // Seed a checklist with a few empty rows so it reads as a list on
+        // insert; the node opens straight into edit mode (below).
+        ...(type === "checklist" && {
+          checklistItems: [
+            { id: 1, text: "", checked: false },
+            { id: 2, text: "", checked: false },
+            { id: 3, text: "", checked: false },
+          ],
+        }),
       };
       const newNodes = [...nodesRef.current, newNode];
       const newOrder = [...presentationOrderRef.current, newId];
@@ -500,7 +547,7 @@ export default function Canvas() {
       setSelected(newId);
       setContextMenu(null);
       setTimeout(() => setActiveShapeType(null), 600);
-      if (isText) {
+      if (isText || type === "checklist" || type === "link") {
         editingNodeIdRef.current = newId;
         setTimeout(() => {
           const el = document.querySelector<HTMLElement>(
@@ -931,16 +978,18 @@ export default function Canvas() {
       const newConns = connectionsRef.current.filter(
         (c) => !ids.has(c.from) && !ids.has(c.to),
       );
-      const newOrder = presentationOrderRef.current.filter(
+      const filteredOrder = presentationOrderRef.current.filter(
         (id) => !ids.has(id),
       );
-      nodesRef.current = newNodes;
+      // Dissolve any group left with <2 members after the deletion.
+      const norm = normalizePresentation(filteredOrder, newNodes);
+      nodesRef.current = norm.nodes;
       connectionsRef.current = newConns;
-      presentationOrderRef.current = newOrder;
+      presentationOrderRef.current = norm.order;
       pushHistory();
-      setNodes(newNodes);
+      setNodes(norm.nodes);
       setConnections(newConns);
-      setPresentationOrder(newOrder);
+      setPresentationOrder(norm.order);
       setSelectedIds(new Set());
       setSelected(null);
     } else {
@@ -950,14 +999,17 @@ export default function Canvas() {
       const newConns = connectionsRef.current.filter(
         (c) => c.from !== id && c.to !== id,
       );
-      const newOrder = presentationOrderRef.current.filter((p) => p !== id);
-      nodesRef.current = newNodes;
+      const filteredOrder = presentationOrderRef.current.filter(
+        (p) => p !== id,
+      );
+      const norm = normalizePresentation(filteredOrder, newNodes);
+      nodesRef.current = norm.nodes;
       connectionsRef.current = newConns;
-      presentationOrderRef.current = newOrder;
+      presentationOrderRef.current = norm.order;
       pushHistory();
-      setNodes(newNodes);
+      setNodes(norm.nodes);
       setConnections(newConns);
-      setPresentationOrder(newOrder);
+      setPresentationOrder(norm.order);
       setSelected(null);
     }
   }, [pushHistory]);
@@ -1001,13 +1053,43 @@ export default function Canvas() {
     [pushHistory],
   );
 
-  const movePresentationNodeUp = useCallback(
-    (id: number) => {
-      const prev = presentationOrderRef.current;
-      const idx = prev.indexOf(id);
-      if (idx <= 0) return;
-      const next = [...prev];
-      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+  // Move a whole Story Path step (a node or an entire group) past its
+  // neighbour. Operating on the derived step list keeps a group's members
+  // contiguous automatically.
+  const movePresentationStep = useCallback(
+    (stepIndex: number, dir: -1 | 1) => {
+      const order = presentationOrderRef.current;
+      const steps = buildPresentationSteps(order, nodeMapRef.current);
+      const target = stepIndex + dir;
+      if (stepIndex < 0 || stepIndex >= steps.length) return;
+      if (target < 0 || target >= steps.length) return;
+      const next = [...steps];
+      [next[stepIndex], next[target]] = [next[target], next[stepIndex]];
+      const newOrder = flattenSteps(next);
+      presentationOrderRef.current = newOrder;
+      pushHistory();
+      setPresentationOrder(newOrder);
+    },
+    [pushHistory],
+  );
+
+  // Reorder a node within its group (swap with the adjacent member; never
+  // crosses the group boundary).
+  const moveGroupMember = useCallback(
+    (groupId: string, memberId: number, dir: -1 | 1) => {
+      const order = presentationOrderRef.current;
+      const idx = order.indexOf(memberId);
+      if (idx < 0) return;
+      const target = idx + dir;
+      if (target < 0 || target >= order.length) return;
+      const map = nodeMapRef.current;
+      if (
+        map.get(memberId)?.presentationGroupId !== groupId ||
+        map.get(order[target])?.presentationGroupId !== groupId
+      )
+        return;
+      const next = [...order];
+      [next[idx], next[target]] = [next[target], next[idx]];
       presentationOrderRef.current = next;
       pushHistory();
       setPresentationOrder(next);
@@ -1015,16 +1097,95 @@ export default function Canvas() {
     [pushHistory],
   );
 
-  const movePresentationNodeDown = useCallback(
-    (id: number) => {
-      const prev = presentationOrderRef.current;
-      const idx = prev.indexOf(id);
-      if (idx === -1 || idx === prev.length - 1) return;
-      const next = [...prev];
-      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-      presentationOrderRef.current = next;
+  // Combine selected nodes into one group step: stamp them with a fresh group
+  // id and cluster them contiguously at the earliest selected position.
+  const groupNodes = useCallback(
+    (ids: number[]) => {
+      const order = presentationOrderRef.current;
+      const sorted = order.filter((id) => ids.includes(id));
+      if (sorted.length < 2) return;
+      const gid = newGroupId();
+      const idSet = new Set(sorted);
+      const stamped = nodesRef.current.map((n) =>
+        idSet.has(n.id) ? { ...n, presentationGroupId: gid } : n,
+      );
+      const clustered = clusterContiguous(order, sorted);
+      // Normalize in case a member came from another group that now has <2.
+      const norm = normalizePresentation(clustered, stamped);
+      nodesRef.current = norm.nodes;
+      presentationOrderRef.current = norm.order;
       pushHistory();
-      setPresentationOrder(next);
+      setNodes(norm.nodes);
+      setPresentationOrder(norm.order);
+    },
+    [pushHistory],
+  );
+
+  // Add a single ungrouped node to an existing group (drag & drop from the
+  // Story Path list). Stamp it with the group's id, then re-cluster so it joins
+  // the group's contiguous block; normalize cleans up any group the node left.
+  const addNodeToGroup = useCallback(
+    (nodeId: number, groupId: string) => {
+      const node = nodeMapRef.current.get(nodeId);
+      if (!node || node.presentationGroupId === groupId) return;
+      const stamped = nodesRef.current.map((n) =>
+        n.id === nodeId ? { ...n, presentationGroupId: groupId } : n,
+      );
+      const stampedMap = new Map(stamped.map((n) => [n.id, n] as const));
+      const order = presentationOrderRef.current;
+      const members = order.filter(
+        (id) => stampedMap.get(id)?.presentationGroupId === groupId,
+      );
+      const clustered = clusterContiguous(order, members);
+      const norm = normalizePresentation(clustered, stamped);
+      nodesRef.current = norm.nodes;
+      presentationOrderRef.current = norm.order;
+      pushHistory();
+      setNodes(norm.nodes);
+      setPresentationOrder(norm.order);
+    },
+    [pushHistory],
+  );
+
+  // Remove a single node from its group (drag it out in the Story Path list):
+  // clear its group id so it becomes a standalone slide. normalizePresentation
+  // then re-clusters the remaining members contiguously (the freed node lands
+  // just after the group) and dissolves the group entirely if it's left with a
+  // lone member — single-node groups aren't a thing.
+  const removeNodeFromGroup = useCallback(
+    (nodeId: number) => {
+      const node = nodeMapRef.current.get(nodeId);
+      if (!node || !node.presentationGroupId) return;
+      const cleared = nodesRef.current.map((n) => {
+        if (n.id !== nodeId) return n;
+        const copy = { ...n };
+        delete copy.presentationGroupId;
+        return copy;
+      });
+      const norm = normalizePresentation(presentationOrderRef.current, cleared);
+      nodesRef.current = norm.nodes;
+      presentationOrderRef.current = norm.order;
+      pushHistory();
+      setNodes(norm.nodes);
+      setPresentationOrder(norm.order);
+    },
+    [pushHistory],
+  );
+
+  // Dissolve a group back into individual steps (members keep their order).
+  const dissolveGroup = useCallback(
+    (groupId: string) => {
+      const newNodes = nodesRef.current.map((n) => {
+        if (n.presentationGroupId === groupId) {
+          const copy = { ...n };
+          delete copy.presentationGroupId;
+          return copy;
+        }
+        return n;
+      });
+      nodesRef.current = newNodes;
+      pushHistory();
+      setNodes(newNodes);
     },
     [pushHistory],
   );
@@ -1054,6 +1215,71 @@ export default function Canvas() {
     },
     [pushHistory],
   );
+
+  // Replace a checklist node's items wholesale (toggle / add / remove / reorder /
+  // text edit are all computed in NodeView and committed here). One discrete
+  // change = one undo entry.
+  const commitChecklist = useCallback(
+    (id: number, items: { id: number; text: string; checked: boolean }[]) => {
+      const newNodes = nodesRef.current.map((n) =>
+        n.id === id ? { ...n, checklistItems: items } : n,
+      );
+      nodesRef.current = newNodes;
+      pushHistory();
+      setNodes(newNodes);
+    },
+    [pushHistory],
+  );
+
+  // Commit a link node's URL: normalize it, cache the favicon URL, reset the
+  // title, then fetch the page title in the background (best-effort; CORS often
+  // blocks it, in which case the node just shows the URL). The async update is
+  // guarded so it never clobbers a node the user has since deleted or re-pointed.
+  const commitLinkUrl = useCallback(
+    (id: number, rawUrl: string) => {
+      const url = normalizeUrl(rawUrl);
+      const old = nodesRef.current.find((n) => n.id === id);
+      if (!old) return;
+      const urlChanged = old.linkUrl !== url;
+      const newNodes = nodesRef.current.map((n) =>
+        n.id === id
+          ? {
+              ...n,
+              linkUrl: url,
+              linkFavicon: url ? faviconUrl(url) : undefined,
+              title: urlChanged ? "" : n.title,
+            }
+          : n,
+      );
+      nodesRef.current = newNodes;
+      pushHistory();
+      setNodes(newNodes);
+
+      if (url && urlChanged) {
+        fetchLinkTitle(url).then((title) => {
+          if (!title) return;
+          const cur = nodeMapRef.current.get(id);
+          if (!cur || cur.linkUrl !== url) return; // deleted or re-pointed
+          const updated = nodesRef.current.map((n) =>
+            n.id === id ? { ...n, title } : n,
+          );
+          nodesRef.current = updated;
+          // Background metadata — not a discrete user action, so no history push.
+          setNodes(updated);
+        });
+      }
+    },
+    [pushHistory],
+  );
+
+  // Open a link node's URL in a new tab. Skipped when the "click" was actually
+  // the tail of a drag (same gate as opening a document).
+  const openLink = useCallback((url: string) => {
+    if (lastInteractionMovedRef.current) return;
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateNodeLabel = useCallback(
     (id: number, label: string) => {
@@ -1140,7 +1366,7 @@ export default function Canvas() {
     animCurrentRef,
     setIsPresenting,
     setPresentationIndex,
-    centerNodeForPresentation,
+    centerNodesForPresentation,
     setPan,
     setZoom,
     editingNodeIdRef,
@@ -1289,13 +1515,13 @@ export default function Canvas() {
     setContextMenu(null);
     setColorPicker(null);
     setTextColorPicker(null);
-    centerNodeForPresentation(seq[0]);
+    centerNodesForPresentation(seq[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [centerNodeForPresentation]);
+  }, [centerNodesForPresentation]);
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const panelOpen = activePanel !== null;
-  return (
+  const tree = (
     <div
       style={{
         width: "100vw",
@@ -1373,12 +1599,16 @@ export default function Canvas() {
         setEditingSidebarNodeId={setEditingSidebarNodeId}
         focusNode={focusNode}
         updateNodeLabel={updateNodeLabel}
-        presentationOrder={presentationOrder}
+        presentSteps={presentSteps}
         nodeMap={nodeMap}
         presentActiveSeqLength={presentActiveSeq.length}
         toggleExcludeFromPresentation={toggleExcludeFromPresentation}
-        movePresentationNodeUp={movePresentationNodeUp}
-        movePresentationNodeDown={movePresentationNodeDown}
+        movePresentationStep={movePresentationStep}
+        moveGroupMember={moveGroupMember}
+        groupNodes={groupNodes}
+        addNodeToGroup={addNodeToGroup}
+        removeNodeFromGroup={removeNodeFromGroup}
+        dissolveGroup={dissolveGroup}
         onPresent={startPresentation}
         saveBoard={saveBoard}
         onLoadBoardClick={onLoadBoardClick}
@@ -1471,6 +1701,12 @@ export default function Canvas() {
             transformOrigin: "0 0",
             width: 0,
             height: 0,
+            // While the presentation camera glides, promote the world to its own
+            // GPU layer so the changing scale composites a cached raster instead
+            // of re-rasterising the whole scaled subtree every frame — the
+            // measured per-frame bottleneck (paint ≈ full 16ms budget). Dropped
+            // once the camera settles so the world re-rasterises crisply at rest.
+            willChange: cameraAnimating ? "transform" : undefined,
           }}
         >
           {/* Connections SVG — positioned at (-5000,-5000) so the internal
@@ -1534,10 +1770,10 @@ export default function Canvas() {
             />
           )}
 
-          {/* Nodes — the presentation-focused node is rendered separately in
-              the sharp spotlight layer below, so skip it here. */}
+          {/* Nodes — the active presentation step's nodes are rendered
+              separately in the sharp spotlight layer below, so skip them here. */}
           {nodes.map((n) => {
-            if (n.id === presentationFocusId) return null;
+            if (focusedIds?.has(n.id)) return null;
             return (
               <NodeView
                 key={n.id}
@@ -1554,13 +1790,20 @@ export default function Canvas() {
                 onOpenDocument={openDocument}
                 setHoveredId={setHoveredId}
                 commitNodeText={commitNodeText}
+                commitChecklist={commitChecklist}
+                commitLinkUrl={commitLinkUrl}
+                onOpenLink={openLink}
                 startNodeDrag={startNodeDrag}
                 onDotClick={onDotClick}
                 onResizeMouseDown={onResizeMouseDown}
                 dimmed={filterActive && !matchedNodeIds.has(n.id)}
                 isMultiSelected={selectedIds.has(n.id)}
                 searchHit={filterText !== "" && matchedNodeIds.has(n.id)}
-                zoom={zoom}
+                // During presentation the live `zoom` changes every tween frame;
+                // NodeView only uses it for hover/select affordances that never
+                // render here, so freeze it to keep the memo from re-rendering
+                // every node on every frame of the camera glide.
+                zoom={isPresenting ? 1 : zoom}
               />
             );
           })}
@@ -1581,16 +1824,22 @@ export default function Canvas() {
               pointerEvents: "none",
               zIndex: 200,
               background: "rgba(24,18,12,0.46)",
-              backdropFilter: "blur(14px)",
-              WebkitBackdropFilter: "blur(14px)",
+              // Drop the backdrop blur while the camera glides — re-blurring the
+              // whole viewport every frame as the world moves underneath is the
+              // dominant per-frame cost and the main source of step-switch
+              // stutter. The dim alone carries the transition; the blur snaps
+              // back the instant the camera settles.
+              backdropFilter: cameraAnimating ? "none" : "blur(14px)",
+              WebkitBackdropFilter: cameraAnimating ? "none" : "blur(14px)",
             }}
           />
         )}
 
-        {/* Sharp focused-node layer — mirrors the world transform so the node
-            sits exactly where it would on the canvas, but renders above the
-            spotlight backdrop and is therefore left completely untouched. */}
-        {isPresenting && focusedNode && (
+        {/* Sharp focused-node layer — mirrors the world transform so the active
+            step's nodes sit exactly where they would on the canvas, but render
+            above the spotlight backdrop and are therefore left untouched. A
+            group step lifts all its members together. */}
+        {isPresenting && focusedNodes.length > 0 && (
           <div
             style={{
               position: "absolute",
@@ -1602,31 +1851,42 @@ export default function Canvas() {
               height: 0,
               zIndex: 201,
               pointerEvents: "none",
+              // Same GPU-layer promotion as the world layer: composite the cached
+              // raster of the staged nodes during the glide, re-rasterise crisp
+              // on settle (the audience only scrutinises them once at rest).
+              willChange: cameraAnimating ? "transform" : undefined,
             }}
           >
-            <NodeView
-              key={focusedNode.id}
-              n={focusedNode}
-              isSelected={false}
-              isHovered={false}
-              isConnectSource={false}
-              connecting={false}
-              editingNodeIdRef={editingNodeIdRef}
-              connectDragRef={connectDragRef}
-              onNodeMouseDown={onNodeMouseDown}
-              onNodeContextMenu={onNodeContextMenu}
-              onNodeClick={onNodeClick}
-              onOpenDocument={openDocument}
-              setHoveredId={setHoveredId}
-              commitNodeText={commitNodeText}
-              startNodeDrag={startNodeDrag}
-              onDotClick={onDotClick}
-              onResizeMouseDown={onResizeMouseDown}
-              dimmed={false}
-              isMultiSelected={false}
-              onStage
-              zoom={zoom}
-            />
+            {focusedNodes.map((fn) => (
+              <NodeView
+                key={fn.id}
+                n={fn}
+                isSelected={false}
+                isHovered={false}
+                isConnectSource={false}
+                connecting={false}
+                editingNodeIdRef={editingNodeIdRef}
+                connectDragRef={connectDragRef}
+                onNodeMouseDown={onNodeMouseDown}
+                onNodeContextMenu={onNodeContextMenu}
+                onNodeClick={onNodeClick}
+                onOpenDocument={openDocument}
+                setHoveredId={setHoveredId}
+                commitNodeText={commitNodeText}
+                commitChecklist={commitChecklist}
+                commitLinkUrl={commitLinkUrl}
+                onOpenLink={openLink}
+                startNodeDrag={startNodeDrag}
+                onDotClick={onDotClick}
+                onResizeMouseDown={onResizeMouseDown}
+                dimmed={false}
+                isMultiSelected={false}
+                onStage
+                // Frozen like the world layer — the glide must not re-render the
+                // staged nodes each frame (see note above).
+                zoom={1}
+              />
+            ))}
           </div>
         )}
 
@@ -1855,4 +2115,17 @@ export default function Canvas() {
       </div>
     </div>
   );
+
+  // In debug mode, wrap the whole canvas in a Profiler so each commit's
+  // render time (dev builds) is attributed to the frame that triggered it.
+  if (DEBUG_CAMERA)
+    return (
+      <Profiler
+        id="canvas"
+        onRender={(_id, _phase, actualDuration) => perfCommit(actualDuration)}
+      >
+        {tree}
+      </Profiler>
+    );
+  return tree;
 }
