@@ -144,7 +144,13 @@ export default function Canvas() {
   const needsHistoryPushRef = useRef(false);
 
   // ── Node lookup map (rebuilt only when nodes changes) ────────────────────────
-  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  // Built with a direct loop instead of `new Map(nodes.map(...))` so a drag
+  // frame doesn't also allocate N throwaway [id, node] tuple arrays.
+  const nodeMap = useMemo(() => {
+    const m = new Map<number, CanvasNode>();
+    for (const n of nodes) m.set(n.id, n);
+    return m;
+  }, [nodes]);
   const nodeMapRef = useRef(nodeMap);
   nodeMapRef.current = nodeMap;
 

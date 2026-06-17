@@ -106,10 +106,14 @@ export const ELEVATION =
 // broad ambient) so the cream cards float distinctly above the greige canvas,
 // lit from above. Warm-brown tinted (rgba(58,48,38)). Present but soft.
 // rest → resting node · hover → cursor over · active → selected / dragged.
+// Blur radii were trimmed ~30% from their peak (and opacity nudged up slightly
+// to keep the same perceived float): a soft shadow's paint cost grows with the
+// square of the blur radius, so on a 200-node board this is a large cut to the
+// total blur area rasterized on each repaint, with no real change to the look.
 export const NODE_SHADOW = {
-  rest: "0 3px 8px rgba(58,48,38,0.10), 0 16px 36px rgba(58,48,38,0.16)",
-  hover: "0 6px 14px rgba(58,48,38,0.12), 0 24px 48px rgba(58,48,38,0.20)",
-  active: "0 12px 26px rgba(58,48,38,0.16), 0 40px 76px rgba(58,48,38,0.26)",
+  rest: "0 2px 6px rgba(58,48,38,0.10), 0 12px 30px rgba(58,48,38,0.17)",
+  hover: "0 5px 12px rgba(58,48,38,0.13), 0 18px 40px rgba(58,48,38,0.21)",
+  active: "0 10px 22px rgba(58,48,38,0.17), 0 30px 60px rgba(58,48,38,0.27)",
 } as const;
 
 // ── Reusable style fragments ────────────────────────────────────────────────
