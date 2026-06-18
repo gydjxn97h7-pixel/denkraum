@@ -10,6 +10,7 @@ import {
   Network,
   Search,
   Ellipsis,
+  Sparkles,
 } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
@@ -51,6 +52,9 @@ interface CanvasToolbarProps {
   nodeCount: number;
   filterOpen: boolean;
   setFilterOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  // AI: the Generate button shows only when an API key is set.
+  hasKey: boolean;
+  onGenerate: () => void;
 }
 
 // Shared glass background for each floating cluster.
@@ -95,6 +99,8 @@ function CanvasToolbarImpl({
   nodeCount,
   filterOpen,
   setFilterOpen,
+  hasKey,
+  onGenerate,
 }: CanvasToolbarProps) {
   // Center of the canvas in world coords — where freshly inserted nodes land.
   const canvasCenter = () => {
@@ -195,6 +201,43 @@ function CanvasToolbarImpl({
         fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
       }}
     >
+      {/* ── Cluster: AI Generate (only when an API key is set) ── */}
+      {hasKey && (
+        <div style={cluster}>
+          <button
+            title="Generate a node graph with AI"
+            onClick={onGenerate}
+            style={{
+              height: 36,
+              padding: "0 14px",
+              borderRadius: 999,
+              border: "none",
+              background: ACCENT,
+              color: "#FCFBF8",
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              transition: "opacity 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.opacity = "0.88";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.opacity = "1";
+            }}
+          >
+            <Sparkles size={ICON.md} {...ICON_PROPS} />
+            Generate
+          </button>
+        </div>
+      )}
+
       {/* ── Cluster: Shapes ── */}
       <div style={cluster}>
         {PRIMARY_SHAPES.map(({ type, label }) => (

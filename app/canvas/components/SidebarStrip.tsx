@@ -1,7 +1,14 @@
 "use client";
 import { memo } from "react";
 import type { PanelSection } from "../lib/canvas-types";
-import { LayoutDashboard, Workflow, Play, FolderOpen, Keyboard } from "lucide-react";
+import {
+  LayoutDashboard,
+  Workflow,
+  Play,
+  FolderOpen,
+  Keyboard,
+  Sparkles,
+} from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
 interface SidebarStripProps {
@@ -114,6 +121,13 @@ function SidebarStripImpl({
             title: "Shortcuts",
             icon: (
               <Keyboard size={ICON.lg} {...ICON_PROPS} />
+            ),
+          },
+          {
+            section: "ai" as const,
+            title: "AI",
+            icon: (
+              <Sparkles size={ICON.lg} {...ICON_PROPS} />
             ),
           },
         ] as {

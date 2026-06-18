@@ -4,6 +4,8 @@ import type { CanvasNode, PanelSection } from "../lib/canvas-types";
 import type { PresentationStep } from "../lib/presentation";
 import { SidebarNodeItem } from "./SidebarNodeItem";
 import { PresentationPanel } from "./PresentationPanel";
+import { AiSettingsPanel } from "./AiSettingsPanel";
+import type { AiCharacterState } from "./AiCharacter";
 import { PanelSectionLabel, StatusRow } from "./panel-ui";
 import { LayoutDashboard, Save, FolderOpen, X } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
@@ -41,6 +43,8 @@ interface SidebarPanelProps {
   // Save / Load section
   saveBoard: () => void;
   onLoadBoardClick: () => void;
+  // AI section
+  aiState: AiCharacterState;
 }
 
 // ── Sidebar Panel (220px, shown when panel open) ──
@@ -73,6 +77,7 @@ function SidebarPanelImpl({
   onPresent,
   saveBoard,
   onLoadBoardClick,
+  aiState,
 }: SidebarPanelProps) {
   const panelOpen = activePanel !== null;
   return (
@@ -125,6 +130,7 @@ function SidebarPanelImpl({
           {activePanel === "presentation" && "PRESENT"}
           {activePanel === "saveload" && "BOARD FILES"}
           {activePanel === "shortcuts" && "SHORTCUTS"}
+          {activePanel === "ai" && "AI"}
         </span>
         <button
           onClick={() => setActivePanel(null)}
@@ -566,6 +572,9 @@ function SidebarPanelImpl({
           </div>
         </div>
       )}
+
+      {/* ── AI section ── */}
+      {activePanel === "ai" && <AiSettingsPanel aiState={aiState} />}
     </div>
   );
 }

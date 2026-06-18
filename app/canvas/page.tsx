@@ -34,6 +34,12 @@ import {
 } from "./lib/canvas-helpers";
 import { sanitizeLoadedNode } from "./lib/dnkrm-file";
 import { normalizeUrl, faviconUrl, fetchLinkTitle } from "./lib/link-preview";
+import { useApiKey } from "./lib/ai-key";
+import {
+  layoutGraph,
+  GEN_SIZE,
+  type GeneratedGraph,
+} from "./lib/ai-generate";
 import {
   buildPresentationSteps,
   flattenSteps,
@@ -57,6 +63,8 @@ import { ConnectionLine } from "./components/ConnectionLine";
 import { SidebarStrip } from "./components/SidebarStrip";
 import { SidebarPanel } from "./components/SidebarPanel";
 import { CanvasToolbar } from "./components/CanvasToolbar";
+import { AiGenerateModal } from "./components/AiGenerateModal";
+import type { AiCharacterState } from "./components/AiCharacter";
 import { FilterBar } from "./components/FilterBar";
 import { NodeContextMenu } from "./components/NodeContextMenu";
 import { CanvasContextMenu } from "./components/CanvasContextMenu";
@@ -115,6 +123,18 @@ export default function Canvas() {
     msg: string;
     variant: "success" | "error";
   } | null>(null);
+
+  // AI: key presence gates the Generate button; the modal drives prompt→graph.
+  const { hasKey: aiHasKey, apiKey: aiApiKey } = useApiKey();
+  const [generateOpen, setGenerateOpen] = useState(false);
+  // Assistant character state, shared by the toolbar button + the modal.
+  const [aiState, setAiState] = useState<AiCharacterState>("idle");
+  // "done" / "error" are momentary — settle back to "idle" shortly after.
+  useEffect(() => {
+    if (aiState !== "done" && aiState !== "error") return;
+    const t = setTimeout(() => setAiState("idle"), 1200);
+    return () => clearTimeout(t);
+  }, [aiState]);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -555,6 +575,108 @@ export default function Canvas() {
           );
           el?.focus();
         }, 50);
+      }
+    },
+    [pushHistory],
+  );
+
+  // Place an AI-generated graph: lay it out, drop it to the right of existing
+  // content (or at the viewport centre on an empty board), commit as ONE undo
+  // snapshot, select the new nodes, and pan to reveal them. Generated nodes are
+  // plain CanvasNodes — no AI marking.
+  const addGeneratedGraph = useCallback(
+    (graph: GeneratedGraph) => {
+      if (graph.nodes.length === 0) return;
+      const local = layoutGraph(graph.nodes, graph.connections);
+
+      // Cluster bounding box (layout coordinates start near 0,0).
+      let clusterW = 0;
+      let clusterH = 0;
+      for (const gn of graph.nodes) {
+        const p = local.get(gn.id);
+        if (!p) continue;
+        const s = GEN_SIZE[gn.type];
+        clusterW = Math.max(clusterW, p.x + s.w);
+        clusterH = Math.max(clusterH, p.y + s.h);
+      }
+
+      // Placement origin: right of all existing content, else viewport centre.
+      const existing = nodesRef.current;
+      let originX: number;
+      let originY: number;
+      if (existing.length > 0) {
+        let maxX = -Infinity;
+        let minY = Infinity;
+        for (const n of existing) {
+          if (n.x + n.w > maxX) maxX = n.x + n.w;
+          if (n.y < minY) minY = n.y;
+        }
+        originX = maxX + 120;
+        originY = minY;
+      } else {
+        const r = canvasRef.current?.getBoundingClientRect();
+        const z = zoomRef.current;
+        const p = panRef.current;
+        const cx = r ? (r.width / 2 - p.x) / z : 0;
+        const cy = r ? (r.height / 2 - p.y) / z : 0;
+        originX = cx - clusterW / 2;
+        originY = cy - clusterH / 2;
+      }
+
+      // Fresh ids ahead of every existing node id.
+      const maxExistingId = getMaxNodeId(nodeMapRef.current);
+      if (idCounterRef.current <= maxExistingId)
+        idCounterRef.current = maxExistingId + 1;
+      const idMap = new Map<string, number>();
+      const newNodes: CanvasNode[] = graph.nodes.map((gn) => {
+        const id = idCounterRef.current;
+        idCounterRef.current += 1;
+        idMap.set(gn.id, id);
+        const s = GEN_SIZE[gn.type];
+        const p = local.get(gn.id) ?? { x: 0, y: 0 };
+        const isText = gn.type === "text";
+        return {
+          id,
+          x: originX + p.x,
+          y: originY + p.y,
+          w: s.w,
+          h: s.h,
+          title: gn.title,
+          body: gn.body,
+          type: gn.type,
+          color: isText ? "transparent" : "#FCFBF8",
+          fontSize: isText ? 15 : 13,
+        };
+      });
+      const newConns: Connection[] = [];
+      for (const c of graph.connections) {
+        const from = idMap.get(c.from);
+        const to = idMap.get(c.to);
+        if (from !== undefined && to !== undefined)
+          newConns.push({ from, to });
+      }
+
+      const newIds = newNodes.map((n) => n.id);
+      const allNodes = [...existing, ...newNodes];
+      const allConns = [...connectionsRef.current, ...newConns];
+      const allOrder = [...presentationOrderRef.current, ...newIds];
+      nodesRef.current = allNodes;
+      connectionsRef.current = allConns;
+      presentationOrderRef.current = allOrder;
+      pushHistory();
+      setNodes(allNodes);
+      setConnections(allConns);
+      setPresentationOrder(allOrder);
+      setSelected(null);
+      setSelectedIds(new Set(newIds));
+
+      // Pan to bring the new cluster into view (keeping the current zoom).
+      const r = canvasRef.current?.getBoundingClientRect();
+      if (r) {
+        const z = zoomRef.current;
+        const cx = originX + clusterW / 2;
+        const cy = originY + clusterH / 2;
+        setPan({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z });
       }
     },
     [pushHistory],
@@ -1612,6 +1734,7 @@ export default function Canvas() {
         onPresent={startPresentation}
         saveBoard={saveBoard}
         onLoadBoardClick={onLoadBoardClick}
+        aiState={aiState}
       />
 
       <CanvasToolbar
@@ -1632,6 +1755,8 @@ export default function Canvas() {
         nodeCount={nodes.length}
         filterOpen={filterOpen}
         setFilterOpen={setFilterOpen}
+        hasKey={aiHasKey}
+        onGenerate={() => setGenerateOpen(true)}
       />
 
       {/* ── Filter Bar ── */}
@@ -2069,6 +2194,15 @@ export default function Canvas() {
         showPresentOverlay={showPresentOverlay}
         presentationIndex={presentationIndex}
         presentActiveCount={presentActiveSeq.length}
+      />
+
+      <AiGenerateModal
+        open={generateOpen}
+        onClose={() => setGenerateOpen(false)}
+        apiKey={aiApiKey}
+        onPlace={addGeneratedGraph}
+        aiState={aiState}
+        onState={setAiState}
       />
 
       <Toast toast={toast} />

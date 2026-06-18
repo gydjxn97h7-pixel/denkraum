@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
     "@types/d3-force": "^3.0.10",
     "d3-force": "^3.0.0",
     "jspdf": "^4.2.1",

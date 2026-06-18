@@ -128,8 +128,6 @@ export const PRESET_COLORS = [
   "#9C8F75",
 ];
 
-export const SIDEBAR_W = 220;
-
 export const MIN_ZOOM = 0.05;
 export const MAX_ZOOM = 3;
 
@@ -138,7 +136,8 @@ export type PanelSection =
   | "nodes"
   | "presentation"
   | "saveload"
-  | "shortcuts";
+  | "shortcuts"
+  | "ai";
 
 export const LS_NODES = "denkraum_nodes";
 export const LS_CONNECTIONS = "denkraum_connections";

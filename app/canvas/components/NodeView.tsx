@@ -1301,7 +1301,6 @@ export const NodeView = React.memo(function NodeView({
         const VIS  = 22;   // visible dot diameter (screen px)
         const EDGE = 8;    // dot-center distance from node edge (screen px)
         const hh = HIT / 2 / z;  // hit half-size in canvas units
-        const vh = VIS / 2 / z;  // vis half-size in canvas units
         const eg = EDGE / z;     // edge gap in canvas units
         return ([
           { key: "top",    top: -(eg + hh),       left: n.w / 2 - hh },
