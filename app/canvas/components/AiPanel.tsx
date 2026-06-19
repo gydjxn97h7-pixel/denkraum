@@ -1,6 +1,4 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Sparkles, FileText, GitBranch, Crosshair, X } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 import { ACCENT } from "../lib/canvas-types";
@@ -60,8 +58,6 @@ export function AiPanel({
   placingWorkspace,
   onAssignWorkspace,
   onClearWorkspace,
-  flightSignal,
-  getFlightTarget,
 }: {
   aiState: AiCharacterState;
   nodeCount: number;
@@ -71,59 +67,8 @@ export function AiPanel({
   placingWorkspace: boolean;
   onAssignWorkspace: () => void;
   onClearWorkspace: () => void;
-  flightSignal: number;
-  getFlightTarget: () => { sx: number; sy: number } | null;
 }) {
   const { hasKey } = useApiKey();
-
-  // "Flight": when a marker-targeted AI call starts, the character glides once
-  // toward the marker's on-screen position, then snaps back. Subtle, not a romp.
-  // It flies as a fixed-position clone (the sidebar clips overflow, so the real
-  // character can't leave the panel) while the real one fades for the trip.
-  const charRef = useRef<HTMLSpanElement>(null);
-  const [flight, setFlight] = useState<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    dx: number;
-    dy: number;
-    armed: boolean;
-  } | null>(null);
-  useEffect(() => {
-    if (flightSignal === 0) return;
-    const el = charRef.current;
-    // Recompute the marker's screen position from the live camera right now; if
-    // the marker is off-screen the getter returns null and we skip the flight
-    // (nodes still place — the animation is purely decorative).
-    const target = getFlightTarget();
-    if (!el || !target) return;
-    const r = el.getBoundingClientRect();
-    setFlight({
-      x: r.left,
-      y: r.top,
-      w: r.width,
-      h: r.height,
-      dx: target.sx - (r.left + r.width / 2),
-      dy: target.sy - (r.top + r.height / 2),
-      armed: false,
-    });
-    // Arm on the next frame so the transform transition actually runs.
-    const raf = requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        setFlight((f) => (f ? { ...f, armed: true } : f)),
-      ),
-    );
-    // Snap back once the ~400ms flight completes. Timer-driven so the return is
-    // guaranteed even if the camera moved during the trip — the real character
-    // always reappears at its resting spot in the sidebar.
-    const t = setTimeout(() => setFlight(null), 440);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(t);
-    };
-    // Re-fire only on a new signal; the target is recomputed live above.
-  }, [flightSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
@@ -134,40 +79,6 @@ export function AiPanel({
         paddingTop: 16,
       }}
     >
-      {/* Flight clone — fixed to the viewport so it isn't clipped by the panel */}
-      {flight &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            aria-hidden="true"
-            style={{
-              position: "fixed",
-              left: flight.x,
-              top: flight.y,
-              width: flight.w,
-              height: flight.h,
-              transform: flight.armed
-                ? `translate(${flight.dx}px, ${flight.dy}px) scale(0.92)`
-                : "none",
-              transition: "transform 400ms cubic-bezier(0.4, 0, 0.2, 1)",
-              willChange: "transform",
-              pointerEvents: "none",
-              zIndex: 600,
-              // Faithful copy of the resting pedestal so the lift-off reads as
-              // the whole companion leaving its stage.
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: "50%",
-              background:
-                "radial-gradient(circle at 50% 42%, rgba(197,107,71,0.16), rgba(197,107,71,0.05) 58%, transparent 72%)",
-            }}
-          >
-            <AiCharacter state={aiState} size={52} color="#2A2823" />
-          </div>,
-          document.body,
-        )}
-
       {/* Assistant character */}
       <div
         style={{
@@ -180,7 +91,6 @@ export function AiPanel({
       >
         {/* Companion on a soft aura pedestal */}
         <span
-          ref={charRef}
           style={{
             position: "relative",
             display: "inline-flex",
@@ -191,14 +101,10 @@ export function AiPanel({
             borderRadius: "50%",
             // A warm radial halo so the companion sits on a little stage.
             background:
-              "radial-gradient(circle at 50% 42%, rgba(197,107,71,0.16), rgba(197,107,71,0.05) 58%, transparent 72%)",
-            // Hidden while its clone makes the trip; reappears (snaps back) when
-            // the flight ends.
-            opacity: flight ? 0 : 1,
-            transition: "opacity 120ms ease-out",
+              "radial-gradient(circle at 50% 42%, rgba(197,107,71,0.14), rgba(197,107,71,0.04) 58%, transparent 72%)",
           }}
         >
-          <AiCharacter state={aiState} size={52} color="#2A2823" />
+          <AiCharacter state={aiState} size={50} />
         </span>
 
         {/* Name */}

@@ -156,9 +156,6 @@ export default function Canvas() {
   const [placingWorkspace, setPlacingWorkspace] = useState(false);
   const placingWorkspaceRef = useRef(placingWorkspace);
   placingWorkspaceRef.current = placingWorkspace;
-  // Bumped when a marker-targeted AI call starts; drives the sidebar character's
-  // brief "flight" toward the marker.
-  const [aiFlightSignal, setAiFlightSignal] = useState(0);
 
   // Hydrate the marker from localStorage once on mount.
   useEffect(() => {
@@ -199,21 +196,6 @@ export default function Canvas() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [placingWorkspace]);
-
-  // The marker's current screen position (viewport coords) for the character
-  // flight, recomputed from the world coordinate + the LIVE camera at the
-  // instant it's read — never a cached value. Returns null when there's no
-  // marker or it's currently off-screen, so the flight is skipped in that case.
-  const getWorkspaceFlightTarget = useCallback(() => {
-    const m = aiWorkspaceRef.current;
-    const el = canvasRef.current;
-    if (!m || !el) return null;
-    const r = el.getBoundingClientRect();
-    const sx = r.left + panRef.current.x + m.x * zoomRef.current;
-    const sy = r.top + panRef.current.y + m.y * zoomRef.current;
-    if (sx < r.left || sx > r.right || sy < r.top || sy > r.bottom) return null;
-    return { sx, sy };
-  }, []);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -794,7 +776,6 @@ export default function Canvas() {
       if (!aiHasKey || aiBusyRef.current) return;
       aiBusyRef.current = true;
       setAiState("thinking");
-      if (aiWorkspaceRef.current) setAiFlightSignal((s) => s + 1);
       const r = await generateGraph(prompt, aiApiKey);
       aiBusyRef.current = false;
       if (!r.ok) {
@@ -1001,7 +982,6 @@ export default function Canvas() {
 
     aiBusyRef.current = true;
     setAiState("thinking");
-    if (aiWorkspaceRef.current) setAiFlightSignal((s) => s + 1);
     const r = await summarizeBoard(items, aiApiKey);
     aiBusyRef.current = false;
     if (!r.ok) {
@@ -2125,8 +2105,6 @@ export default function Canvas() {
         placingWorkspace={placingWorkspace}
         onAssignWorkspace={assignWorkspace}
         onClearWorkspace={clearWorkspace}
-        aiFlightSignal={aiFlightSignal}
-        getFlightTarget={getWorkspaceFlightTarget}
       />
 
       <CanvasToolbar

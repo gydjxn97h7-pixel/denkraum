@@ -52,8 +52,6 @@ interface SidebarPanelProps {
   placingWorkspace: boolean;
   onAssignWorkspace: () => void;
   onClearWorkspace: () => void;
-  aiFlightSignal: number;
-  getFlightTarget: () => { sx: number; sy: number } | null;
 }
 
 // ── Sidebar Panel (220px, shown when panel open) ──
@@ -93,8 +91,6 @@ function SidebarPanelImpl({
   placingWorkspace,
   onAssignWorkspace,
   onClearWorkspace,
-  aiFlightSignal,
-  getFlightTarget,
 }: SidebarPanelProps) {
   const panelOpen = activePanel !== null;
   return (
@@ -602,8 +598,6 @@ function SidebarPanelImpl({
           placingWorkspace={placingWorkspace}
           onAssignWorkspace={onAssignWorkspace}
           onClearWorkspace={onClearWorkspace}
-          flightSignal={aiFlightSignal}
-          getFlightTarget={getFlightTarget}
         />
       )}
 

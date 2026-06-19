@@ -162,3 +162,111 @@ input[type="range"].fmt-slider::-webkit-slider-runnable-track {
 .doc-page-scroll *::selection {
   background: rgba(197, 107, 71, 0.3);
 }
+
+/* ── AI companion: the living DNKRM mark (AiCharacter) ─────────────────────────
+   Pure SVG + CSS. Ambient life + per-state moods live here, keyed off
+   data-state. Transforms resolve against the 24×24 viewBox. */
+.ai-mark {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+.ai-mark * {
+  transform-box: view-box;
+}
+
+.ai-mark__breathe {
+  transform-origin: 12px 12px;
+  animation: ai-mark-breathe 4s ease-in-out infinite;
+}
+.ai-mark__core,
+.ai-mark__glow {
+  transform-origin: 12px 12px;
+  transition: fill 0.35s ease;
+  /* Mood hue — overridden per state below; terracotta by default. */
+  fill: #c56b47;
+}
+.ai-mark__core {
+  animation: ai-mark-pulse 2.8s ease-in-out infinite;
+}
+.ai-mark__glow {
+  opacity: 0;
+  animation: ai-mark-glow 2.8s ease-in-out infinite;
+}
+
+/* Mood hues for the core + glow */
+.ai-mark[data-state="thinking"] .ai-mark__core,
+.ai-mark[data-state="thinking"] .ai-mark__glow {
+  fill: #d4a04a; /* ochre */
+}
+.ai-mark[data-state="done"] .ai-mark__core,
+.ai-mark[data-state="done"] .ai-mark__glow {
+  fill: #7c7a4e; /* olive */
+}
+.ai-mark[data-state="error"] .ai-mark__core,
+.ai-mark[data-state="error"] .ai-mark__glow {
+  fill: #a8553a; /* deep clay */
+}
+
+/* Thinking — the core turns the idea over; glow quickens */
+.ai-mark[data-state="thinking"] .ai-mark__core {
+  animation: ai-mark-think 2s ease-in-out infinite;
+}
+.ai-mark[data-state="thinking"] .ai-mark__glow {
+  animation-duration: 1.2s;
+}
+
+/* Done — a single bloom outward */
+.ai-mark[data-state="done"] .ai-mark__core {
+  animation: ai-mark-bloom 0.62s ease;
+}
+.ai-mark[data-state="done"] .ai-mark__glow {
+  animation: ai-mark-glow-bloom 0.62s ease;
+}
+
+/* Error — a brief shake of the whole mark */
+.ai-mark[data-state="error"] .ai-mark__breathe {
+  animation: ai-mark-shake 0.5s ease;
+}
+
+@keyframes ai-mark-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.035); }
+}
+@keyframes ai-mark-pulse {
+  0%, 100% { opacity: 0.9; transform: scale(0.97); }
+  50%      { opacity: 1; transform: scale(1.02); }
+}
+@keyframes ai-mark-glow {
+  0%, 100% { opacity: 0; transform: scale(1); }
+  50%      { opacity: 0.22; transform: scale(1.32); }
+}
+@keyframes ai-mark-think {
+  0%, 100% { transform: rotate(-7deg) scale(0.98); }
+  50%      { transform: rotate(7deg) scale(1.02); }
+}
+@keyframes ai-mark-bloom {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.2); }
+  70%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+@keyframes ai-mark-glow-bloom {
+  0%   { opacity: 0.32; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.9); }
+}
+@keyframes ai-mark-shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-1.4px); }
+  40%      { transform: translateX(1.4px); }
+  60%      { transform: translateX(-1px); }
+  80%      { transform: translateX(0.8px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-mark__breathe,
+  .ai-mark__core,
+  .ai-mark__glow {
+    animation: none !important;
+  }
+}
