@@ -172,16 +172,12 @@ const GRAPH_SCHEMA = {
           body: { type: "string" },
           color: { type: "string", enum: [...GEN_FILL_COLORS] },
           fontSize: { type: "number", enum: [...GEN_FONT_SIZES] },
-          width: {
-            type: "number",
-            minimum: GEN_W_RANGE.min,
-            maximum: GEN_W_RANGE.max,
-          },
-          height: {
-            type: "number",
-            minimum: GEN_H_RANGE.min,
-            maximum: GEN_H_RANGE.max,
-          },
+          // Anthropic structured outputs do NOT support numeric constraints
+          // (minimum/maximum/multipleOf) — including them 400s the whole schema.
+          // The allowed range is conveyed in the prompt and enforced by
+          // sanitizeGraph()'s clampSize() instead.
+          width: { type: "number" },
+          height: { type: "number" },
         },
         required: [
           "id",
@@ -240,20 +236,22 @@ async function callModel(
     };
   }
 
+  const request = {
+    model: "claude-haiku-4-5",
+    max_tokens: maxTokens,
+    system,
+    messages: [{ role: "user" as const, content: user }],
+    ...(schema && {
+      output_config: { format: { type: "json_schema" as const, schema } },
+    }),
+  };
+
   let response: Awaited<
     ReturnType<InstanceType<typeof Anthropic>["messages"]["create"]>
   >;
   try {
     const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    response = await client.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: "user", content: user }],
-      ...(schema && {
-        output_config: { format: { type: "json_schema", schema } },
-      }),
-    });
+    response = await client.messages.create(request);
   } catch (err) {
     if (
       err instanceof Anthropic.AuthenticationError ||
@@ -265,8 +263,19 @@ async function callModel(
       return { ok: false, message: "Network error — check your connection." };
     }
     if (err instanceof Anthropic.APIError) {
+      // Log the exact request payload + full API error so schema/parameter
+      // rejections (e.g. a 400 from an unsupported JSON-schema keyword) are
+      // diagnosable instead of hiding behind a generic status message.
+      console.error("[ai-generate] Anthropic API error", {
+        status: err.status,
+        type: (err as { error?: { error?: { type?: string } } }).error?.error
+          ?.type,
+        message: err.message,
+        request,
+      });
       return { ok: false, message: `AI request failed (status ${err.status}).` };
     }
+    console.error("[ai-generate] Unexpected error contacting the AI", err);
     return { ok: false, message: "Something went wrong contacting the AI." };
   }
 
