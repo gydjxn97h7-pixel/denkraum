@@ -11,6 +11,7 @@ import "./canvas.css";
 import {
   ACCENT,
   LS_BOARD_NAME,
+  LS_AI_WORKSPACE,
   DEFAULT_NODES,
   DEFAULT_CONNECTIONS,
 } from "./lib/canvas-types";
@@ -142,6 +143,61 @@ export default function Canvas() {
     const t = setTimeout(() => setAiState("idle"), 1200);
     return () => clearTimeout(t);
   }, [aiState]);
+
+  // AI workspace marker — a world coordinate where AI output lands. Persisted
+  // on its own localStorage key, kept entirely out of board state / .dnkrm.
+  const [aiWorkspace, setAiWorkspace] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const aiWorkspaceRef = useRef(aiWorkspace);
+  aiWorkspaceRef.current = aiWorkspace;
+  // Placement mode: while active the next canvas click drops the marker.
+  const [placingWorkspace, setPlacingWorkspace] = useState(false);
+  const placingWorkspaceRef = useRef(placingWorkspace);
+  placingWorkspaceRef.current = placingWorkspace;
+  // Bumped when a marker-targeted AI call starts; drives the sidebar character's
+  // brief "flight" toward the marker.
+  const [aiFlightSignal, setAiFlightSignal] = useState(0);
+
+  // Hydrate the marker from localStorage once on mount.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_AI_WORKSPACE);
+      if (!raw) return;
+      const p = JSON.parse(raw);
+      if (typeof p?.x === "number" && typeof p?.y === "number")
+        setAiWorkspace({ x: p.x, y: p.y });
+    } catch {
+      /* ignore malformed marker */
+    }
+  }, []);
+
+  // Persist (or clear) the marker whenever it changes.
+  useEffect(() => {
+    try {
+      if (aiWorkspace)
+        localStorage.setItem(LS_AI_WORKSPACE, JSON.stringify(aiWorkspace));
+      else localStorage.removeItem(LS_AI_WORKSPACE);
+    } catch {
+      /* storage unavailable */
+    }
+  }, [aiWorkspace]);
+
+  const assignWorkspace = useCallback(() => setPlacingWorkspace(true), []);
+  const clearWorkspace = useCallback(() => {
+    setAiWorkspace(null);
+    setPlacingWorkspace(false);
+  }, []);
+
+  // Escape cancels an active placement (without clearing an existing marker).
+  useEffect(() => {
+    if (!placingWorkspace) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPlacingWorkspace(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [placingWorkspace]);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -641,11 +697,16 @@ export default function Canvas() {
         clusterH = Math.max(clusterH, p.y + s.h);
       }
 
-      // Placement origin: right of all existing content, else viewport centre.
+      // Placement origin: the AI workspace marker if set, otherwise right of all
+      // existing content, else viewport centre.
       const existing = nodesRef.current;
+      const marker = aiWorkspaceRef.current;
       let originX: number;
       let originY: number;
-      if (existing.length > 0) {
+      if (marker) {
+        originX = marker.x;
+        originY = marker.y;
+      } else if (existing.length > 0) {
         let maxX = -Infinity;
         let minY = Infinity;
         for (const n of existing) {
@@ -714,6 +775,7 @@ export default function Canvas() {
       if (!aiHasKey || aiBusyRef.current) return;
       aiBusyRef.current = true;
       setAiState("thinking");
+      if (aiWorkspaceRef.current) setAiFlightSignal((s) => s + 1);
       const r = await generateGraph(prompt, aiApiKey);
       aiBusyRef.current = false;
       if (!r.ok) {
@@ -919,6 +981,7 @@ export default function Canvas() {
 
     aiBusyRef.current = true;
     setAiState("thinking");
+    if (aiWorkspaceRef.current) setAiFlightSignal((s) => s + 1);
     const r = await summarizeBoard(items, aiApiKey);
     aiBusyRef.current = false;
     if (!r.ok) {
@@ -928,20 +991,29 @@ export default function Canvas() {
     }
     setAiState("done");
 
-    // One generously-sized card centred below all existing content. A "rounded"
-    // node renders both fields, so the prose sits in `body` (title is a label).
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const n of all) {
-      if (n.x < minX) minX = n.x;
-      if (n.x + n.w > maxX) maxX = n.x + n.w;
-      if (n.y + n.h > maxY) maxY = n.y + n.h;
-    }
+    // A generously-sized "rounded" card (renders both fields, so the prose sits
+    // in `body`). Anchored at the AI workspace marker if set, otherwise centred
+    // below all existing content.
     const W = 360;
     const H = 140;
-    const x = (minX + maxX) / 2 - W / 2;
-    const y = maxY + 80;
+    const marker = aiWorkspaceRef.current;
+    let x: number;
+    let y: number;
+    if (marker) {
+      x = marker.x;
+      y = marker.y;
+    } else {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const n of all) {
+        if (n.x < minX) minX = n.x;
+        if (n.x + n.w > maxX) maxX = n.x + n.w;
+        if (n.y + n.h > maxY) maxY = n.y + n.h;
+      }
+      x = (minX + maxX) / 2 - W / 2;
+      y = maxY + 80;
+    }
 
     const maxExistingId = getMaxNodeId(nodeMapRef.current);
     if (idCounterRef.current <= maxExistingId)
@@ -1199,6 +1271,16 @@ export default function Canvas() {
         return;
       }
       if (e.button !== 0) return;
+      // Workspace placement mode: this click drops the marker at the clicked
+      // world point and exits the mode — nothing else happens.
+      if (placingWorkspaceRef.current && canvasRef.current) {
+        const r = canvasRef.current.getBoundingClientRect();
+        const wx = (e.clientX - r.left - panRef.current.x) / zoomRef.current;
+        const wy = (e.clientY - r.top - panRef.current.y) / zoomRef.current;
+        setAiWorkspace({ x: wx, y: wy });
+        setPlacingWorkspace(false);
+        return;
+      }
       const t = e.target as HTMLElement;
       if (t.closest("[data-node-id]")) return;
       // Cancel any in-progress connect drag
@@ -2019,6 +2101,16 @@ export default function Canvas() {
         aiState={aiState}
         onSummarize={summarizeBoardToNode}
         onGenerate={() => setGenerateOpen(true)}
+        aiWorkspace={aiWorkspace}
+        placingWorkspace={placingWorkspace}
+        onAssignWorkspace={assignWorkspace}
+        onClearWorkspace={clearWorkspace}
+        aiFlightSignal={aiFlightSignal}
+        workspaceScreenPos={
+          aiWorkspace
+            ? { sx: pan.x + aiWorkspace.x * zoom, sy: pan.y + aiWorkspace.y * zoom }
+            : null
+        }
       />
 
       <CanvasToolbar
@@ -2068,7 +2160,8 @@ export default function Canvas() {
           right: 0,
           bottom: 0,
           left: 0,
-          cursor: connectDrag ? "crosshair" : "grab",
+          cursor:
+            placingWorkspace || connectDrag ? "crosshair" : "grab",
           overflow: "hidden",
         }}
       >
@@ -2215,6 +2308,65 @@ export default function Canvas() {
             );
           })}
         </div>
+
+        {/* ── AI workspace marker ──
+            A subtle anchor (not a node) showing where AI output will land.
+            Rendered in screen space at a fixed pixel size — tracks pan/zoom but
+            never scales — so it stays a small, quiet indicator at any zoom. */}
+        {!isPresenting && aiWorkspace && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: pan.x + aiWorkspace.x * zoom,
+              top: pan.y + aiWorkspace.y * zoom,
+              transform: "translate(-50%, -50%)",
+              pointerEvents: "none",
+              zIndex: 120,
+            }}
+          >
+            {/* Ring + center dot */}
+            <div
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: "50%",
+                border: `1.5px solid ${ACCENT}`,
+                background: "rgba(197,107,71,0.10)",
+                boxShadow: "0 1px 4px rgba(197,107,71,0.35)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <div
+                style={{
+                  width: 4,
+                  height: 4,
+                  borderRadius: "50%",
+                  background: ACCENT,
+                }}
+              />
+            </div>
+            {/* Tiny label */}
+            <span
+              style={{
+                position: "absolute",
+                top: "calc(100% + 3px)",
+                left: "50%",
+                transform: "translateX(-50%)",
+                fontSize: 8.5,
+                fontWeight: 700,
+                letterSpacing: "0.12em",
+                color: ACCENT,
+                whiteSpace: "nowrap",
+                fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+              }}
+            >
+              AI
+            </span>
+          </div>
+        )}
 
         {/* ── Presentation spotlight backdrop ──
             Blurs + dims the entire canvas (dot grid, connections, every other

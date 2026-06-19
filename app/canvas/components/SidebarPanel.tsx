@@ -48,6 +48,12 @@ interface SidebarPanelProps {
   aiState: AiCharacterState;
   onSummarize: () => void;
   onGenerate: () => void;
+  aiWorkspace: { x: number; y: number } | null;
+  placingWorkspace: boolean;
+  onAssignWorkspace: () => void;
+  onClearWorkspace: () => void;
+  aiFlightSignal: number;
+  workspaceScreenPos: { sx: number; sy: number } | null;
 }
 
 // ── Sidebar Panel (220px, shown when panel open) ──
@@ -83,6 +89,12 @@ function SidebarPanelImpl({
   aiState,
   onSummarize,
   onGenerate,
+  aiWorkspace,
+  placingWorkspace,
+  onAssignWorkspace,
+  onClearWorkspace,
+  aiFlightSignal,
+  workspaceScreenPos,
 }: SidebarPanelProps) {
   const panelOpen = activePanel !== null;
   return (
@@ -586,6 +598,12 @@ function SidebarPanelImpl({
           nodeCount={nodes.length}
           onSummarize={onSummarize}
           onGenerate={onGenerate}
+          workspace={aiWorkspace}
+          placingWorkspace={placingWorkspace}
+          onAssignWorkspace={onAssignWorkspace}
+          onClearWorkspace={onClearWorkspace}
+          flightSignal={aiFlightSignal}
+          workspaceScreenPos={workspaceScreenPos}
         />
       )}
 

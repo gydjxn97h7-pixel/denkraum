@@ -1,5 +1,7 @@
 "use client";
-import { Sparkles, FileText, GitBranch } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Sparkles, FileText, GitBranch, Crosshair, X } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 import { ACCENT } from "../lib/canvas-types";
 import { PanelSectionLabel } from "./panel-ui";
@@ -43,13 +45,77 @@ export function AiPanel({
   nodeCount,
   onSummarize,
   onGenerate,
+  workspace,
+  placingWorkspace,
+  onAssignWorkspace,
+  onClearWorkspace,
+  flightSignal,
+  workspaceScreenPos,
 }: {
   aiState: AiCharacterState;
   nodeCount: number;
   onSummarize: () => void;
   onGenerate: () => void;
+  workspace: { x: number; y: number } | null;
+  placingWorkspace: boolean;
+  onAssignWorkspace: () => void;
+  onClearWorkspace: () => void;
+  flightSignal: number;
+  workspaceScreenPos: { sx: number; sy: number } | null;
 }) {
   const { hasKey } = useApiKey();
+
+  // "Flight": when a marker-targeted AI call starts, the character glides once
+  // toward the marker's on-screen position, then snaps back. Subtle, not a romp.
+  // It flies as a fixed-position clone (the sidebar clips overflow, so the real
+  // character can't leave the panel) while the real one fades for the trip.
+  const charRef = useRef<HTMLSpanElement>(null);
+  const [flight, setFlight] = useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    dx: number;
+    dy: number;
+    armed: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (flightSignal === 0) return;
+    const el = charRef.current;
+    const target = workspaceScreenPos;
+    if (!el || !target) return;
+    const r = el.getBoundingClientRect();
+    setFlight({
+      x: r.left,
+      y: r.top,
+      w: r.width,
+      h: r.height,
+      dx: target.sx - (r.left + r.width / 2),
+      dy: target.sy - (r.top + r.height / 2),
+      armed: false,
+    });
+    // Arm on the next frame so the transform transition actually runs.
+    const raf = requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        setFlight((f) => (f ? { ...f, armed: true } : f)),
+      ),
+    );
+    // Safety cap: never hold the clone out for longer than a slow call.
+    const t = setTimeout(() => setFlight(null), 8000);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
+    // Re-fire only on a new signal; the captured screen pos is intentional.
+  }, [flightSignal]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Snap the clone back once the call lands (nodes appear) — aiState leaves
+  // "thinking" for "done"/"error". A short beat lets the arrival register.
+  useEffect(() => {
+    if (!flight || aiState === "thinking") return;
+    const t = setTimeout(() => setFlight(null), 200);
+    return () => clearTimeout(t);
+  }, [aiState, flight]);
 
   return (
     <div
@@ -60,6 +126,32 @@ export function AiPanel({
         paddingTop: 16,
       }}
     >
+      {/* Flight clone — fixed to the viewport so it isn't clipped by the panel */}
+      {flight &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            aria-hidden="true"
+            style={{
+              position: "fixed",
+              left: flight.x,
+              top: flight.y,
+              width: flight.w,
+              height: flight.h,
+              transform: flight.armed
+                ? `translate(${flight.dx}px, ${flight.dy}px) scale(0.92)`
+                : "none",
+              transition: "transform 400ms cubic-bezier(0.4, 0, 0.2, 1)",
+              willChange: "transform",
+              pointerEvents: "none",
+              zIndex: 600,
+            }}
+          >
+            <AiCharacter state={aiState} size={48} color="#2A2823" />
+          </div>,
+          document.body,
+        )}
+
       {/* Assistant character */}
       <div
         style={{
@@ -70,7 +162,18 @@ export function AiPanel({
           padding: "4px 16px 18px",
         }}
       >
-        <AiCharacter state={aiState} size={48} color="#2A2823" />
+        <span
+          ref={charRef}
+          style={{
+            display: "inline-flex",
+            // Hidden while its clone makes the trip; reappears (snaps back) when
+            // the flight ends.
+            opacity: flight ? 0 : 1,
+            transition: "opacity 120ms ease-out",
+          }}
+        >
+          <AiCharacter state={aiState} size={48} color="#2A2823" />
+        </span>
         <span
           style={{
             fontSize: 11,
@@ -144,6 +247,73 @@ export function AiPanel({
             <FileText size={ICON.sm} {...ICON_PROPS} />
             {aiState === "thinking" ? "Summarizing…" : "Summarize board"}
           </button>
+        </div>
+      )}
+
+      {/* AI workspace marker — assign / clear a spot for AI output */}
+      {hasKey && (
+        <div style={{ padding: "0 16px 4px" }}>
+          <button
+            onClick={
+              placingWorkspace
+                ? undefined
+                : workspace
+                  ? onClearWorkspace
+                  : onAssignWorkspace
+            }
+            title={
+              workspace
+                ? "Remove the AI workspace marker"
+                : "Pick a spot on the canvas for AI output"
+            }
+            style={{
+              width: "100%",
+              height: 36,
+              borderRadius: 10,
+              border: placingWorkspace
+                ? `1px solid ${ACCENT}`
+                : "1px solid rgba(42,40,35,0.12)",
+              background: placingWorkspace
+                ? "rgba(197,107,71,0.10)"
+                : "transparent",
+              color: placingWorkspace ? ACCENT : "rgba(42,40,35,0.85)",
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              cursor: placingWorkspace ? "default" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            {workspace && !placingWorkspace ? (
+              <X size={ICON.sm} {...ICON_PROPS} />
+            ) : (
+              <Crosshair size={ICON.sm} {...ICON_PROPS} />
+            )}
+            {placingWorkspace
+              ? "Click on canvas…"
+              : workspace
+                ? "Clear workspace"
+                : "Assign AI workspace"}
+          </button>
+
+          {/* Coordinate hint when a marker is set */}
+          {workspace && (
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: "0.02em",
+                color: "rgba(42,40,35,0.5)",
+                textAlign: "center",
+              }}
+            >
+              x: {Math.round(workspace.x)}, y: {Math.round(workspace.y)}
+            </div>
+          )}
         </div>
       )}
 

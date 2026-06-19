@@ -145,6 +145,9 @@ export const LS_CONNECTIONS = "denkraum_connections";
 export const LS_BOARD_NAME = "denkraum_board_name";
 export const LS_PRESENTATION_ORDER = "denkraum_presentation_order";
 export const LS_CAMERA = "denkraum_camera";
+// AI workspace marker — a world coordinate where AI output is placed. Kept
+// separate from board state and never written to .dnkrm exports.
+export const LS_AI_WORKSPACE = "denkraum_ai_workspace";
 
 export const DEFAULT_NODES: CanvasNode[] = [
   {
