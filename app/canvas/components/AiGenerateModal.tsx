@@ -1,57 +1,38 @@
 "use client";
 import { useState } from "react";
-import { AlertTriangle, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 import { ACCENT } from "../lib/canvas-types";
-import { generateGraph, type GeneratedGraph } from "../lib/ai-generate";
 import { AiCharacter, type AiCharacterState } from "./AiCharacter";
 
 interface AiGenerateModalProps {
   open: boolean;
   onClose: () => void;
-  apiKey: string;
-  onPlace: (graph: GeneratedGraph) => void;
-  // Shared assistant state — mirrored here (the modal covers the toolbar during
-  // a call) and reported back so the toolbar character reacts too.
+  // Fire-and-forget: the modal hands the prompt off and closes immediately;
+  // the actual AI call runs in the background while the canvas stays usable.
+  onSubmit: (prompt: string) => void;
   aiState: AiCharacterState;
-  onState: (state: AiCharacterState) => void;
 }
 
-// ── AI Generate modal — prompt → node graph ──
+// ── AI Generate modal — prompt → node graph (non-blocking) ──
 export function AiGenerateModal({
   open,
   onClose,
-  apiKey,
-  onPlace,
+  onSubmit,
   aiState,
-  onState,
 }: AiGenerateModalProps) {
   const [prompt, setPrompt] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
 
   const close = () => {
-    if (busy) return;
-    setError(null);
     onClose();
   };
 
-  const submit = async () => {
-    if (busy || prompt.trim() === "") return;
-    setBusy(true);
-    setError(null);
-    onState("thinking");
-    const r = await generateGraph(prompt, apiKey);
-    setBusy(false);
-    if (!r.ok) {
-      setError(r.message);
-      onState("error");
-      return;
-    }
-    onState("done");
-    onPlace(r.graph);
+  const submit = () => {
+    const p = prompt.trim();
+    if (p === "") return;
+    onSubmit(p);
     setPrompt("");
     onClose();
   };
@@ -120,13 +101,9 @@ export function AiGenerateModal({
         <input
           autoFocus
           value={prompt}
-          disabled={busy}
           placeholder="e.g. a flowchart for user onboarding"
           spellCheck={false}
-          onChange={(e) => {
-            setPrompt(e.target.value);
-            if (error) setError(null);
-          }}
+          onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === "Enter") submit();
@@ -147,22 +124,6 @@ export function AiGenerateModal({
           }}
         />
 
-        {error && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              fontWeight: 600,
-              color: ACCENT,
-            }}
-          >
-            <AlertTriangle size={ICON.sm} {...ICON_PROPS} />
-            {error}
-          </div>
-        )}
-
         {/* Actions */}
         <div
           style={{
@@ -174,7 +135,6 @@ export function AiGenerateModal({
         >
           <button
             onClick={close}
-            disabled={busy}
             style={{
               height: 34,
               padding: "0 14px",
@@ -185,35 +145,33 @@ export function AiGenerateModal({
               fontSize: 12,
               fontWeight: 600,
               fontFamily: "inherit",
-              cursor: busy ? "default" : "pointer",
+              cursor: "pointer",
             }}
           >
             Cancel
           </button>
           <button
             onClick={submit}
-            disabled={busy || prompt.trim() === ""}
+            disabled={prompt.trim() === ""}
             style={{
               height: 34,
               padding: "0 16px",
               borderRadius: 10,
               border: "none",
               background:
-                busy || prompt.trim() === ""
-                  ? "rgba(197,107,71,0.4)"
-                  : ACCENT,
+                prompt.trim() === "" ? "rgba(197,107,71,0.4)" : ACCENT,
               color: "#FCFBF8",
               fontSize: 12,
               fontWeight: 600,
               fontFamily: "inherit",
-              cursor: busy || prompt.trim() === "" ? "default" : "pointer",
+              cursor: prompt.trim() === "" ? "default" : "pointer",
               display: "flex",
               alignItems: "center",
               gap: 6,
             }}
           >
             <Sparkles size={ICON.sm} {...ICON_PROPS} />
-            {busy ? "Generating…" : "Generate"}
+            Generate
           </button>
         </div>
       </div>

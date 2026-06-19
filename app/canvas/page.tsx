@@ -39,6 +39,7 @@ import {
   layoutGraph,
   GEN_SIZE,
   expandNode,
+  generateGraph,
   summarizeBoard,
   type GeneratedGraph,
   type ExpandContext,
@@ -704,6 +705,33 @@ export default function Canvas() {
     [commitNewGraph],
   );
 
+  // Generate a node graph from a prompt. Runs in the background: the modal
+  // closes the moment the user submits, the canvas stays interactive, and
+  // aiState drives the assistant character while the call is in flight. Success
+  // and failure both surface as a toast.
+  const generateFromPrompt = useCallback(
+    async (prompt: string) => {
+      if (!aiHasKey || aiBusyRef.current) return;
+      aiBusyRef.current = true;
+      setAiState("thinking");
+      const r = await generateGraph(prompt, aiApiKey);
+      aiBusyRef.current = false;
+      if (!r.ok) {
+        setAiState("error");
+        setToast({ msg: `AI: ${r.message}`, variant: "error" });
+        return;
+      }
+      setAiState("done");
+      addGeneratedGraph(r.graph);
+      const n = r.graph.nodes.length;
+      setToast({
+        msg: `Generated ${n} node${n === 1 ? "" : "s"}`,
+        variant: "success",
+      });
+    },
+    [aiHasKey, aiApiKey, addGeneratedGraph],
+  );
+
   // Expand a selected node into AI-generated child nodes branching off it. The
   // children fan out to the right of the node (sliding clear of any existing
   // node), connect back to it, and commit as one undo snapshot. Errors surface
@@ -933,6 +961,7 @@ export default function Canvas() {
       fontSize: 13,
     };
     commitNewGraph([node], [], { cx: x + W / 2, cy: y + H / 2 });
+    setToast({ msg: "Board summarized", variant: "success" });
   }, [aiHasKey, aiApiKey, commitNewGraph]);
 
   const handleImageInsert = useCallback((cx: number, cy: number) => {
@@ -2454,10 +2483,8 @@ export default function Canvas() {
       <AiGenerateModal
         open={generateOpen}
         onClose={() => setGenerateOpen(false)}
-        apiKey={aiApiKey}
-        onPlace={addGeneratedGraph}
+        onSubmit={generateFromPrompt}
         aiState={aiState}
-        onState={setAiState}
       />
 
       <Toast toast={toast} />
