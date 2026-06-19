@@ -50,9 +50,9 @@ export const GEN_FILL_COLORS = [
 export const GEN_FONT_SIZES = [20, 16, 13, 11] as const;
 
 // Bounds for the AI-assigned node size (importance, not text volume). Single
-// source of truth shared by the JSON schema and the sanitizer's clamp.
-export const GEN_W_RANGE = { min: 120, max: 360 } as const;
-export const GEN_H_RANGE = { min: 56, max: 200 } as const;
+// source of truth shared by the prompt's size guide and the sanitizer's clamp.
+export const GEN_W_RANGE = { min: 140, max: 400 } as const;
+export const GEN_H_RANGE = { min: 64, max: 220 } as const;
 
 export type GenNode = {
   id: string;
@@ -99,11 +99,11 @@ const TYPOGRAPHY_GUIDE = `Typography — give each node a "fontSize" to build a 
 - 11 — small leaf details or asides
 Make a few anchor nodes larger; keep the rest at 13 so the structure stays calm.`;
 
-const SIZE_GUIDE = `Size — give each node a "width" and "height" that reflect how CENTRAL and IMPORTANT it is, NOT how much text it holds. Size is your strongest signal of hierarchy:
-- Root / central node: large, about 240×100 (go wider for a single dominant hub).
-- Key supporting nodes: medium, about 180×80.
-- Detail / peripheral / leaf nodes: small, about 140×60.
-Pick sizes from a continuum (width ${GEN_W_RANGE.min}–${GEN_W_RANGE.max}, height ${GEN_H_RANGE.min}–${GEN_H_RANGE.max}); a node with little text can still be large if it is central, and a node with lots of text stays small if it is peripheral. Circles and sticky notes are kept square automatically, so their size still reads as importance.`;
+const SIZE_GUIDE = `Size — give each node a "width" and "height" that reflect how CENTRAL and IMPORTANT it is, NOT how much text it holds. Size is your strongest signal of hierarchy, so make the differences between tiers obvious — a glance should reveal the structure:
+- Root / central node: large, at least 280×120 (go bigger, up to ${GEN_W_RANGE.max}×${GEN_H_RANGE.max}, for a single dominant hub). Clearly the largest node.
+- Key supporting nodes: medium, about 200×90. Plainly bigger than the detail nodes, plainly smaller than the root.
+- Detail / peripheral / leaf nodes: small, about 160×70.
+Pick sizes from a continuum (width ${GEN_W_RANGE.min}–${GEN_W_RANGE.max}, height ${GEN_H_RANGE.min}–${GEN_H_RANGE.max}). A node with little text can still be large if it is central, and a node with lots of text stays small if it is peripheral — the app grows a node's height to fit its text, so never shrink a node to cram text in. Circles and sticky notes are kept square automatically, so their size still reads as importance.`;
 
 const SYSTEM_PROMPT = `You generate a node graph for DNKRM, a visual canvas / mind-mapping tool. Given the user's request, return a graph of nodes and the directed connections between them.
 
@@ -156,7 +156,7 @@ Each node has:
 
 "connections" are directed edges { "from": <id>, "to": <id> } BETWEEN the child nodes only (for sub-branches) — do NOT reference the parent; the app links the children to it automatically.
 
-Color the children to fit the branch's meaning (often a shared color reads as one cluster), and keep most at fontSize 13 — these are a sub-branch, so rarely use 20. These are peripheral nodes, so size them mostly medium (~180×80) to small (~140×60); reserve the largest sizes for a child that clearly anchors a sub-branch. Return only JSON matching the provided schema, with 3 to 7 nodes.`;
+Color the children to fit the branch's meaning (often a shared color reads as one cluster), and keep most at fontSize 13 — these are a sub-branch, so rarely use 20. These are peripheral nodes, so size them mostly medium (~200×90) to small (~160×70); reserve the largest sizes for a child that clearly anchors a sub-branch. Return only JSON matching the provided schema, with 3 to 7 nodes.`;
 
 const GRAPH_SCHEMA = {
   type: "object",

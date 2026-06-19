@@ -45,6 +45,7 @@ import {
   type ExpandContext,
   type SummaryItem,
 } from "./lib/ai-generate";
+import { fitGeneratedHeights } from "./lib/node-measure";
 import {
   buildPresentationSteps,
   flattenSteps,
@@ -684,6 +685,9 @@ export default function Canvas() {
   const addGeneratedGraph = useCallback(
     (graph: GeneratedGraph) => {
       if (graph.nodes.length === 0) return;
+      // Grow card nodes to fit their text before layout, so spacing accounts for
+      // the real heights (no overlap) and nothing clips.
+      fitGeneratedHeights(graph.nodes);
       const local = layoutGraph(graph.nodes, graph.connections);
 
       // Cluster bounding box (layout coordinates start near 0,0).
@@ -842,6 +846,8 @@ export default function Canvas() {
         (c) => childIds.has(c.from) && childIds.has(c.to),
       );
 
+      // Grow card children to fit their text before layout (no clip, no overlap).
+      fitGeneratedHeights(children);
       const local = layoutGraph(children, childConns);
       let clusterW = 0;
       let clusterH = 0;
