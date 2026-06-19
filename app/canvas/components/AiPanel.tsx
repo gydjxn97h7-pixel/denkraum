@@ -8,12 +8,23 @@ import { PanelSectionLabel } from "./panel-ui";
 import { useApiKey } from "../lib/ai-key";
 import { AiCharacter, type AiCharacterState } from "./AiCharacter";
 
-// Caption shown under the assistant character per state.
-const STATE_CAPTION: Record<AiCharacterState, string> = {
-  idle: "Ready",
-  thinking: "Thinking…",
-  done: "Done",
-  error: "Hmm…",
+// The companion has a name so it reads as a presence, not a status icon.
+const COMPANION_NAME = "Sol";
+
+// A warm, in-character mood line per state — the companion "speaking".
+const STATE_MOOD: Record<AiCharacterState, string> = {
+  idle: "Ready when you are",
+  thinking: "Thinking it through…",
+  done: "There you go!",
+  error: "That didn't work",
+};
+
+// Soft status dot colour matching the mood.
+const STATE_DOT: Record<AiCharacterState, string> = {
+  idle: "#7C7A4E", // olive — calm
+  thinking: "#D4A04A", // ochre — working
+  done: "#7C7A4E", // olive — happy/settled
+  error: "#C56B47", // terracotta — attention
 };
 
 // What the assistant can do today — strictly the features that work now.
@@ -142,9 +153,17 @@ export function AiPanel({
               willChange: "transform",
               pointerEvents: "none",
               zIndex: 600,
+              // Faithful copy of the resting pedestal so the lift-off reads as
+              // the whole companion leaving its stage.
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "50%",
+              background:
+                "radial-gradient(circle at 50% 42%, rgba(197,107,71,0.16), rgba(197,107,71,0.05) 58%, transparent 72%)",
             }}
           >
-            <AiCharacter state={aiState} size={48} color="#2A2823" />
+            <AiCharacter state={aiState} size={52} color="#2A2823" />
           </div>,
           document.body,
         )}
@@ -159,27 +178,66 @@ export function AiPanel({
           padding: "4px 16px 18px",
         }}
       >
+        {/* Companion on a soft aura pedestal */}
         <span
           ref={charRef}
           style={{
+            position: "relative",
             display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 72,
+            height: 72,
+            borderRadius: "50%",
+            // A warm radial halo so the companion sits on a little stage.
+            background:
+              "radial-gradient(circle at 50% 42%, rgba(197,107,71,0.16), rgba(197,107,71,0.05) 58%, transparent 72%)",
             // Hidden while its clone makes the trip; reappears (snaps back) when
             // the flight ends.
             opacity: flight ? 0 : 1,
             transition: "opacity 120ms ease-out",
           }}
         >
-          <AiCharacter state={aiState} size={48} color="#2A2823" />
+          <AiCharacter state={aiState} size={52} color="#2A2823" />
         </span>
+
+        {/* Name */}
         <span
           style={{
+            fontSize: 14,
+            fontWeight: 600,
+            letterSpacing: "0.01em",
+            color: "#2A2823",
+            fontFamily: "var(--font-clash), system-ui, sans-serif",
+            marginTop: 2,
+          }}
+        >
+          {COMPANION_NAME}
+        </span>
+
+        {/* Mood line with a status dot */}
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
             fontSize: 11,
             fontWeight: 600,
-            letterSpacing: "0.02em",
+            letterSpacing: "0.01em",
             color: "rgba(42,40,35,0.5)",
           }}
         >
-          {STATE_CAPTION[aiState]}
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: STATE_DOT[aiState],
+              flexShrink: 0,
+              transition: "background 0.3s ease",
+            }}
+          />
+          {STATE_MOOD[aiState]}
         </span>
       </div>
 
