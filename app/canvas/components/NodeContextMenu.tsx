@@ -14,6 +14,7 @@ import {
   ArrowDown,
   ArrowUpToLine,
   ArrowDownToLine,
+  Sparkles,
 } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
@@ -46,6 +47,9 @@ interface NodeContextMenuProps {
   arrangeSendToBack: (id: number) => void;
   toggleExcludeFromPresentation: (id: number, toExclude: boolean) => void;
   deleteSelected: () => void;
+  // AI: "Expand with AI" entry shows only when an API key is set.
+  hasKey: boolean;
+  onExpand: (id: number) => void;
   onClose: () => void;
 }
 
@@ -65,6 +69,8 @@ export function NodeContextMenu({
   arrangeSendToBack,
   toggleExcludeFromPresentation,
   deleteSelected,
+  hasKey,
+  onExpand,
   onClose,
 }: NodeContextMenuProps) {
   const canColor = n.type !== "text" && n.type !== "image";
@@ -87,6 +93,41 @@ export function NodeContextMenu({
         padding: "8px 0",
       }}
     >
+      {/* ── Expand with AI (only when an API key is set) ── */}
+      {hasKey && (
+        <>
+          <div
+            onClick={() => {
+              onExpand(menu.id);
+              onClose();
+            }}
+            onMouseEnter={(e) => hoverMenu(e, true)}
+            onMouseLeave={(e) => hoverMenu(e, false)}
+            style={menuItem()}
+          >
+            <span
+              style={{
+                width: 22,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#C56B47",
+              }}
+            >
+              <Sparkles size={ICON.sm} {...ICON_PROPS} />
+            </span>
+            Expand with AI
+          </div>
+          <div
+            style={{
+              height: "1px",
+              background: "rgba(42,40,35,0.10)",
+              margin: "4px 0",
+            }}
+          />
+        </>
+      )}
+
       {/* ── Copy ── */}
       <div
         onClick={() => {

@@ -46,16 +46,18 @@ export type GenResult =
 
 const MAX_NODES = 40;
 
-const SYSTEM_PROMPT = `You generate a node graph for DNKRM, a visual canvas / mind-mapping tool. Given the user's request, return a graph of nodes and the directed connections between them.
-
-Node types you may use — pick the most fitting for each node:
+const NODE_TYPE_GUIDE = `Node types you may use — pick the most fitting for each node:
 - "block": a standard rectangular card. The sensible default for most ideas, steps, or items.
 - "rounded": a rounded rectangle, good for a grouping, area, or phase.
 - "circle": a small circle, good for a single focal point or a start/end marker.
 - "oval": an ellipse, good for start and end states.
 - "diamond": a decision or branch point.
 - "text": a bare text label with no card — use sparingly, for a heading or a loose note.
-- "sticky": a square sticky note, good for an aside, reminder, or annotation.
+- "sticky": a square sticky note, good for an aside, reminder, or annotation.`;
+
+const SYSTEM_PROMPT = `You generate a node graph for DNKRM, a visual canvas / mind-mapping tool. Given the user's request, return a graph of nodes and the directed connections between them.
+
+${NODE_TYPE_GUIDE}
 
 Each node has:
 - "id": a short unique string within this response (e.g. "n1"), referenced by connections.
@@ -70,6 +72,22 @@ Guidance:
 - Keep titles concise. Use diamonds for decisions and connect each branch.
 - Do not include positions or coordinates — the app lays the graph out.
 Return only JSON matching the provided schema.`;
+
+const EXPAND_SYSTEM_PROMPT = `You expand one node in DNKRM, a visual canvas / mind-mapping tool, into a few child nodes that branch out from it.
+
+Given a parent node (its type, title, and detail) and what it is already connected to, generate 3–7 NEW child nodes that deepen or branch the idea. Do not restate the parent, and do not duplicate anything it is already connected to.
+
+${NODE_TYPE_GUIDE}
+
+Each node has:
+- "id": a short unique string within this response (e.g. "c1").
+- "type": exactly one of the types above.
+- "title": a short label, a few words.
+- "body": an optional one-sentence detail, or "" if none.
+
+"connections" are directed edges { "from": <id>, "to": <id> } BETWEEN the child nodes only (for sub-branches) — do NOT reference the parent; the app links the children to it automatically.
+
+Return only JSON matching the provided schema, with 3 to 7 nodes.`;
 
 const GRAPH_SCHEMA = {
   type: "object",
@@ -105,12 +123,14 @@ const GRAPH_SCHEMA = {
   additionalProperties: false,
 };
 
-export async function generateGraph(
-  prompt: string,
+// Shared core for every graph request: load the SDK (module-cached after the
+// first call), call Haiku with the structured-output schema, map errors, parse,
+// and sanitize. generateGraph and expandNode differ only in their prompts.
+async function runGraphRequest(
+  system: string,
+  user: string,
   apiKey: string,
 ): Promise<GenResult> {
-  const trimmed = prompt.trim();
-  if (!trimmed) return { ok: false, message: "Enter a prompt." };
   if (!apiKey) return { ok: false, message: "No API key set." };
 
   let Anthropic: typeof import("@anthropic-ai/sdk").default;
@@ -131,8 +151,8 @@ export async function generateGraph(
     response = await client.messages.create({
       model: "claude-haiku-4-5",
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: trimmed }],
+      system,
+      messages: [{ role: "user", content: user }],
       output_config: { format: { type: "json_schema", schema: GRAPH_SCHEMA } },
     });
   } catch (err) {
@@ -176,6 +196,42 @@ export async function generateGraph(
   }
 
   return sanitizeGraph(parsed);
+}
+
+export async function generateGraph(
+  prompt: string,
+  apiKey: string,
+): Promise<GenResult> {
+  const trimmed = prompt.trim();
+  if (!trimmed) return { ok: false, message: "Enter a prompt." };
+  return runGraphRequest(SYSTEM_PROMPT, trimmed, apiKey);
+}
+
+// Context describing the node being expanded — passed to the model so the
+// children deepen the idea without repeating existing connections.
+export type ExpandContext = {
+  type: string;
+  title: string;
+  body: string;
+  neighbors: string[];
+};
+
+// Expand one node into 3–7 child nodes. The returned graph's nodes are the
+// children and its connections are child→child only; the caller links them to
+// the parent.
+export async function expandNode(
+  ctx: ExpandContext,
+  apiKey: string,
+): Promise<GenResult> {
+  const user =
+    `Parent node (type: ${ctx.type}):\n` +
+    `Title: ${ctx.title.trim() || "(untitled)"}\n` +
+    (ctx.body.trim() ? `Detail: ${ctx.body.trim()}\n` : "") +
+    `Already connected to: ${
+      ctx.neighbors.length > 0 ? ctx.neighbors.join(", ") : "(nothing yet)"
+    }\n\n` +
+    `Generate 3–7 child nodes that branch or deepen this idea, avoiding anything already connected.`;
+  return runGraphRequest(EXPAND_SYSTEM_PROMPT, user, apiKey);
 }
 
 // Validate + coerce the model's JSON into a safe graph: known ids only, types

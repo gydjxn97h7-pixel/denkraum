@@ -38,7 +38,9 @@ import { useApiKey } from "./lib/ai-key";
 import {
   layoutGraph,
   GEN_SIZE,
+  expandNode,
   type GeneratedGraph,
+  type ExpandContext,
 } from "./lib/ai-generate";
 import {
   buildPresentationSteps,
@@ -129,6 +131,8 @@ export default function Canvas() {
   const [generateOpen, setGenerateOpen] = useState(false);
   // Assistant character state, shared by the toolbar button + the modal.
   const [aiState, setAiState] = useState<AiCharacterState>("idle");
+  // Guards against overlapping AI operations (e.g. a double-triggered Expand).
+  const aiBusyRef = useRef(false);
   // "done" / "error" are momentary — settle back to "idle" shortly after.
   useEffect(() => {
     if (aiState !== "done" && aiState !== "error") return;
@@ -580,6 +584,40 @@ export default function Canvas() {
     [pushHistory],
   );
 
+  // Append AI-built nodes + connections as ONE undo snapshot, select them, and
+  // pan to centre `center`. Shared by Generate and Expand.
+  const commitNewGraph = useCallback(
+    (
+      newNodes: CanvasNode[],
+      newConns: Connection[],
+      center: { cx: number; cy: number },
+    ) => {
+      const newIds = newNodes.map((n) => n.id);
+      const allNodes = [...nodesRef.current, ...newNodes];
+      const allConns = [...connectionsRef.current, ...newConns];
+      const allOrder = [...presentationOrderRef.current, ...newIds];
+      nodesRef.current = allNodes;
+      connectionsRef.current = allConns;
+      presentationOrderRef.current = allOrder;
+      pushHistory();
+      setNodes(allNodes);
+      setConnections(allConns);
+      setPresentationOrder(allOrder);
+      setSelected(null);
+      setSelectedIds(new Set(newIds));
+
+      const r = canvasRef.current?.getBoundingClientRect();
+      if (r) {
+        const z = zoomRef.current;
+        setPan({
+          x: r.width / 2 - center.cx * z,
+          y: r.height / 2 - center.cy * z,
+        });
+      }
+    },
+    [pushHistory],
+  );
+
   // Place an AI-generated graph: lay it out, drop it to the right of existing
   // content (or at the viewport centre on an empty board), commit as ONE undo
   // snapshot, select the new nodes, and pan to reveal them. Generated nodes are
@@ -656,30 +694,149 @@ export default function Canvas() {
           newConns.push({ from, to });
       }
 
-      const newIds = newNodes.map((n) => n.id);
-      const allNodes = [...existing, ...newNodes];
-      const allConns = [...connectionsRef.current, ...newConns];
-      const allOrder = [...presentationOrderRef.current, ...newIds];
-      nodesRef.current = allNodes;
-      connectionsRef.current = allConns;
-      presentationOrderRef.current = allOrder;
-      pushHistory();
-      setNodes(allNodes);
-      setConnections(allConns);
-      setPresentationOrder(allOrder);
-      setSelected(null);
-      setSelectedIds(new Set(newIds));
-
-      // Pan to bring the new cluster into view (keeping the current zoom).
-      const r = canvasRef.current?.getBoundingClientRect();
-      if (r) {
-        const z = zoomRef.current;
-        const cx = originX + clusterW / 2;
-        const cy = originY + clusterH / 2;
-        setPan({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z });
-      }
+      commitNewGraph(newNodes, newConns, {
+        cx: originX + clusterW / 2,
+        cy: originY + clusterH / 2,
+      });
     },
-    [pushHistory],
+    [commitNewGraph],
+  );
+
+  // Expand a selected node into AI-generated child nodes branching off it. The
+  // children fan out to the right of the node (sliding clear of any existing
+  // node), connect back to it, and commit as one undo snapshot. Errors surface
+  // as a toast (Expand has no modal); aiState drives the assistant character.
+  const expandSelectedNode = useCallback(
+    async (nodeId: number) => {
+      if (!aiHasKey || aiBusyRef.current) return;
+      const node = nodeMapRef.current.get(nodeId);
+      if (!node) return;
+
+      // Titles of already-connected nodes (both directions) so the AI doesn't
+      // duplicate them.
+      const neighbors: string[] = [];
+      const seen = new Set<number>();
+      for (const c of connectionsRef.current) {
+        const other =
+          c.from === nodeId ? c.to : c.to === nodeId ? c.from : null;
+        if (other === null || seen.has(other)) continue;
+        seen.add(other);
+        const t = (
+          nodeMapRef.current.get(other)?.title ??
+          nodeMapRef.current.get(other)?.label ??
+          ""
+        ).trim();
+        if (t) neighbors.push(t);
+      }
+
+      aiBusyRef.current = true;
+      setAiState("thinking");
+      const ctx: ExpandContext = {
+        type: node.type,
+        title: node.title ?? "",
+        body: node.body ?? "",
+        neighbors,
+      };
+      const r = await expandNode(ctx, aiApiKey);
+      aiBusyRef.current = false;
+      if (!r.ok) {
+        setAiState("error");
+        setToast({ msg: `AI: ${r.message}`, variant: "error" });
+        return;
+      }
+      setAiState("done");
+
+      // Cap to a sensible fan; keep only child→child edges.
+      const children = r.graph.nodes.slice(0, 8);
+      const childIds = new Set(children.map((n) => n.id));
+      const childConns = r.graph.connections.filter(
+        (c) => childIds.has(c.from) && childIds.has(c.to),
+      );
+
+      const local = layoutGraph(children, childConns);
+      let clusterW = 0;
+      let clusterH = 0;
+      for (const gn of children) {
+        const p = local.get(gn.id);
+        if (!p) continue;
+        const s = GEN_SIZE[gn.type];
+        clusterW = Math.max(clusterW, p.x + s.w);
+        clusterH = Math.max(clusterH, p.y + s.h);
+      }
+
+      // Right of the parent, vertically centred; slide right past any existing
+      // node it would overlap (never the parent itself).
+      const GAP = 80;
+      let originX = node.x + node.w + GAP;
+      const originY = node.y + node.h / 2 - clusterH / 2;
+      const others = nodesRef.current.filter((n) => n.id !== nodeId);
+      for (let iter = 0; iter < 12; iter++) {
+        const M = 24;
+        let pushTo = -Infinity;
+        for (const o of others) {
+          const overlapX =
+            originX - M < o.x + o.w && originX + clusterW + M > o.x;
+          const overlapY =
+            originY - M < o.y + o.h && originY + clusterH + M > o.y;
+          if (overlapX && overlapY) pushTo = Math.max(pushTo, o.x + o.w + GAP);
+        }
+        if (pushTo === -Infinity) break;
+        originX = pushTo;
+      }
+
+      const maxExistingId = getMaxNodeId(nodeMapRef.current);
+      if (idCounterRef.current <= maxExistingId)
+        idCounterRef.current = maxExistingId + 1;
+      const idMap = new Map<string, number>();
+      const newNodes: CanvasNode[] = children.map((gn) => {
+        const id = idCounterRef.current;
+        idCounterRef.current += 1;
+        idMap.set(gn.id, id);
+        const s = GEN_SIZE[gn.type];
+        const p = local.get(gn.id) ?? { x: 0, y: 0 };
+        const isText = gn.type === "text";
+        return {
+          id,
+          x: originX + p.x,
+          y: originY + p.y,
+          w: s.w,
+          h: s.h,
+          title: gn.title,
+          body: gn.body,
+          type: gn.type,
+          color: isText ? "transparent" : "#FCFBF8",
+          fontSize: isText ? 15 : 13,
+        };
+      });
+
+      // child→child sub-branch edges.
+      const newConns: Connection[] = [];
+      const hasIncoming = new Set<string>();
+      for (const c of childConns) hasIncoming.add(c.to);
+      for (const c of childConns) {
+        const from = idMap.get(c.from);
+        const to = idMap.get(c.to);
+        if (from !== undefined && to !== undefined) newConns.push({ from, to });
+      }
+
+      // Link the parent to the root children (those with no incoming child
+      // edge). If the model returned a structure with NO root — a cycle, or one
+      // where every child is targeted — `roots` is empty and the parent loop
+      // adds nothing, leaving the whole cluster floating. Fall back to linking
+      // the parent to ALL children so it's always attached.
+      const roots = children.filter((gn) => !hasIncoming.has(gn.id));
+      const parentTargets = roots.length > 0 ? roots : children;
+      for (const gn of parentTargets) {
+        const childId = idMap.get(gn.id);
+        if (childId !== undefined) newConns.push({ from: nodeId, to: childId });
+      }
+
+      commitNewGraph(newNodes, newConns, {
+        cx: originX + clusterW / 2,
+        cy: originY + clusterH / 2,
+      });
+    },
+    [aiHasKey, aiApiKey, commitNewGraph],
   );
 
   const handleImageInsert = useCallback((cx: number, cy: number) => {
@@ -2082,6 +2239,8 @@ export default function Canvas() {
               arrangeSendToBack={arrangeSendToBack}
               toggleExcludeFromPresentation={toggleExcludeFromPresentation}
               deleteSelected={deleteSelected}
+              hasKey={aiHasKey}
+              onExpand={expandSelectedNode}
               onClose={() => setContextMenu(null)}
             />
           );

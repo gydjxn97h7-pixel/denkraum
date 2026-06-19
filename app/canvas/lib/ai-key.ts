@@ -1,15 +1,20 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 // ── Anthropic API key storage + validation ─────────────────────────────────────
 // Foundation for optional AI features. The key lives in its OWN localStorage
 // entry, deliberately separate from board state — so it is never part of the
 // nodes/connections JSON and is therefore never written to a .dnkrm file or any
 // PDF/MD export. It is never logged.
+//
+// A single module-level store backs every useApiKey() consumer: one source of
+// truth (so saving the key in the AI panel instantly flips hasKey everywhere),
+// no per-component state, and localStorage is read once at module load — never
+// on render.
 
 export const LS_AI_API_KEY = "denkraum_anthropic_api_key";
 
-export function getApiKey(): string {
+function readLocal(): string {
   if (typeof window === "undefined") return "";
   try {
     return localStorage.getItem(LS_AI_API_KEY) ?? "";
@@ -18,20 +23,43 @@ export function getApiKey(): string {
   }
 }
 
+// Cached current value + subscribers. Initialised once (client: one read).
+let current = readLocal();
+const listeners = new Set<() => void>();
+const emit = () => {
+  for (const l of listeners) l();
+};
+const subscribe = (cb: () => void) => {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+};
+const getSnapshot = () => current;
+const getServerSnapshot = () => "";
+
+export function getApiKey(): string {
+  return current;
+}
+
 export function setApiKey(key: string): void {
+  current = key;
   try {
     localStorage.setItem(LS_AI_API_KEY, key);
   } catch {
     // private-mode / quota — non-critical
   }
+  emit();
 }
 
 export function clearApiKey(): void {
+  current = "";
   try {
     localStorage.removeItem(LS_AI_API_KEY);
   } catch {
     // ignore
   }
+  emit();
 }
 
 export type ValidateResult = {
@@ -89,29 +117,25 @@ export async function validateKey(key: string): Promise<ValidateResult> {
   }
 }
 
-// Reactive access to the stored key. `hasKey` is the gate future AI features
-// use: render AI UI only when a key is present.
+// Reactive access to the stored key, shared across all consumers. `hasKey` is
+// the gate AI features use: render AI UI only when a key is present. Backed by
+// useSyncExternalStore — no per-render localStorage, no duplicated state, and
+// SSR-safe (server snapshot is empty; the client reconciles after hydration).
 export function useApiKey() {
-  const [apiKey, setKey] = useState("");
-
-  // Hydrate from localStorage after mount — reading it during render would
-  // break SSR and cause a hydration mismatch, so this setState-in-effect is
-  // intentional and runs exactly once.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setKey(getApiKey());
-  }, []);
+  const apiKey = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
 
   const save = useCallback((key: string) => {
     const trimmed = key.trim();
     if (trimmed) setApiKey(trimmed);
     else clearApiKey();
-    setKey(trimmed);
   }, []);
 
   const clear = useCallback(() => {
     clearApiKey();
-    setKey("");
   }, []);
 
   return { apiKey, hasKey: apiKey.length > 0, save, clear };
