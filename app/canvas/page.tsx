@@ -900,8 +900,8 @@ export default function Canvas() {
     }
     setAiState("done");
 
-    // One generously-sized Text node centred below all existing content. The
-    // prose lives in `title` — that's the field a type:"text" node renders.
+    // One generously-sized card centred below all existing content. A "rounded"
+    // node renders both fields, so the prose sits in `body` (title is a label).
     let minX = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
@@ -926,11 +926,11 @@ export default function Canvas() {
       y,
       w: W,
       h: H,
-      title: r.summary,
-      body: "",
-      type: "text",
-      color: "transparent",
-      fontSize: 15,
+      title: "Summary",
+      body: r.summary,
+      type: "rounded",
+      color: "#FCFBF8",
+      fontSize: 13,
     };
     commitNewGraph([node], [], { cx: x + W / 2, cy: y + H / 2 });
   }, [aiHasKey, aiApiKey, commitNewGraph]);
