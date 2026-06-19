@@ -46,6 +46,7 @@ interface SidebarPanelProps {
   // AI section
   aiState: AiCharacterState;
   onSummarize: () => void;
+  onGenerate: () => void;
 }
 
 // ── Sidebar Panel (220px, shown when panel open) ──
@@ -80,6 +81,7 @@ function SidebarPanelImpl({
   onLoadBoardClick,
   aiState,
   onSummarize,
+  onGenerate,
 }: SidebarPanelProps) {
   const panelOpen = activePanel !== null;
   return (
@@ -581,6 +583,7 @@ function SidebarPanelImpl({
           aiState={aiState}
           nodeCount={nodes.length}
           onSummarize={onSummarize}
+          onGenerate={onGenerate}
         />
       )}
     </div>

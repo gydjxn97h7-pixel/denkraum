@@ -7,7 +7,7 @@ import {
   Play,
   FolderOpen,
   Keyboard,
-  Sparkles,
+  Cpu,
 } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
@@ -127,7 +127,7 @@ function SidebarStripImpl({
             section: "ai" as const,
             title: "AI",
             icon: (
-              <Sparkles size={ICON.lg} {...ICON_PROPS} />
+              <Cpu size={ICON.lg} {...ICON_PROPS} />
             ),
           },
         ] as {

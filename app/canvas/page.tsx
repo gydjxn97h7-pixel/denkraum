@@ -1989,6 +1989,7 @@ export default function Canvas() {
         onLoadBoardClick={onLoadBoardClick}
         aiState={aiState}
         onSummarize={summarizeBoardToNode}
+        onGenerate={() => setGenerateOpen(true)}
       />
 
       <CanvasToolbar
@@ -2009,8 +2010,6 @@ export default function Canvas() {
         nodeCount={nodes.length}
         filterOpen={filterOpen}
         setFilterOpen={setFilterOpen}
-        hasKey={aiHasKey}
-        onGenerate={() => setGenerateOpen(true)}
       />
 
       {/* ── Filter Bar ── */}

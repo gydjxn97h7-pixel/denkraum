@@ -25,10 +25,12 @@ export function AiSettingsPanel({
   aiState,
   nodeCount,
   onSummarize,
+  onGenerate,
 }: {
   aiState: AiCharacterState;
   nodeCount: number;
   onSummarize: () => void;
+  onGenerate: () => void;
 }) {
   const { apiKey, hasKey, save, clear } = useApiKey();
   const [draft, setDraft] = useState(apiKey);
@@ -137,6 +139,37 @@ export function AiSettingsPanel({
           >
             {STATE_CAPTION[aiState]}
           </span>
+        </div>
+      )}
+
+      {/* Generate — primary AI entry point, present whenever a key is set */}
+      {hasKey && (
+        <div style={{ padding: "0 16px 8px" }}>
+          <button
+            onClick={onGenerate}
+            disabled={aiState === "thinking"}
+            title="Generate a node graph with AI"
+            style={{
+              width: "100%",
+              height: 36,
+              borderRadius: 10,
+              border: "none",
+              background: ACCENT,
+              color: "#FCFBF8",
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              cursor: aiState === "thinking" ? "default" : "pointer",
+              opacity: aiState === "thinking" ? 0.6 : 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            <Sparkles size={ICON.sm} {...ICON_PROPS} />
+            Generate
+          </button>
         </div>
       )}
 
