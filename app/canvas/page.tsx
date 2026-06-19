@@ -146,9 +146,10 @@ export default function Canvas() {
 
   // AI workspace marker — a world coordinate where AI output lands. Persisted
   // on its own localStorage key, kept entirely out of board state / .dnkrm.
-  const [aiWorkspace, setAiWorkspace] = useState<{ x: number; y: number } | null>(
-    null,
-  );
+  const [aiWorkspace, setAiWorkspace] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const aiWorkspaceRef = useRef(aiWorkspace);
   aiWorkspaceRef.current = aiWorkspace;
   // Placement mode: while active the next canvas click drops the marker.
@@ -315,7 +316,9 @@ export default function Canvas() {
   const focusedIds = useMemo(() => {
     if (!isPresenting || presentActiveSeq.length === 0) return null;
     const step =
-      presentActiveSeq[Math.min(presentationIndex, presentActiveSeq.length - 1)];
+      presentActiveSeq[
+        Math.min(presentationIndex, presentActiveSeq.length - 1)
+      ];
     return new Set(step);
   }, [isPresenting, presentActiveSeq, presentationIndex]);
   const focusedNodes = useMemo(
@@ -563,19 +566,20 @@ export default function Canvas() {
     (cx: number, cy: number, type: NodeType) => {
       const isText = type === "text";
       // Default insert size per shape; block/rounded/etc. fall back to 200×80.
-      const DEFAULT_SIZE: Partial<Record<NodeType, { w: number; h: number }>> = {
-        text: { w: 160, h: 40 },
-        circle: { w: 100, h: 100 },
-        oval: { w: 160, h: 100 },
-        diamond: { w: 130, h: 100 },
-        triangle: { w: 130, h: 110 },
-        star: { w: 120, h: 120 },
-        arrow: { w: 170, h: 90 },
-        parallelogram: { w: 160, h: 90 },
-        sticky: { w: 150, h: 150 },
-        checklist: { w: 220, h: 170 },
-        link: { w: 240, h: 100 },
-      };
+      const DEFAULT_SIZE: Partial<Record<NodeType, { w: number; h: number }>> =
+        {
+          text: { w: 160, h: 40 },
+          circle: { w: 100, h: 100 },
+          oval: { w: 160, h: 100 },
+          diamond: { w: 130, h: 100 },
+          triangle: { w: 130, h: 110 },
+          star: { w: 120, h: 120 },
+          arrow: { w: 170, h: 90 },
+          parallelogram: { w: 160, h: 90 },
+          sticky: { w: 150, h: 150 },
+          checklist: { w: 220, h: 170 },
+          link: { w: 240, h: 100 },
+        };
       const { w, h } = DEFAULT_SIZE[type] ?? { w: 200, h: 80 };
       const maxExistingId = getMaxNodeId(nodeMapRef.current);
       if (idCounterRef.current <= maxExistingId)
@@ -770,8 +774,7 @@ export default function Canvas() {
       for (const c of graph.connections) {
         const from = idMap.get(c.from);
         const to = idMap.get(c.to);
-        if (from !== undefined && to !== undefined)
-          newConns.push({ from, to });
+        if (from !== undefined && to !== undefined) newConns.push({ from, to });
       }
 
       commitNewGraph(newNodes, newConns, {
@@ -2173,8 +2176,7 @@ export default function Canvas() {
           right: 0,
           bottom: 0,
           left: 0,
-          cursor:
-            placingWorkspace || connectDrag ? "crosshair" : "grab",
+          cursor: placingWorkspace || connectDrag ? "crosshair" : "grab",
           overflow: "hidden",
         }}
       >
