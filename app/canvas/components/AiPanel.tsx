@@ -50,7 +50,7 @@ export function AiPanel({
   onAssignWorkspace,
   onClearWorkspace,
   flightSignal,
-  workspaceScreenPos,
+  getFlightTarget,
 }: {
   aiState: AiCharacterState;
   nodeCount: number;
@@ -61,7 +61,7 @@ export function AiPanel({
   onAssignWorkspace: () => void;
   onClearWorkspace: () => void;
   flightSignal: number;
-  workspaceScreenPos: { sx: number; sy: number } | null;
+  getFlightTarget: () => { sx: number; sy: number } | null;
 }) {
   const { hasKey } = useApiKey();
 
@@ -82,7 +82,10 @@ export function AiPanel({
   useEffect(() => {
     if (flightSignal === 0) return;
     const el = charRef.current;
-    const target = workspaceScreenPos;
+    // Recompute the marker's screen position from the live camera right now; if
+    // the marker is off-screen the getter returns null and we skip the flight
+    // (nodes still place — the animation is purely decorative).
+    const target = getFlightTarget();
     if (!el || !target) return;
     const r = el.getBoundingClientRect();
     setFlight({
@@ -100,22 +103,16 @@ export function AiPanel({
         setFlight((f) => (f ? { ...f, armed: true } : f)),
       ),
     );
-    // Safety cap: never hold the clone out for longer than a slow call.
-    const t = setTimeout(() => setFlight(null), 8000);
+    // Snap back once the ~400ms flight completes. Timer-driven so the return is
+    // guaranteed even if the camera moved during the trip — the real character
+    // always reappears at its resting spot in the sidebar.
+    const t = setTimeout(() => setFlight(null), 440);
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(t);
     };
-    // Re-fire only on a new signal; the captured screen pos is intentional.
+    // Re-fire only on a new signal; the target is recomputed live above.
   }, [flightSignal]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Snap the clone back once the call lands (nodes appear) — aiState leaves
-  // "thinking" for "done"/"error". A short beat lets the arrival register.
-  useEffect(() => {
-    if (!flight || aiState === "thinking") return;
-    const t = setTimeout(() => setFlight(null), 200);
-    return () => clearTimeout(t);
-  }, [aiState, flight]);
 
   return (
     <div

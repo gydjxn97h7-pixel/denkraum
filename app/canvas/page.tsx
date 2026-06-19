@@ -199,6 +199,21 @@ export default function Canvas() {
     return () => window.removeEventListener("keydown", onKey);
   }, [placingWorkspace]);
 
+  // The marker's current screen position (viewport coords) for the character
+  // flight, recomputed from the world coordinate + the LIVE camera at the
+  // instant it's read — never a cached value. Returns null when there's no
+  // marker or it's currently off-screen, so the flight is skipped in that case.
+  const getWorkspaceFlightTarget = useCallback(() => {
+    const m = aiWorkspaceRef.current;
+    const el = canvasRef.current;
+    if (!m || !el) return null;
+    const r = el.getBoundingClientRect();
+    const sx = r.left + panRef.current.x + m.x * zoomRef.current;
+    const sy = r.top + panRef.current.y + m.y * zoomRef.current;
+    if (sx < r.left || sx > r.right || sy < r.top || sy > r.bottom) return null;
+    return { sx, sy };
+  }, []);
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFileInputRef = useRef<HTMLInputElement>(null);
@@ -2106,11 +2121,7 @@ export default function Canvas() {
         onAssignWorkspace={assignWorkspace}
         onClearWorkspace={clearWorkspace}
         aiFlightSignal={aiFlightSignal}
-        workspaceScreenPos={
-          aiWorkspace
-            ? { sx: pan.x + aiWorkspace.x * zoom, sy: pan.y + aiWorkspace.y * zoom }
-            : null
-        }
+        getFlightTarget={getWorkspaceFlightTarget}
       />
 
       <CanvasToolbar
