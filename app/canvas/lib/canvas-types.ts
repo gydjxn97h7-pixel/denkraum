@@ -137,7 +137,8 @@ export type PanelSection =
   | "presentation"
   | "saveload"
   | "shortcuts"
-  | "ai";
+  | "ai"
+  | "settings";
 
 export const LS_NODES = "denkraum_nodes";
 export const LS_CONNECTIONS = "denkraum_connections";

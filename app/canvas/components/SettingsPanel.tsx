@@ -1,37 +1,18 @@
 "use client";
 import { useState } from "react";
-import { Check, AlertTriangle, X, Sparkles, FileText } from "lucide-react";
+import { Check, AlertTriangle, X, Sparkles } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 import { ACCENT } from "../lib/canvas-types";
 import { PanelSectionLabel } from "./panel-ui";
 import { useApiKey, validateKey } from "../lib/ai-key";
-import { AiCharacter, type AiCharacterState } from "./AiCharacter";
 
 const OLIVE = "#7C7A4E";
 const OCHRE = "#D4A04A";
 
 type Feedback = { tone: "good" | "bad" | "warn"; text: string } | null;
 
-// Caption shown under the assistant character per state.
-const STATE_CAPTION: Record<AiCharacterState, string> = {
-  idle: "Ready",
-  thinking: "Thinking…",
-  done: "Done",
-  error: "Hmm…",
-};
-
-// ── AI settings (Anthropic API key) ──
-export function AiSettingsPanel({
-  aiState,
-  nodeCount,
-  onSummarize,
-  onGenerate,
-}: {
-  aiState: AiCharacterState;
-  nodeCount: number;
-  onSummarize: () => void;
-  onGenerate: () => void;
-}) {
+// ── Settings (Anthropic API key) — the only place the key is managed ──
+export function SettingsPanel() {
   const { apiKey, hasKey, save, clear } = useApiKey();
   const [draft, setDraft] = useState(apiKey);
   const [checking, setChecking] = useState(false);
@@ -117,95 +98,6 @@ export function AiSettingsPanel({
         paddingTop: 16,
       }}
     >
-      {/* Assistant character — present only when a key is set */}
-      {hasKey && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 6,
-            padding: "4px 16px 18px",
-          }}
-        >
-          <AiCharacter state={aiState} size={48} color="#2A2823" />
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: "0.02em",
-              color: "rgba(42,40,35,0.5)",
-            }}
-          >
-            {STATE_CAPTION[aiState]}
-          </span>
-        </div>
-      )}
-
-      {/* Generate — primary AI entry point, present whenever a key is set */}
-      {hasKey && (
-        <div style={{ padding: "0 16px 8px" }}>
-          <button
-            onClick={onGenerate}
-            disabled={aiState === "thinking"}
-            title="Generate a node graph with AI"
-            style={{
-              width: "100%",
-              height: 36,
-              borderRadius: 10,
-              border: "none",
-              background: ACCENT,
-              color: "#FCFBF8",
-              fontSize: 12,
-              fontWeight: 600,
-              fontFamily: "inherit",
-              cursor: aiState === "thinking" ? "default" : "pointer",
-              opacity: aiState === "thinking" ? 0.6 : 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
-            <Sparkles size={ICON.sm} {...ICON_PROPS} />
-            Generate
-          </button>
-        </div>
-      )}
-
-      {/* Board actions — only when a key is set and the board has nodes */}
-      {hasKey && nodeCount > 0 && (
-        <div style={{ padding: "0 16px 4px" }}>
-          <button
-            onClick={onSummarize}
-            disabled={aiState === "thinking"}
-            title="Summarize the board into a text node"
-            style={{
-              width: "100%",
-              height: 36,
-              borderRadius: 10,
-              border: "1px solid rgba(42,40,35,0.12)",
-              background: "transparent",
-              color:
-                aiState === "thinking"
-                  ? "rgba(42,40,35,0.4)"
-                  : "rgba(42,40,35,0.85)",
-              fontSize: 12,
-              fontWeight: 600,
-              fontFamily: "inherit",
-              cursor: aiState === "thinking" ? "default" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
-            <FileText size={ICON.sm} {...ICON_PROPS} />
-            {aiState === "thinking" ? "Summarizing…" : "Summarize board"}
-          </button>
-        </div>
-      )}
-
       <PanelSectionLabel first>Anthropic API Key</PanelSectionLabel>
 
       <div

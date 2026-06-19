@@ -4,7 +4,8 @@ import type { CanvasNode, PanelSection } from "../lib/canvas-types";
 import type { PresentationStep } from "../lib/presentation";
 import { SidebarNodeItem } from "./SidebarNodeItem";
 import { PresentationPanel } from "./PresentationPanel";
-import { AiSettingsPanel } from "./AiSettingsPanel";
+import { AiPanel } from "./AiPanel";
+import { SettingsPanel } from "./SettingsPanel";
 import type { AiCharacterState } from "./AiCharacter";
 import { PanelSectionLabel, StatusRow } from "./panel-ui";
 import { LayoutDashboard, Save, FolderOpen, X } from "lucide-react";
@@ -135,6 +136,7 @@ function SidebarPanelImpl({
           {activePanel === "saveload" && "BOARD FILES"}
           {activePanel === "shortcuts" && "SHORTCUTS"}
           {activePanel === "ai" && "AI"}
+          {activePanel === "settings" && "SETTINGS"}
         </span>
         <button
           onClick={() => setActivePanel(null)}
@@ -579,13 +581,16 @@ function SidebarPanelImpl({
 
       {/* ── AI section ── */}
       {activePanel === "ai" && (
-        <AiSettingsPanel
+        <AiPanel
           aiState={aiState}
           nodeCount={nodes.length}
           onSummarize={onSummarize}
           onGenerate={onGenerate}
         />
       )}
+
+      {/* ── Settings section (API key management) ── */}
+      {activePanel === "settings" && <SettingsPanel />}
     </div>
   );
 }

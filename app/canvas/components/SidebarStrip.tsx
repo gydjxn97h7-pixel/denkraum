@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Keyboard,
   Cpu,
+  Settings,
 } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 
@@ -128,6 +129,13 @@ function SidebarStripImpl({
             title: "AI",
             icon: (
               <Cpu size={ICON.lg} {...ICON_PROPS} />
+            ),
+          },
+          {
+            section: "settings" as const,
+            title: "Settings",
+            icon: (
+              <Settings size={ICON.lg} {...ICON_PROPS} />
             ),
           },
         ] as {
