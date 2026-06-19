@@ -671,12 +671,18 @@ export const NodeView = React.memo(function NodeView({
 
   const isPotentialTarget = connecting && !isConnectSource && !isText;
 
-  const hostBg =
-    isPoly || isText || isImage
-      ? "transparent"
-      : isSticky
-        ? STICKY_FILL
+  // Card fill: the node's own colour drives it (the AI assigns palette fills and
+  // the fill colour-picker writes here too), falling back to cream. Sticky keeps
+  // its fixed yellow; text/image/polygon hosts stay transparent (text has no
+  // card, image shows the picture, polygons fill via their SVG below).
+  const cardFill =
+    isSticky
+      ? STICKY_FILL
+      : n.color && n.color !== "transparent"
+        ? n.color
         : "#FCFBF8";
+  const hostBg =
+    isPoly || isText || isImage ? "transparent" : cardFill;
   // Borderless cards — the soft drop shadow does the separation now.
   const hostBorder = "none";
   // Elevation by state: selected/dragged sits highest, hover lifts slightly.
@@ -834,7 +840,7 @@ export const NodeView = React.memo(function NodeView({
             </defs>
             <polygon
               points={pointsAttr(polygonPoints(n.type, n.w, n.h) ?? [])}
-              fill="#FCFBF8"
+              fill={cardFill}
               stroke={
                 isPotentialTarget
                   ? ACCENT

@@ -31,11 +31,31 @@ export const GEN_SIZE: Record<GenNodeType, { w: number; h: number }> = {
   sticky: { w: 150, h: 150 },
 };
 
+// Curated DNKRM fill palette the generator may assign as a node's card colour.
+// Deliberately a warm, mid/light subset of the full palette — every value keeps
+// the node's dark text (#2A2823) readable, so the AI can never produce an
+// unreadable card. "cream" is the neutral default.
+export const GEN_FILL_COLORS = [
+  "#FCFBF8", // cream — neutral default
+  "#D8C9A8", // sand — grouping / area / phase
+  "#EAD884", // yellow — note / highlight / watch
+  "#D4A04A", // ochre — caution / important detail
+  "#C56B47", // terracotta — key node / decision / primary path
+  "#B0795E", // clay — secondary accent
+  "#7C7A4E", // olive — success / positive end state / "done"
+] as const;
+
+// Font sizes the generator may assign, smallest set that still reads as a clear
+// hierarchy. 13 is the default body size (matches manually-created nodes).
+export const GEN_FONT_SIZES = [20, 16, 13, 11] as const;
+
 export type GenNode = {
   id: string;
   type: GenNodeType;
   title: string;
   body: string;
+  color: string;
+  fontSize: number;
 };
 export type GenConn = { from: string; to: string };
 export type GeneratedGraph = { nodes: GenNode[]; connections: GenConn[] };
@@ -55,21 +75,45 @@ const NODE_TYPE_GUIDE = `Node types you may use — pick the most fitting for ea
 - "text": a bare text label with no card — use sparingly, for a heading or a loose note.
 - "sticky": a square sticky note, good for an aside, reminder, or annotation.`;
 
+const COLOR_GUIDE = `Colors — give each node a "color" (its card fill) from this warm DNKRM palette so the graph reads at a glance. Use color with restraint: most nodes stay cream, and color carries meaning.
+- "#FCFBF8" cream — neutral default (use for the majority of nodes)
+- "#D8C9A8" sand — a grouping, area, or phase
+- "#EAD884" yellow — a note, highlight, or thing to watch
+- "#D4A04A" ochre — caution or an important detail
+- "#C56B47" terracotta — a key node, decision, or the primary path
+- "#B0795E" clay — a secondary accent
+- "#7C7A4E" olive — a positive end state, success, or "done"
+Share a color across related nodes to group them, and reserve terracotta for the few most important nodes. (Text is always dark; every color above keeps it readable.)`;
+
+const TYPOGRAPHY_GUIDE = `Typography — give each node a "fontSize" to build a clear hierarchy:
+- 20 — the root or single central topic (use once, or not at all)
+- 16 — major headings or section anchors
+- 13 — the default for ordinary nodes (use this for most)
+- 11 — small leaf details or asides
+Make a few anchor nodes larger; keep the rest at 13 so the structure stays calm.`;
+
 const SYSTEM_PROMPT = `You generate a node graph for DNKRM, a visual canvas / mind-mapping tool. Given the user's request, return a graph of nodes and the directed connections between them.
 
 ${NODE_TYPE_GUIDE}
+
+${COLOR_GUIDE}
+
+${TYPOGRAPHY_GUIDE}
 
 Each node has:
 - "id": a short unique string within this response (e.g. "n1"), referenced by connections.
 - "type": exactly one of the types above.
 - "title": a short label, a few words.
 - "body": an optional one-sentence detail, or "" if none.
+- "color": exactly one of the palette hex values above.
+- "fontSize": exactly one of the allowed sizes above.
 
 "connections" are directed edges { "from": <id>, "to": <id> } that reference node ids, showing flow or relationship.
 
 Guidance:
 - Produce a focused graph of roughly 5–15 nodes unless the user asks for more or fewer.
 - Keep titles concise. Use diamonds for decisions and connect each branch.
+- Use color and size to express structure (group with color, anchor with size), not decoration.
 - Do not include positions or coordinates — the app lays the graph out.
 Return only JSON matching the provided schema.`;
 
@@ -79,15 +123,21 @@ Given a parent node (its type, title, and detail) and what it is already connect
 
 ${NODE_TYPE_GUIDE}
 
+${COLOR_GUIDE}
+
+${TYPOGRAPHY_GUIDE}
+
 Each node has:
 - "id": a short unique string within this response (e.g. "c1").
 - "type": exactly one of the types above.
 - "title": a short label, a few words.
 - "body": an optional one-sentence detail, or "" if none.
+- "color": exactly one of the palette hex values above.
+- "fontSize": exactly one of the allowed sizes above.
 
 "connections" are directed edges { "from": <id>, "to": <id> } BETWEEN the child nodes only (for sub-branches) — do NOT reference the parent; the app links the children to it automatically.
 
-Return only JSON matching the provided schema, with 3 to 7 nodes.`;
+Color the children to fit the branch's meaning (often a shared color reads as one cluster), and keep most at fontSize 13 — these are a sub-branch, so rarely use 20. Return only JSON matching the provided schema, with 3 to 7 nodes.`;
 
 const GRAPH_SCHEMA = {
   type: "object",
@@ -101,8 +151,10 @@ const GRAPH_SCHEMA = {
           type: { type: "string", enum: [...GEN_NODE_TYPES] },
           title: { type: "string" },
           body: { type: "string" },
+          color: { type: "string", enum: [...GEN_FILL_COLORS] },
+          fontSize: { type: "number", enum: [...GEN_FONT_SIZES] },
         },
-        required: ["id", "type", "title", "body"],
+        required: ["id", "type", "title", "body", "color", "fontSize"],
         additionalProperties: false,
       },
     },
@@ -268,12 +320,26 @@ function sanitizeGraph(parsed: unknown): GenResult {
     const type = (
       typeof n.type === "string" && allowed.includes(n.type) ? n.type : "block"
     ) as GenNodeType;
+    // Clamp colour + size to the allowed sets so a stray value can never produce
+    // an off-palette fill or an unreadable card; default to cream / body size.
+    const color =
+      typeof n.color === "string" &&
+      (GEN_FILL_COLORS as readonly string[]).includes(n.color)
+        ? n.color
+        : "#FCFBF8";
+    const fontSize =
+      typeof n.fontSize === "number" &&
+      (GEN_FONT_SIZES as readonly number[]).includes(n.fontSize)
+        ? n.fontSize
+        : 13;
     ids.add(n.id);
     nodes.push({
       id: n.id,
       type,
       title: typeof n.title === "string" ? n.title : "",
       body: typeof n.body === "string" ? n.body : "",
+      color,
+      fontSize,
     });
   }
 

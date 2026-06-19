@@ -761,8 +761,9 @@ export default function Canvas() {
           title: gn.title,
           body: gn.body,
           type: gn.type,
-          color: isText ? "transparent" : "#FCFBF8",
-          fontSize: isText ? 15 : 13,
+          // AI-assigned card fill (text nodes have no card) + size hierarchy.
+          color: isText ? "transparent" : gn.color,
+          fontSize: gn.fontSize,
         };
       });
       const newConns: Connection[] = [];
@@ -911,8 +912,9 @@ export default function Canvas() {
           title: gn.title,
           body: gn.body,
           type: gn.type,
-          color: isText ? "transparent" : "#FCFBF8",
-          fontSize: isText ? 15 : 13,
+          // AI-assigned card fill (text nodes have no card) + size hierarchy.
+          color: isText ? "transparent" : gn.color,
+          fontSize: gn.fontSize,
         };
       });
 
