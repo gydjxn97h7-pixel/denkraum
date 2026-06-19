@@ -38,7 +38,6 @@ import { normalizeUrl, faviconUrl, fetchLinkTitle } from "./lib/link-preview";
 import { useApiKey } from "./lib/ai-key";
 import {
   layoutGraph,
-  GEN_SIZE,
   expandNode,
   generateGraph,
   summarizeBoard,
@@ -693,9 +692,8 @@ export default function Canvas() {
       for (const gn of graph.nodes) {
         const p = local.get(gn.id);
         if (!p) continue;
-        const s = GEN_SIZE[gn.type];
-        clusterW = Math.max(clusterW, p.x + s.w);
-        clusterH = Math.max(clusterH, p.y + s.h);
+        clusterW = Math.max(clusterW, p.x + gn.width);
+        clusterH = Math.max(clusterH, p.y + gn.height);
       }
 
       // Placement origin: the AI workspace marker if set, otherwise right of all
@@ -735,15 +733,14 @@ export default function Canvas() {
         const id = idCounterRef.current;
         idCounterRef.current += 1;
         idMap.set(gn.id, id);
-        const s = GEN_SIZE[gn.type];
         const p = local.get(gn.id) ?? { x: 0, y: 0 };
         const isText = gn.type === "text";
         return {
           id,
           x: originX + p.x,
           y: originY + p.y,
-          w: s.w,
-          h: s.h,
+          w: gn.width,
+          h: gn.height,
           title: gn.title,
           body: gn.body,
           type: gn.type,
@@ -851,9 +848,8 @@ export default function Canvas() {
       for (const gn of children) {
         const p = local.get(gn.id);
         if (!p) continue;
-        const s = GEN_SIZE[gn.type];
-        clusterW = Math.max(clusterW, p.x + s.w);
-        clusterH = Math.max(clusterH, p.y + s.h);
+        clusterW = Math.max(clusterW, p.x + gn.width);
+        clusterH = Math.max(clusterH, p.y + gn.height);
       }
 
       // Right of the parent, vertically centred; slide right past any existing
@@ -884,15 +880,14 @@ export default function Canvas() {
         const id = idCounterRef.current;
         idCounterRef.current += 1;
         idMap.set(gn.id, id);
-        const s = GEN_SIZE[gn.type];
         const p = local.get(gn.id) ?? { x: 0, y: 0 };
         const isText = gn.type === "text";
         return {
           id,
           x: originX + p.x,
           y: originY + p.y,
-          w: s.w,
-          h: s.h,
+          w: gn.width,
+          h: gn.height,
           title: gn.title,
           body: gn.body,
           type: gn.type,

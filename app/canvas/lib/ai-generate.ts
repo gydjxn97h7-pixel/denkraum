@@ -49,6 +49,11 @@ export const GEN_FILL_COLORS = [
 // hierarchy. 13 is the default body size (matches manually-created nodes).
 export const GEN_FONT_SIZES = [20, 16, 13, 11] as const;
 
+// Bounds for the AI-assigned node size (importance, not text volume). Single
+// source of truth shared by the JSON schema and the sanitizer's clamp.
+export const GEN_W_RANGE = { min: 120, max: 360 } as const;
+export const GEN_H_RANGE = { min: 56, max: 200 } as const;
+
 export type GenNode = {
   id: string;
   type: GenNodeType;
@@ -56,6 +61,8 @@ export type GenNode = {
   body: string;
   color: string;
   fontSize: number;
+  width: number;
+  height: number;
 };
 export type GenConn = { from: string; to: string };
 export type GeneratedGraph = { nodes: GenNode[]; connections: GenConn[] };
@@ -92,6 +99,12 @@ const TYPOGRAPHY_GUIDE = `Typography — give each node a "fontSize" to build a 
 - 11 — small leaf details or asides
 Make a few anchor nodes larger; keep the rest at 13 so the structure stays calm.`;
 
+const SIZE_GUIDE = `Size — give each node a "width" and "height" that reflect how CENTRAL and IMPORTANT it is, NOT how much text it holds. Size is your strongest signal of hierarchy:
+- Root / central node: large, about 240×100 (go wider for a single dominant hub).
+- Key supporting nodes: medium, about 180×80.
+- Detail / peripheral / leaf nodes: small, about 140×60.
+Pick sizes from a continuum (width ${GEN_W_RANGE.min}–${GEN_W_RANGE.max}, height ${GEN_H_RANGE.min}–${GEN_H_RANGE.max}); a node with little text can still be large if it is central, and a node with lots of text stays small if it is peripheral. Circles and sticky notes are kept square automatically, so their size still reads as importance.`;
+
 const SYSTEM_PROMPT = `You generate a node graph for DNKRM, a visual canvas / mind-mapping tool. Given the user's request, return a graph of nodes and the directed connections between them.
 
 ${NODE_TYPE_GUIDE}
@@ -100,6 +113,8 @@ ${COLOR_GUIDE}
 
 ${TYPOGRAPHY_GUIDE}
 
+${SIZE_GUIDE}
+
 Each node has:
 - "id": a short unique string within this response (e.g. "n1"), referenced by connections.
 - "type": exactly one of the types above.
@@ -107,13 +122,14 @@ Each node has:
 - "body": an optional one-sentence detail, or "" if none.
 - "color": exactly one of the palette hex values above.
 - "fontSize": exactly one of the allowed sizes above.
+- "width" and "height": numbers reflecting the node's importance (see the size guide).
 
 "connections" are directed edges { "from": <id>, "to": <id> } that reference node ids, showing flow or relationship.
 
 Guidance:
 - Produce a focused graph of roughly 5–15 nodes unless the user asks for more or fewer.
 - Keep titles concise. Use diamonds for decisions and connect each branch.
-- Use color and size to express structure (group with color, anchor with size), not decoration.
+- Use color and size to express structure (group with color, anchor the central nodes with size), not decoration.
 - Do not include positions or coordinates — the app lays the graph out.
 Return only JSON matching the provided schema.`;
 
@@ -127,6 +143,8 @@ ${COLOR_GUIDE}
 
 ${TYPOGRAPHY_GUIDE}
 
+${SIZE_GUIDE}
+
 Each node has:
 - "id": a short unique string within this response (e.g. "c1").
 - "type": exactly one of the types above.
@@ -134,10 +152,11 @@ Each node has:
 - "body": an optional one-sentence detail, or "" if none.
 - "color": exactly one of the palette hex values above.
 - "fontSize": exactly one of the allowed sizes above.
+- "width" and "height": numbers reflecting the node's importance (see the size guide).
 
 "connections" are directed edges { "from": <id>, "to": <id> } BETWEEN the child nodes only (for sub-branches) — do NOT reference the parent; the app links the children to it automatically.
 
-Color the children to fit the branch's meaning (often a shared color reads as one cluster), and keep most at fontSize 13 — these are a sub-branch, so rarely use 20. Return only JSON matching the provided schema, with 3 to 7 nodes.`;
+Color the children to fit the branch's meaning (often a shared color reads as one cluster), and keep most at fontSize 13 — these are a sub-branch, so rarely use 20. These are peripheral nodes, so size them mostly medium (~180×80) to small (~140×60); reserve the largest sizes for a child that clearly anchors a sub-branch. Return only JSON matching the provided schema, with 3 to 7 nodes.`;
 
 const GRAPH_SCHEMA = {
   type: "object",
@@ -153,8 +172,27 @@ const GRAPH_SCHEMA = {
           body: { type: "string" },
           color: { type: "string", enum: [...GEN_FILL_COLORS] },
           fontSize: { type: "number", enum: [...GEN_FONT_SIZES] },
+          width: {
+            type: "number",
+            minimum: GEN_W_RANGE.min,
+            maximum: GEN_W_RANGE.max,
+          },
+          height: {
+            type: "number",
+            minimum: GEN_H_RANGE.min,
+            maximum: GEN_H_RANGE.max,
+          },
         },
-        required: ["id", "type", "title", "body", "color", "fontSize"],
+        required: [
+          "id",
+          "type",
+          "title",
+          "body",
+          "color",
+          "fontSize",
+          "width",
+          "height",
+        ],
         additionalProperties: false,
       },
     },
@@ -304,6 +342,17 @@ export async function expandNode(
   return runGraphRequest(EXPAND_SYSTEM_PROMPT, user, apiKey);
 }
 
+// Coerce a model-supplied dimension into the allowed range, rounding to a whole
+// pixel; fall back to the type's default when it's not a finite number.
+function clampSize(
+  v: unknown,
+  range: { min: number; max: number },
+  fallback: number,
+): number {
+  if (typeof v !== "number" || !Number.isFinite(v)) return fallback;
+  return Math.round(Math.max(range.min, Math.min(range.max, v)));
+}
+
 // Validate + coerce the model's JSON into a safe graph: known ids only, types
 // clamped to the allowed set, connections referencing real nodes, deduped.
 function sanitizeGraph(parsed: unknown): GenResult {
@@ -332,6 +381,17 @@ function sanitizeGraph(parsed: unknown): GenResult {
       (GEN_FONT_SIZES as readonly number[]).includes(n.fontSize)
         ? n.fontSize
         : 13;
+    // Size encodes importance. Clamp to the allowed range, falling back to the
+    // type's default when missing/garbled. Circles and sticky notes are kept
+    // square so an importance size can't distort their shape.
+    const def = GEN_SIZE[type];
+    let width = clampSize(n.width, GEN_W_RANGE, def.w);
+    let height = clampSize(n.height, GEN_H_RANGE, def.h);
+    if (type === "circle" || type === "sticky") {
+      const side = Math.round((width + height) / 2);
+      width = side;
+      height = side;
+    }
     ids.add(n.id);
     nodes.push({
       id: n.id,
@@ -340,6 +400,8 @@ function sanitizeGraph(parsed: unknown): GenResult {
       body: typeof n.body === "string" ? n.body : "",
       color,
       fontSize,
+      width,
+      height,
     });
   }
 
@@ -400,8 +462,10 @@ export function layoutGraph(
   }
   const depths = [...cols.keys()].sort((a, b) => a - b);
 
+  // Spacing follows each node's own (importance-driven) size, not the type
+  // default, so larger nodes get the room they need and never overlap.
   const colHeight = (col: GenNode[]) =>
-    col.reduce((s, n) => s + GEN_SIZE[n.type].h, 0) +
+    col.reduce((s, n) => s + n.height, 0) +
     V_GAP * Math.max(0, col.length - 1);
   const maxH = Math.max(...depths.map((d) => colHeight(cols.get(d)!)));
 
@@ -409,11 +473,11 @@ export function layoutGraph(
   let colX = 0;
   for (const d of depths) {
     const col = cols.get(d)!;
-    const colW = Math.max(...col.map((n) => GEN_SIZE[n.type].w));
+    const colW = Math.max(...col.map((n) => n.width));
     let y = (maxH - colHeight(col)) / 2;
     for (const n of col) {
       result.set(n.id, { x: colX, y });
-      y += GEN_SIZE[n.type].h + V_GAP;
+      y += n.height + V_GAP;
     }
     colX += colW + H_GAP;
   }
