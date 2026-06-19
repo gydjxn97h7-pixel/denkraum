@@ -123,14 +123,21 @@ const GRAPH_SCHEMA = {
   additionalProperties: false,
 };
 
-// Shared core for every graph request: load the SDK (module-cached after the
-// first call), call Haiku with the structured-output schema, map errors, parse,
-// and sanitize. generateGraph and expandNode differ only in their prompts.
-async function runGraphRequest(
+type TextResult =
+  | { ok: true; text: string }
+  | { ok: false; message: string };
+
+// Shared core for every AI request: load the SDK (module-cached after the first
+// call), call Haiku, map errors, and return the response text. `maxTokens` and
+// the optional structured-output schema vary by caller (graph requests pass the
+// graph schema; prose requests pass none).
+async function callModel(
   system: string,
   user: string,
   apiKey: string,
-): Promise<GenResult> {
+  maxTokens: number,
+  schema?: Record<string, unknown>,
+): Promise<TextResult> {
   if (!apiKey) return { ok: false, message: "No API key set." };
 
   let Anthropic: typeof import("@anthropic-ai/sdk").default;
@@ -150,10 +157,12 @@ async function runGraphRequest(
     const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
     response = await client.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: user }],
-      output_config: { format: { type: "json_schema", schema: GRAPH_SCHEMA } },
+      ...(schema && {
+        output_config: { format: { type: "json_schema", schema } },
+      }),
     });
   } catch (err) {
     if (
@@ -184,17 +193,26 @@ async function runGraphRequest(
       message: "The response was cut off — try a simpler prompt.",
     };
   }
+  return { ok: true, text: textBlock.text };
+}
 
+// Graph requests: structured JSON → parse → sanitize.
+async function runGraphRequest(
+  system: string,
+  user: string,
+  apiKey: string,
+): Promise<GenResult> {
+  const r = await callModel(system, user, apiKey, 4096, GRAPH_SCHEMA);
+  if (!r.ok) return r;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(textBlock.text);
+    parsed = JSON.parse(r.text);
   } catch {
     return {
       ok: false,
       message: "Couldn’t read the AI response (invalid JSON).",
     };
   }
-
   return sanitizeGraph(parsed);
 }
 
@@ -339,4 +357,42 @@ export function layoutGraph(
 // Narrowing helper so callers can treat a GenNodeType as the broader NodeType.
 export function asNodeType(t: GenNodeType): NodeType {
   return t;
+}
+
+// ── Summarize: board → one prose paragraph ─────────────────────────────────────
+
+export type SummaryItem = { title: string; body: string };
+
+export type SummaryResult =
+  | { ok: true; summary: string }
+  | { ok: false; message: string };
+
+const SUMMARY_SYSTEM_PROMPT = `You summarize a DNKRM board (a visual canvas of nodes) for the user. You'll receive the nodes' titles and content in order.
+
+Return a single flowing prose summary, 3–5 sentences. Do not use bullet points, headers, or lists. Capture the main ideas and how they relate, in plain text with no markdown and no preamble (do not start with "This board" or "Summary:").`;
+
+// Summarize the board into one prose paragraph (plain text, no schema).
+export async function summarizeBoard(
+  items: SummaryItem[],
+  apiKey: string,
+): Promise<SummaryResult> {
+  if (items.length === 0) return { ok: false, message: "Nothing to summarize." };
+
+  const user =
+    `Board nodes (in order):\n` +
+    items
+      .map(
+        (it, i) =>
+          `${i + 1}. ${it.title || "(untitled)"}${
+            it.body ? ` — ${it.body}` : ""
+          }`,
+      )
+      .join("\n") +
+    `\n\nWrite a single flowing prose summary of this board (3–5 sentences).`;
+
+  const r = await callModel(SUMMARY_SYSTEM_PROMPT, user, apiKey, 1024);
+  if (!r.ok) return r;
+  const summary = r.text.trim();
+  if (!summary) return { ok: false, message: "The AI returned an empty summary." };
+  return { ok: true, summary };
 }

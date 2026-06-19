@@ -45,6 +45,7 @@ interface SidebarPanelProps {
   onLoadBoardClick: () => void;
   // AI section
   aiState: AiCharacterState;
+  onSummarize: () => void;
 }
 
 // ── Sidebar Panel (220px, shown when panel open) ──
@@ -78,6 +79,7 @@ function SidebarPanelImpl({
   saveBoard,
   onLoadBoardClick,
   aiState,
+  onSummarize,
 }: SidebarPanelProps) {
   const panelOpen = activePanel !== null;
   return (
@@ -574,7 +576,13 @@ function SidebarPanelImpl({
       )}
 
       {/* ── AI section ── */}
-      {activePanel === "ai" && <AiSettingsPanel aiState={aiState} />}
+      {activePanel === "ai" && (
+        <AiSettingsPanel
+          aiState={aiState}
+          nodeCount={nodes.length}
+          onSummarize={onSummarize}
+        />
+      )}
     </div>
   );
 }

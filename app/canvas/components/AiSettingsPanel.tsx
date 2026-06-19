@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Check, AlertTriangle, X, Sparkles } from "lucide-react";
+import { Check, AlertTriangle, X, Sparkles, FileText } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 import { ACCENT } from "../lib/canvas-types";
 import { PanelSectionLabel } from "./panel-ui";
@@ -21,7 +21,15 @@ const STATE_CAPTION: Record<AiCharacterState, string> = {
 };
 
 // ── AI settings (Anthropic API key) ──
-export function AiSettingsPanel({ aiState }: { aiState: AiCharacterState }) {
+export function AiSettingsPanel({
+  aiState,
+  nodeCount,
+  onSummarize,
+}: {
+  aiState: AiCharacterState;
+  nodeCount: number;
+  onSummarize: () => void;
+}) {
   const { apiKey, hasKey, save, clear } = useApiKey();
   const [draft, setDraft] = useState(apiKey);
   const [checking, setChecking] = useState(false);
@@ -129,6 +137,39 @@ export function AiSettingsPanel({ aiState }: { aiState: AiCharacterState }) {
           >
             {STATE_CAPTION[aiState]}
           </span>
+        </div>
+      )}
+
+      {/* Board actions — only when a key is set and the board has nodes */}
+      {hasKey && nodeCount > 0 && (
+        <div style={{ padding: "0 16px 4px" }}>
+          <button
+            onClick={onSummarize}
+            disabled={aiState === "thinking"}
+            title="Summarize the board into a text node"
+            style={{
+              width: "100%",
+              height: 36,
+              borderRadius: 10,
+              border: "1px solid rgba(42,40,35,0.12)",
+              background: "transparent",
+              color:
+                aiState === "thinking"
+                  ? "rgba(42,40,35,0.4)"
+                  : "rgba(42,40,35,0.85)",
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              cursor: aiState === "thinking" ? "default" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            <FileText size={ICON.sm} {...ICON_PROPS} />
+            {aiState === "thinking" ? "Summarizing…" : "Summarize board"}
+          </button>
         </div>
       )}
 

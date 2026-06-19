@@ -39,8 +39,10 @@ import {
   layoutGraph,
   GEN_SIZE,
   expandNode,
+  summarizeBoard,
   type GeneratedGraph,
   type ExpandContext,
+  type SummaryItem,
 } from "./lib/ai-generate";
 import {
   buildPresentationSteps,
@@ -838,6 +840,100 @@ export default function Canvas() {
     },
     [aiHasKey, aiApiKey, commitNewGraph],
   );
+
+  // Summarize the whole board into one prose Text node, placed below all
+  // existing content. One undo snapshot; errors via toast; plain Text node.
+  const summarizeBoardToNode = useCallback(async () => {
+    if (!aiHasKey || aiBusyRef.current) return;
+    const all = nodesRef.current;
+    if (all.length === 0) return;
+
+    // Order by the Story Path (presentationOrder); append any stragglers.
+    const map = nodeMapRef.current;
+    const ordered: CanvasNode[] = [];
+    const used = new Set<number>();
+    for (const id of presentationOrderRef.current) {
+      const n = map.get(id);
+      if (n) {
+        ordered.push(n);
+        used.add(id);
+      }
+    }
+    for (const n of all) if (!used.has(n.id)) ordered.push(n);
+
+    // Title + content per node (type-aware), truncated and capped.
+    const items: SummaryItem[] = [];
+    for (const n of ordered) {
+      const title = (n.title || n.label || "").replace(/<[^>]*>/g, "").trim();
+      let body = (n.body || "").trim();
+      if (!body && n.type === "textfile" && n.textFileContent)
+        body = n.textFileContent.trim();
+      if (n.type === "checklist" && n.checklistItems?.length)
+        body =
+          body ||
+          n.checklistItems
+            .map((it) => `${it.checked ? "[x]" : "[ ]"} ${it.text}`)
+            .join("; ");
+      if (n.type === "link" && n.linkUrl) body = body || n.linkUrl;
+      const t = title.slice(0, 120);
+      const b = body.slice(0, 200);
+      if (!t && !b) continue;
+      items.push({ title: t, body: b });
+      if (items.length >= 60) break;
+    }
+    if (items.length === 0) {
+      setToast({
+        msg: "AI: nothing on the board to summarize.",
+        variant: "error",
+      });
+      return;
+    }
+
+    aiBusyRef.current = true;
+    setAiState("thinking");
+    const r = await summarizeBoard(items, aiApiKey);
+    aiBusyRef.current = false;
+    if (!r.ok) {
+      setAiState("error");
+      setToast({ msg: `AI: ${r.message}`, variant: "error" });
+      return;
+    }
+    setAiState("done");
+
+    // One generously-sized Text node centred below all existing content. The
+    // prose lives in `title` — that's the field a type:"text" node renders.
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const n of all) {
+      if (n.x < minX) minX = n.x;
+      if (n.x + n.w > maxX) maxX = n.x + n.w;
+      if (n.y + n.h > maxY) maxY = n.y + n.h;
+    }
+    const W = 360;
+    const H = 140;
+    const x = (minX + maxX) / 2 - W / 2;
+    const y = maxY + 80;
+
+    const maxExistingId = getMaxNodeId(nodeMapRef.current);
+    if (idCounterRef.current <= maxExistingId)
+      idCounterRef.current = maxExistingId + 1;
+    const id = idCounterRef.current;
+    idCounterRef.current += 1;
+    const node: CanvasNode = {
+      id,
+      x,
+      y,
+      w: W,
+      h: H,
+      title: r.summary,
+      body: "",
+      type: "text",
+      color: "transparent",
+      fontSize: 15,
+    };
+    commitNewGraph([node], [], { cx: x + W / 2, cy: y + H / 2 });
+  }, [aiHasKey, aiApiKey, commitNewGraph]);
 
   const handleImageInsert = useCallback((cx: number, cy: number) => {
     pendingImagePos.current = { cx, cy };
@@ -1892,6 +1988,7 @@ export default function Canvas() {
         saveBoard={saveBoard}
         onLoadBoardClick={onLoadBoardClick}
         aiState={aiState}
+        onSummarize={summarizeBoardToNode}
       />
 
       <CanvasToolbar
