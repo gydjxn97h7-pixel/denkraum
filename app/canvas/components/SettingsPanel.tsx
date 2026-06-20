@@ -4,14 +4,27 @@ import { Check, AlertTriangle, X, Sparkles } from "lucide-react";
 import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 import { PanelSectionLabel } from "./panel-ui";
 import { useApiKey, validateKey } from "../lib/ai-key";
+import type { CanvasBg } from "../lib/canvas-types";
 
 const OLIVE = tokens.color.fern;
 const OCHRE = tokens.color.driftwood;
 
+const CANVAS_BG_OPTIONS: { v: CanvasBg; label: string; desc: string }[] = [
+  { v: "blank", label: "Blank", desc: "Plain stone surface" },
+  { v: "grid", label: "Grid", desc: "Dot grid (default)" },
+  { v: "atmospheric", label: "Atmospheric", desc: "Soft blurred backdrop" },
+];
+
 type Feedback = { tone: "good" | "bad" | "warn"; text: string } | null;
 
-// ── Settings (Anthropic API key) — the only place the key is managed ──
-export function SettingsPanel() {
+// ── Settings (canvas background + Anthropic API key) ──
+export function SettingsPanel({
+  canvasBg,
+  setCanvasBg,
+}: {
+  canvasBg: CanvasBg;
+  setCanvasBg: (v: CanvasBg) => void;
+}) {
   const { apiKey, hasKey, save, clear } = useApiKey();
   const [draft, setDraft] = useState(apiKey);
   const [checking, setChecking] = useState(false);
@@ -97,7 +110,61 @@ export function SettingsPanel() {
         paddingTop: 16,
       }}
     >
-      <PanelSectionLabel first>Anthropic API Key</PanelSectionLabel>
+      <PanelSectionLabel first>Canvas Background</PanelSectionLabel>
+      <div
+        style={{
+          padding: "0 16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        {CANVAS_BG_OPTIONS.map(({ v, label, desc }) => {
+          const active = canvasBg === v;
+          return (
+            <button
+              key={v}
+              onClick={() => setCanvasBg(v)}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+                gap: 1,
+                width: "100%",
+                padding: "8px 10px",
+                borderRadius: tokens.radius.xs,
+                border: `0.5px solid ${active ? tokens.color.ink : tokens.color.border}`,
+                background: active ? tokens.color.ink : "transparent",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                textAlign: "left",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: active ? tokens.color.canvas : tokens.color.text,
+                }}
+              >
+                {label}
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: active
+                    ? "rgba(248,246,241,0.7)"
+                    : "rgba(42,40,35,0.45)",
+                }}
+              >
+                {desc}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <PanelSectionLabel>Anthropic API Key</PanelSectionLabel>
 
       <div
         style={{

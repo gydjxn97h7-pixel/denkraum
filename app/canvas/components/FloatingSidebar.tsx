@@ -2,7 +2,7 @@
 import { Fragment, memo, useCallback, useRef } from "react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useClickOutside } from "../lib/use-click-outside";
-import type { CanvasNode, PanelSection } from "../lib/canvas-types";
+import type { CanvasNode, PanelSection, CanvasBg } from "../lib/canvas-types";
 import type { PresentationStep } from "../lib/presentation";
 import { SidebarNodeItem } from "./SidebarNodeItem";
 import { PresentationPanel } from "./PresentationPanel";
@@ -39,10 +39,15 @@ const MARGIN = 12;
 // Spring used for the panel expand / collapse (Motion Primitives foundation).
 const SPRING = { type: "spring", bounce: 0.1, duration: 0.25 } as const;
 
-// Frosted glass: a very light stone tint (surface) at low opacity over a strong
-// backdrop blur, so the canvas clearly bleeds through the sidebar.
-const FROST_BG = "rgba(240,237,229,0.35)";
+// Frosted glass: a light stone tint at ~55% opacity over a strong backdrop blur,
+// applied to each layer (strip + panel) so the canvas clearly bleeds through.
+const FROST_BG = "rgba(240,237,229,0.55)";
 const FROST_BLUR = "blur(24px)";
+const frost: React.CSSProperties = {
+  background: FROST_BG,
+  backdropFilter: FROST_BLUR,
+  WebkitBackdropFilter: FROST_BLUR,
+};
 // Hairline that separates the strip from the panel and frames the frost.
 const HAIRLINE = "rgba(42,40,35,0.10)";
 
@@ -74,6 +79,9 @@ interface FloatingSidebarProps {
   activePanel: PanelSection | null;
   setActivePanel: React.Dispatch<React.SetStateAction<PanelSection | null>>;
   isPresenting: boolean;
+  // Settings section
+  canvasBg: CanvasBg;
+  setCanvasBg: (v: CanvasBg) => void;
   // Connections (board) section
   boardName: string;
   setBoardName: React.Dispatch<React.SetStateAction<string>>;
@@ -209,6 +217,8 @@ function FloatingSidebarImpl({
   activePanel,
   setActivePanel,
   isPresenting,
+  canvasBg,
+  setCanvasBg,
   boardName,
   setBoardName,
   editingBoardName,
@@ -270,9 +280,9 @@ function FloatingSidebarImpl({
         alignItems: "stretch",
         borderRadius: 18,
         overflow: "hidden",
-        background: FROST_BG,
-        backdropFilter: FROST_BLUR,
-        WebkitBackdropFilter: FROST_BLUR,
+        // The outer is just the clip + shadow frame; the frost lives on each
+        // layer below so backdrop-filter samples the canvas directly.
+        background: "transparent",
         boxShadow: "0 6px 22px rgba(58,48,38,0.16)",
         zIndex: 150,
         fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
@@ -281,6 +291,7 @@ function FloatingSidebarImpl({
       {/* ── Layer 1 — icon strip ── */}
       <div
         style={{
+          ...frost,
           width: STRIP_W,
           flexShrink: 0,
           display: "flex",
@@ -333,6 +344,7 @@ function FloatingSidebarImpl({
             animate={{ width: PANEL_W, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             style={{
+              ...frost,
               flexShrink: 0,
               alignSelf: "stretch",
               overflow: "hidden",
@@ -444,7 +456,7 @@ function FloatingSidebarImpl({
           )}
           {activePanel === "settings" && (
             <SubPanelCard>
-              <SettingsPanel />
+              <SettingsPanel canvasBg={canvasBg} setCanvasBg={setCanvasBg} />
             </SubPanelCard>
           )}
           {activePanel === "presentation" && (

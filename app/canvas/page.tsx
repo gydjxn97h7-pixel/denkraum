@@ -12,6 +12,7 @@ import {
   ACCENT,
   LS_BOARD_NAME,
   LS_AI_WORKSPACE,
+  LS_CANVAS_BG,
   DEFAULT_NODES,
   DEFAULT_CONNECTIONS,
 } from "./lib/canvas-types";
@@ -23,6 +24,7 @@ import type {
   ContextMenu,
   ColorPicker,
   PanelSection,
+  CanvasBg,
   RichText,
 } from "./lib/canvas-types";
 import { richToPlain, richHasMarks, MAX_DOC_CHARS } from "./lib/rich-text";
@@ -95,6 +97,22 @@ export default function Canvas() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [activePanel, setActivePanel] = useState<PanelSection | null>(null);
+
+  // Canvas background style (Blank / Grid / Atmospheric). Grid is the default;
+  // hydrated from localStorage after mount to avoid an SSR mismatch.
+  const [canvasBg, setCanvasBg] = useState<CanvasBg>("grid");
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(LS_CANVAS_BG);
+      if (v === "blank" || v === "grid" || v === "atmospheric") setCanvasBg(v);
+    } catch {}
+  }, []);
+  const changeCanvasBg = useCallback((v: CanvasBg) => {
+    setCanvasBg(v);
+    try {
+      localStorage.setItem(LS_CANVAS_BG, v);
+    } catch {}
+  }, []);
   // Document editor panel: nodeId null = new, not-yet-saved document.
   // seq bumps on every open so the panel remounts (and re-reads the node)
   // per session, but not when a first save assigns the new node's id.
@@ -2068,6 +2086,8 @@ export default function Canvas() {
         activePanel={activePanel}
         setActivePanel={setActivePanel}
         isPresenting={isPresenting}
+        canvasBg={canvasBg}
+        setCanvasBg={changeCanvasBg}
         boardName={boardName}
         setBoardName={setBoardName}
         editingBoardName={editingBoardName}
@@ -2153,31 +2173,65 @@ export default function Canvas() {
           overflow: "hidden",
         }}
       >
+        {/* Atmospheric background — a blurred image under a light stone veil. */}
+        {canvasBg === "atmospheric" && (
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              overflow: "hidden",
+              pointerEvents: "none",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                // Overscan past the edges so the 50px blur never reveals gaps.
+                inset: -80,
+                backgroundImage: "url(/backgrounds/atmospheric-1.jpg)",
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+                filter: "blur(50px)",
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: "rgba(248,246,241,0.4)",
+              }}
+            />
+          </div>
+        )}
+
         {/* Dot grid */}
-        <svg
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            pointerEvents: "none",
-          }}
-        >
-          <defs>
-            <pattern
-              id="dots"
-              x={pan.x % (20 * zoom)}
-              y={pan.y % (20 * zoom)}
-              width={20 * zoom}
-              height={20 * zoom}
-              patternUnits="userSpaceOnUse"
-            >
-              <circle cx={1} cy={1} r={0.9} fill="rgba(42,40,35,0.12)" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#dots)" />
-        </svg>
+        {canvasBg === "grid" && (
+          <svg
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              pointerEvents: "none",
+            }}
+          >
+            <defs>
+              <pattern
+                id="dots"
+                x={pan.x % (20 * zoom)}
+                y={pan.y % (20 * zoom)}
+                width={20 * zoom}
+                height={20 * zoom}
+                patternUnits="userSpaceOnUse"
+              >
+                <circle cx={1} cy={1} r={0.9} fill="rgba(42,40,35,0.12)" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#dots)" />
+          </svg>
+        )}
 
         {/* World */}
         <div
