@@ -15,7 +15,7 @@ import {
   CheckSquare,
   Square,
 } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 import { PanelSectionLabel } from "./panel-ui";
 
 interface PresentationPanelProps {
@@ -64,7 +64,7 @@ function PanelIconButton({
         width: 22,
         height: 22,
         border: "none",
-        borderRadius: 8,
+        borderRadius: tokens.radius.xs,
         background: "transparent",
         color: disabled ? "rgba(42,40,35,0.15)" : color,
         cursor: disabled ? "default" : "pointer",
@@ -225,8 +225,8 @@ export function PresentationPanel({
               margin: "0 8px 4px",
               padding: "6px 8px",
               borderRadius: 10,
-              background: "rgba(197,107,71,0.10)",
-              border: "1px solid rgba(197,107,71,0.25)",
+              background: tokens.color.sand,
+              border: `0.5px solid ${tokens.color.border}`,
             }}
           >
             <span
@@ -256,13 +256,13 @@ export function PresentationPanel({
                 gap: 6,
                 height: 26,
                 padding: "0 10px",
-                borderRadius: 8,
+                borderRadius: tokens.radius.xs,
                 border: "none",
                 background:
                   validSelected.length < 2
-                    ? "rgba(197,107,71,0.35)"
-                    : "#C56B47",
-                color: "#FCFBF8",
+                    ? "rgba(29,28,26,0.35)"
+                    : tokens.color.ink,
+                color: tokens.color.canvas,
                 fontSize: 12,
                 fontWeight: 600,
                 fontFamily: "inherit",
@@ -316,15 +316,13 @@ export function PresentationPanel({
               padding: "8px 10px",
               borderRadius: 10,
               border: overRemoveZone
-                ? "1px solid #C56B47"
-                : "1px dashed rgba(197,107,71,0.55)",
-              background: overRemoveZone
-                ? "rgba(197,107,71,0.14)"
-                : "rgba(197,107,71,0.06)",
+                ? `1px solid ${tokens.color.ink}`
+                : `1px dashed ${tokens.color.border}`,
+              background: tokens.color.sand,
               boxShadow: overRemoveZone
-                ? "0 0 0 3px rgba(197,107,71,0.15)"
+                ? "0 0 0 3px rgba(29,28,26,0.12)"
                 : undefined,
-              color: "#C56B47",
+              color: tokens.color.ink,
               fontSize: 11,
               fontWeight: 600,
               transition:
@@ -383,8 +381,8 @@ export function PresentationPanel({
                   <PanelIconButton
                     onClick={() => toggleSelect(step.id)}
                     title={checked ? "Deselect" : "Select for grouping"}
-                    color={checked ? "#C56B47" : "rgba(42,40,35,0.35)"}
-                    hoverColor={checked ? "#C56B47" : "rgba(42,40,35,0.6)"}
+                    color={checked ? tokens.color.ink : "rgba(42,40,35,0.35)"}
+                    hoverColor={checked ? tokens.color.ink : "rgba(42,40,35,0.6)"}
                   >
                     {checked ? (
                       <CheckSquare size={ICON.sm} {...ICON_PROPS} />
@@ -480,16 +478,16 @@ export function PresentationPanel({
                 style={{
                   margin: "2px 8px 6px",
                   border: isDropTarget
-                    ? "1px solid #C56B47"
+                    ? `1px solid ${tokens.color.ink}`
                     : canAccept
-                      ? "1px dashed rgba(197,107,71,0.55)"
+                      ? `1px dashed ${tokens.color.border}`
                       : "1px solid rgba(42,40,35,0.1)",
                   borderRadius: 10,
                   background: isDropTarget
-                    ? "rgba(197,107,71,0.12)"
+                    ? tokens.color.sand
                     : "rgba(216,201,168,0.12)",
                   boxShadow: isDropTarget
-                    ? "0 0 0 3px rgba(197,107,71,0.15)"
+                    ? "0 0 0 3px rgba(29,28,26,0.12)"
                     : undefined,
                   overflow: "hidden",
                   opacity: stepExcluded ? 0.5 : 1,
@@ -656,12 +654,12 @@ export function PresentationPanel({
                       gap: 6,
                       margin: "2px 8px 8px 24px",
                       padding: "5px 8px",
-                      borderRadius: 8,
-                      border: "1px dashed rgba(197,107,71,0.6)",
-                      background: "rgba(197,107,71,0.08)",
+                      borderRadius: tokens.radius.xs,
+                      border: `1px dashed ${tokens.color.border}`,
+                      background: tokens.color.sand,
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "#C56B47",
+                      color: tokens.color.ink,
                     }}
                   >
                     <Group size={ICON.sm} {...ICON_PROPS} />
@@ -688,11 +686,13 @@ export function PresentationPanel({
           style={{
             width: "100%",
             height: 38,
-            borderRadius: 12,
+            borderRadius: tokens.radius.xs,
             border: "none",
             background:
-              presentActiveSeqLength === 0 ? "rgba(197,107,71,0.35)" : "#C56B47",
-            color: "#FCFBF8",
+              presentActiveSeqLength === 0
+                ? "rgba(29,28,26,0.35)"
+                : tokens.color.ink,
+            color: tokens.color.canvas,
             fontSize: 13,
             fontWeight: 600,
             fontFamily: "inherit",

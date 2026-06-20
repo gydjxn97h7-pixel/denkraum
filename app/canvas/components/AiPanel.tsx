@@ -1,7 +1,6 @@
 "use client";
 import { Sparkles, FileText, GitBranch, Crosshair, X } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
-import { ACCENT } from "../lib/canvas-types";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 import { PanelSectionLabel } from "./panel-ui";
 import { useApiKey } from "../lib/ai-key";
 import { AiCharacter, type AiCharacterState } from "./AiCharacter";
@@ -20,9 +19,9 @@ const STATE_MOOD: Record<AiCharacterState, string> = {
 // Soft status dot colour matching the mood.
 const STATE_DOT: Record<AiCharacterState, string> = {
   idle: "#7C7A4E", // olive — calm
-  thinking: "#D4A04A", // ochre — working
+  thinking: tokens.color.driftwood, // warm — working
   done: "#7C7A4E", // olive — happy/settled
-  error: "#C56B47", // terracotta — attention
+  error: tokens.color.ink, // ink — attention
 };
 
 // What the assistant can do today — strictly the features that work now.
@@ -100,8 +99,7 @@ export function AiPanel({
             height: 72,
             borderRadius: "50%",
             // A warm radial halo so the companion sits on a little stage.
-            background:
-              "radial-gradient(circle at 50% 42%, rgba(197,107,71,0.14), rgba(197,107,71,0.04) 58%, transparent 72%)",
+            background: `radial-gradient(circle at 50% 42%, ${tokens.color.driftwood}24, ${tokens.color.driftwood}0A 58%, transparent 72%)`,
           }}
         >
           <AiCharacter state={aiState} size={50} />
@@ -157,10 +155,10 @@ export function AiPanel({
             style={{
               width: "100%",
               height: 36,
-              borderRadius: 10,
+              borderRadius: tokens.radius.xs,
               border: "none",
-              background: ACCENT,
-              color: "#FCFBF8",
+              background: tokens.color.ink,
+              color: tokens.color.canvas,
               fontSize: 12,
               fontWeight: 600,
               fontFamily: "inherit",
@@ -188,13 +186,13 @@ export function AiPanel({
             style={{
               width: "100%",
               height: 36,
-              borderRadius: 10,
-              border: "1px solid rgba(42,40,35,0.12)",
+              borderRadius: tokens.radius.xs,
+              border: `0.5px solid ${tokens.color.border}`,
               background: "transparent",
               color:
                 aiState === "thinking"
                   ? "rgba(42,40,35,0.4)"
-                  : "rgba(42,40,35,0.85)",
+                  : tokens.color.text,
               fontSize: 12,
               fontWeight: 600,
               fontFamily: "inherit",
@@ -230,14 +228,12 @@ export function AiPanel({
             style={{
               width: "100%",
               height: 36,
-              borderRadius: 10,
+              borderRadius: tokens.radius.xs,
               border: placingWorkspace
-                ? `1px solid ${ACCENT}`
-                : "1px solid rgba(42,40,35,0.12)",
-              background: placingWorkspace
-                ? "rgba(197,107,71,0.10)"
-                : "transparent",
-              color: placingWorkspace ? ACCENT : "rgba(42,40,35,0.85)",
+                ? `0.5px solid ${tokens.color.ink}`
+                : `0.5px solid ${tokens.color.border}`,
+              background: placingWorkspace ? tokens.color.sand : "transparent",
+              color: placingWorkspace ? tokens.color.ink : tokens.color.text,
               fontSize: 12,
               fontWeight: 600,
               fontFamily: "inherit",
@@ -288,8 +284,8 @@ export function AiPanel({
               color: "rgba(42,40,35,0.55)",
               padding: "10px 12px",
               borderRadius: 10,
-              background: "rgba(42,40,35,0.04)",
-              border: "1px solid rgba(42,40,35,0.08)",
+              background: tokens.color.sand,
+              border: `0.5px solid ${tokens.color.border}`,
             }}
           >
             Add your Anthropic API key in Settings to start using the assistant.
@@ -317,13 +313,13 @@ export function AiPanel({
                 flexShrink: 0,
                 width: 28,
                 height: 28,
-                borderRadius: 8,
+                borderRadius: tokens.radius.xs,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: ACCENT,
-                background: "rgba(197,107,71,0.10)",
-                border: "1px solid rgba(197,107,71,0.18)",
+                color: tokens.color.wood,
+                background: tokens.color.sand,
+                border: `0.5px solid ${tokens.color.border}`,
               }}
             >
               {icon}

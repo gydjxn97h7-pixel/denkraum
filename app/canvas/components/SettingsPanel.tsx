@@ -1,13 +1,12 @@
 "use client";
 import { useState } from "react";
 import { Check, AlertTriangle, X, Sparkles } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
-import { ACCENT } from "../lib/canvas-types";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 import { PanelSectionLabel } from "./panel-ui";
 import { useApiKey, validateKey } from "../lib/ai-key";
 
 const OLIVE = "#7C7A4E";
-const OCHRE = "#D4A04A";
+const OCHRE = tokens.color.driftwood;
 
 type Feedback = { tone: "good" | "bad" | "warn"; text: string } | null;
 
@@ -53,16 +52,16 @@ export function SettingsPanel() {
     feedback?.tone === "good"
       ? OLIVE
       : feedback?.tone === "bad"
-        ? ACCENT
+        ? tokens.color.ink
         : OCHRE;
 
   const primaryBtn: React.CSSProperties = {
     flex: 1,
     height: 32,
-    borderRadius: 8,
+    borderRadius: tokens.radius.xs,
     border: "none",
-    background: ACCENT,
-    color: "#FCFBF8",
+    background: tokens.color.ink,
+    color: tokens.color.canvas,
     fontSize: 12,
     fontWeight: 600,
     fontFamily: "inherit",
@@ -75,10 +74,10 @@ export function SettingsPanel() {
   const secondaryBtn = (disabled: boolean): React.CSSProperties => ({
     flex: 1,
     height: 32,
-    borderRadius: 8,
-    border: "1px solid rgba(42,40,35,0.12)",
+    borderRadius: tokens.radius.xs,
+    border: `0.5px solid ${tokens.color.border}`,
     background: "transparent",
-    color: disabled ? "rgba(42,40,35,0.3)" : "rgba(42,40,35,0.85)",
+    color: disabled ? "rgba(42,40,35,0.3)" : tokens.color.text,
     fontSize: 12,
     fontWeight: 600,
     fontFamily: "inherit",
@@ -116,14 +115,14 @@ export function SettingsPanel() {
             alignItems: "flex-start",
             padding: "10px 12px",
             borderRadius: 10,
-            background: "rgba(197,107,71,0.07)",
-            border: "1px solid rgba(197,107,71,0.18)",
+            background: tokens.color.sand,
+            border: `0.5px solid ${tokens.color.border}`,
           }}
         >
           <Sparkles
             size={ICON.sm}
             {...ICON_PROPS}
-            color={ACCENT}
+            color={tokens.color.wood}
             style={{ flexShrink: 0, marginTop: 1 }}
           />
           <span
@@ -156,8 +155,8 @@ export function SettingsPanel() {
           style={{
             height: 34,
             borderRadius: 8,
-            border: "1px solid rgba(42,40,35,0.14)",
-            background: "rgba(42,40,35,0.04)",
+            border: `0.5px solid ${tokens.color.border}`,
+            background: tokens.color.sand,
             padding: "0 10px",
             fontSize: 12,
             fontFamily: "inherit",
@@ -209,10 +208,10 @@ export function SettingsPanel() {
           disabled={!hasKey && draft === ""}
           style={{
             height: 30,
-            borderRadius: 8,
+            borderRadius: tokens.radius.xs,
             border: "none",
             background: "transparent",
-            color: !hasKey && draft === "" ? "rgba(42,40,35,0.3)" : ACCENT,
+            color: !hasKey && draft === "" ? "rgba(42,40,35,0.3)" : tokens.color.ink,
             fontSize: 12,
             fontWeight: 600,
             fontFamily: "inherit",

@@ -16,7 +16,7 @@ import {
   ArrowDownToLine,
   Sparkles,
 } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 
 interface NodeContextMenuProps {
   menu: { x: number; y: number; id: number };
@@ -81,13 +81,9 @@ export function NodeContextMenu({
         position: "fixed",
         left: menu.x,
         top: menu.y,
-        background:
-          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
-        backdropFilter: "blur(24px)",
-        border: "1px solid rgba(42,40,35,0.1)",
-        borderRadius: 12,
-        boxShadow:
-          "0 8px 24px rgba(0,0,0,0.22)",
+        background: tokens.color.muted,
+        borderRadius: tokens.radius.md,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 300,
         minWidth: 240,
         padding: "8px 0",
@@ -111,7 +107,7 @@ export function NodeContextMenu({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#C56B47",
+                color: tokens.color.wood,
               }}
             >
               <Sparkles size={ICON.sm} {...ICON_PROPS} />
@@ -229,7 +225,7 @@ export function NodeContextMenu({
                   border: active
                     ? "1px solid rgba(42,40,35,0.25)"
                     : "1px solid rgba(42,40,35,0.08)",
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.xs,
                   background: active
                     ? "rgba(42,40,35,0.12)"
                     : "transparent",
@@ -259,7 +255,7 @@ export function NodeContextMenu({
             style={{
               width: 28,
               height: 28,
-              borderRadius: 8,
+              borderRadius: tokens.radius.xs,
               background: n.textColor ?? "#2A2823",
               border: "1px solid rgba(42,40,35,0.1)",
               flexShrink: 0,
@@ -286,7 +282,7 @@ export function NodeContextMenu({
             }
             style={{
               padding: "4px 12px",
-              borderRadius: 8,
+              borderRadius: tokens.radius.xs,
               background: "rgba(42,40,35,0.07)",
               border: "1px solid rgba(42,40,35,0.1)",
               cursor: "pointer",
@@ -340,7 +336,7 @@ export function NodeContextMenu({
               style={{
                 width: 28,
                 height: 28,
-                borderRadius: 8,
+                borderRadius: tokens.radius.xs,
                 background: n.color,
                 border: "1px solid rgba(42,40,35,0.1)",
                 flexShrink: 0,
@@ -360,7 +356,7 @@ export function NodeContextMenu({
               onClick={() => openColorPicker(menu.id, n.color, menu.x, menu.y)}
               style={{
                 padding: "4px 12px",
-                borderRadius: 8,
+                borderRadius: tokens.radius.xs,
                 background: "rgba(42,40,35,0.07)",
                 border: "1px solid rgba(42,40,35,0.1)",
                 cursor: "pointer",

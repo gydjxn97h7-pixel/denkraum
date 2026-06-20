@@ -17,7 +17,7 @@ import {
   ClipboardPaste,
 } from "lucide-react";
 import { OvalIcon, PolygonGlyph } from "./ShapeButton";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 
 interface CanvasContextMenuProps {
   menu: { x: number; y: number; cx: number; cy: number };
@@ -46,11 +46,8 @@ export function CanvasContextMenu({
         position: "fixed",
         left: menu.x,
         top: menu.y,
-        background:
-          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
-        backdropFilter: "blur(24px)",
-        border: "1px solid rgba(42,40,35,0.1)",
-        borderRadius: 12,
+        background: tokens.color.muted,
+        borderRadius: tokens.radius.md,
         boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 300,
         minWidth: 220,
