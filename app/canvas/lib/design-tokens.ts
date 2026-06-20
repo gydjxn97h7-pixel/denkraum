@@ -145,3 +145,55 @@ export const BUTTON_PILL = {
   gap: SPACE.sm,
   cursor: "pointer",
 } as const;
+
+// ── DNKRM Design System — stone / wood / nature palette ─────────────────────
+// New token system (Phase 2). Added alongside the existing exports above; the
+// old values are migrated to these file by file in subsequent steps. Nothing
+// references `tokens` yet, so this block is purely additive.
+export const tokens = {
+  // Base — Stone & Sand
+  color: {
+    canvas: "#F8F6F1",
+    surface: "#F0EDE5",
+    muted: "#E6E2D8",
+    border: "#C9C5B8",
+    subtle: "#8E8A82",
+    text: "#3E3C38",
+    ink: "#1D1C1A",
+
+    // Warm — Wood & Sand
+    sand: "#EDE0CC",
+    linen: "#D4BFA0",
+    driftwood: "#B09070",
+    wood: "#8A6E50",
+    bark: "#5E4A34",
+
+    // Nature — Green (use sparingly, max one element per view)
+    sage: "#B8C9A0",
+    fern: "#8A9E72",
+    moss: "#5C6B4A",
+
+    // Sticky Note (unchanged)
+    sticky: "#F5E97A",
+    stickyBorder: "#D4C860",
+  },
+
+  radius: {
+    xs: "2px", // buttons
+    sm: "6px", // nodes
+    md: "12px", // panels, sidebar
+  },
+
+  shadow: {
+    node: "0 1px 3px rgba(0,0,0,0.05)",
+    selected: "0 4px 12px rgba(0,0,0,0.08)",
+    panel: "0 8px 24px rgba(0,0,0,0.10)",
+  },
+
+  motion: {
+    micro: "80ms ease-out",
+    standard: "180ms ease-out",
+    deliberate: "320ms cubic-bezier(0.4, 0, 0.2, 1)",
+    breathe: "2800ms ease-in-out infinite",
+  },
+} as const;
