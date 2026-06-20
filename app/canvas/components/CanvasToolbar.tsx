@@ -10,7 +10,7 @@ import {
   Search,
   Ellipsis,
 } from "lucide-react";
-import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens, FROST } from "../lib/design-tokens";
 
 // Primary shapes live in the toolbar; secondary shapes hide behind the overflow
 // "more shapes" button.
@@ -55,7 +55,7 @@ interface CanvasToolbarProps {
 // Each related group of actions lives in its own floating cluster; the wrapper
 // just positions them in a row with gaps between groups.
 const cluster: React.CSSProperties = {
-  background: tokens.color.muted,
+  ...FROST,
   borderRadius: tokens.radius.md,
   padding: "8px 16px",
   display: "flex",

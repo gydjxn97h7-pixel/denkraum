@@ -1,7 +1,7 @@
 "use client";
 import type { NodeType } from "../lib/canvas-types";
 import { Search, X } from "lucide-react";
-import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens, FROST } from "../lib/design-tokens";
 
 interface FilterBarProps {
   filterInputRef: React.RefObject<HTMLInputElement | null>;
@@ -37,7 +37,7 @@ export function FilterBar({
         top: 84,
         left: "50%",
         transform: "translateX(-50%)",
-        background: tokens.color.muted,
+        ...FROST,
         borderRadius: tokens.radius.md,
         padding: "8px 12px",
         display: "flex",

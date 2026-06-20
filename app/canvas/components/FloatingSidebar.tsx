@@ -22,7 +22,7 @@ import {
   FolderOpen as FolderOpenRow,
   X,
 } from "lucide-react";
-import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens, FROST } from "../lib/design-tokens";
 
 // ── Two-layer floating sidebar ──────────────────────────────────────────────
 // A single floating unit that hovers over the canvas with a margin on every
@@ -39,15 +39,6 @@ const MARGIN = 12;
 // Spring used for the panel expand / collapse (Motion Primitives foundation).
 const SPRING = { type: "spring", bounce: 0.1, duration: 0.25 } as const;
 
-// Frosted glass: a light stone tint at ~55% opacity over a strong backdrop blur,
-// applied to each layer (strip + panel) so the canvas clearly bleeds through.
-const FROST_BG = "rgba(240,237,229,0.55)";
-const FROST_BLUR = "blur(24px)";
-const frost: React.CSSProperties = {
-  background: FROST_BG,
-  backdropFilter: FROST_BLUR,
-  WebkitBackdropFilter: FROST_BLUR,
-};
 // Hairline that separates the strip from the panel and frames the frost.
 const HAIRLINE = "rgba(42,40,35,0.10)";
 
@@ -280,9 +271,9 @@ function FloatingSidebarImpl({
         alignItems: "stretch",
         borderRadius: 18,
         overflow: "hidden",
-        // The outer is just the clip + shadow frame; the frost lives on each
-        // layer below so backdrop-filter samples the canvas directly.
-        background: "transparent",
+        // One frosted surface for the whole unit, so the strip and the panel
+        // read identically. The canvas bleeds through both.
+        ...FROST,
         boxShadow: "0 6px 22px rgba(58,48,38,0.16)",
         zIndex: 150,
         fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
@@ -291,7 +282,6 @@ function FloatingSidebarImpl({
       {/* ── Layer 1 — icon strip ── */}
       <div
         style={{
-          ...frost,
           width: STRIP_W,
           flexShrink: 0,
           display: "flex",
@@ -344,7 +334,6 @@ function FloatingSidebarImpl({
             animate={{ width: PANEL_W, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             style={{
-              ...frost,
               flexShrink: 0,
               alignSelf: "stretch",
               overflow: "hidden",

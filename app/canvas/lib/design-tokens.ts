@@ -146,6 +146,15 @@ export const BUTTON_PILL = {
   cursor: "pointer",
 } as const;
 
+// Shared frosted-glass surface for floating chrome (sidebar, toolbars). One
+// spec so every chrome element reads as the same frosted surface over the
+// canvas: a light stone tint at ~55% opacity over a strong backdrop blur.
+export const FROST = {
+  background: "rgba(240,237,229,0.55)",
+  backdropFilter: "blur(24px)",
+  WebkitBackdropFilter: "blur(24px)",
+} as const;
+
 // ── DNKRM Design System — stone / wood / nature palette ─────────────────────
 // New token system (Phase 2). Added alongside the existing exports above; the
 // old values are migrated to these file by file in subsequent steps. Nothing

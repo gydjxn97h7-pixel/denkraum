@@ -2187,12 +2187,12 @@ export default function Canvas() {
             <div
               style={{
                 position: "absolute",
-                // Overscan past the edges so the 50px blur never reveals gaps.
-                inset: -80,
+                // A small overscan so the blur doesn't reveal gaps at the edges.
+                inset: -30,
                 backgroundImage: "url(/backgrounds/atmospheric-1.jpg)",
                 backgroundSize: "cover",
                 backgroundPosition: "center",
-                filter: "blur(50px)",
+                filter: "blur(20px)",
               }}
             />
             <div

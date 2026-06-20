@@ -2,7 +2,7 @@
 import { memo } from "react";
 import { MIN_ZOOM, MAX_ZOOM } from "../lib/canvas-types";
 import { Minus, Plus } from "lucide-react";
-import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens, FROST } from "../lib/design-tokens";
 
 interface ZoomControlsProps {
   zoom: number;
@@ -24,7 +24,7 @@ function ZoomControlsImpl({
         position: "fixed",
         bottom: 24,
         right: 24,
-        background: tokens.color.muted,
+        ...FROST,
         borderRadius: tokens.radius.md,
         padding: "8px 12px",
         display: isPresenting ? "none" : "flex",
