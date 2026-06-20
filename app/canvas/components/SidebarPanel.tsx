@@ -9,7 +9,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import type { AiCharacterState } from "./AiCharacter";
 import { PanelSectionLabel, StatusRow } from "./panel-ui";
 import { LayoutDashboard, Save, FolderOpen, X } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 
 interface SidebarPanelProps {
   activePanel: PanelSection | null;
@@ -101,11 +101,10 @@ function SidebarPanelImpl({
         left: 76,
         height: "calc(100vh - 24px)",
         width: 340,
-        background:
-          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
+        background: tokens.color.muted,
         backdropFilter: "blur(24px)",
         WebkitBackdropFilter: "blur(24px)",
-        borderRadius: 16,
+        borderRadius: tokens.radius.md,
         boxShadow:
           "0 4px 12px rgba(58,48,38,0.10), 0 16px 44px rgba(58,48,38,0.20)",
         zIndex: 149,
@@ -218,8 +217,7 @@ function SidebarPanelImpl({
               display: "flex",
               alignItems: "center",
               cursor: "text",
-              background:
-                "linear-gradient(to right, rgba(197,107,71,0.07), transparent)",
+              background: tokens.color.sand,
               justifyContent: "flex-start",
             }}
           >
@@ -231,7 +229,7 @@ function SidebarPanelImpl({
                 top: 0,
                 width: 2.5,
                 height: 40,
-                background: "#C56B47",
+                background: tokens.color.wood,
                 borderRadius: "0 1px 1px 0",
               }}
             />
@@ -283,7 +281,7 @@ function SidebarPanelImpl({
                   fontFamily: "inherit",
                   background: "rgba(42,40,35,0.07)",
                   border: "none",
-                  outline: "1px solid rgba(197,107,71,0.4)",
+                  outline: `1px solid ${tokens.color.driftwood}`,
                   borderRadius: 8,
                   padding: "0 4px",
                   color: "#2A2823",
@@ -314,8 +312,8 @@ function SidebarPanelImpl({
                   viewBox="0 0 16 16"
                   style={{ marginRight: 20, flexShrink: 0 }}
                 >
-                  <circle cx="8" cy="8" r="6" fill="rgba(197,107,71,0.12)" />
-                  <circle cx="8" cy="8" r="3.5" fill="#C56B47" />
+                  <circle cx="8" cy="8" r="6" fill={tokens.color.sand} />
+                  <circle cx="8" cy="8" r="3.5" fill={tokens.color.wood} />
                 </svg>
               </>
             )}
@@ -328,7 +326,7 @@ function SidebarPanelImpl({
           <StatusRow
             label="Autosave"
             value={saveState === "saving" ? "Saving…" : "Saved"}
-            dotColor={saveState === "saving" ? "#D4A04A" : "#7C7A4E"}
+            dotColor={saveState === "saving" ? tokens.color.driftwood : "#7C7A4E"}
           />
         </div>
       )}

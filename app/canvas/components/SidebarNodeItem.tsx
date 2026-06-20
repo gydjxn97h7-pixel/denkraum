@@ -16,7 +16,7 @@ import {
   FileText,
 } from "lucide-react";
 import { OvalIcon, PolygonGlyph } from "./ShapeButton";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 
 interface SidebarNodeItemProps {
   id: number;
@@ -66,7 +66,7 @@ const TYPE_ICON: Partial<Record<NodeType, typeof Square>> = {
 };
 
 function NodeIcon({ type, active }: { type: NodeType; active: boolean }) {
-  const color = active ? "#C56B47" : "rgba(42,40,35,0.6)";
+  const color = active ? tokens.color.wood : "rgba(42,40,35,0.6)";
   if (type === "oval") return <OvalIcon size={ICON.sm} color={color} />;
   if (type === "arrow" || type === "parallelogram")
     return <PolygonGlyph type={type} size={ICON.sm} color={color} />;
@@ -105,9 +105,7 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
         display: "flex",
         alignItems: "center",
         cursor: "pointer",
-        background: isActive
-          ? "linear-gradient(to right, rgba(197,107,71,0.07), transparent)"
-          : "transparent",
+        background: isActive ? tokens.color.sand : "transparent",
         padding: "0 16px",
       }}
       onMouseEnter={(e) => {
@@ -129,7 +127,7 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
             top: 0,
             width: 2.5,
             height: 36,
-            background: "#C56B47",
+            background: tokens.color.wood,
             borderRadius: "0 1px 1px 0",
           }}
         />
@@ -167,7 +165,7 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
             fontFamily: "var(--font-clash), system-ui, sans-serif",
             background: "rgba(42,40,35,0.07)",
             border: "none",
-            outline: "1px solid rgba(197,107,71,0.4)",
+            outline: `1px solid ${tokens.color.driftwood}`,
             borderRadius: 8,
             padding: "0 4px",
             color: "#2A2823",

@@ -10,7 +10,7 @@ import {
   Cpu,
   Settings,
 } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 
 interface SidebarStripProps {
   isPresenting: boolean;
@@ -32,11 +32,10 @@ function SidebarStripImpl({
         left: 12,
         height: "calc(100vh - 24px)",
         width: 52,
-        background:
-          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
+        background: tokens.color.muted,
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
-        borderRadius: 16,
+        borderRadius: tokens.radius.md,
         boxShadow:
           "0 4px 12px rgba(58,48,38,0.10), 0 16px 44px rgba(58,48,38,0.20)",
         zIndex: 151,
@@ -62,7 +61,7 @@ function SidebarStripImpl({
           width="21"
           height="21"
           rx="5"
-          stroke="rgba(197,107,71,0.3)"
+          stroke={tokens.color.driftwood}
           strokeWidth="1"
         />
         <rect
@@ -71,7 +70,7 @@ function SidebarStripImpl({
           width="14"
           height="14"
           rx="3"
-          fill="rgba(197,107,71,0.12)"
+          fill={tokens.color.sand}
         />
         <rect
           x="7"
@@ -79,7 +78,7 @@ function SidebarStripImpl({
           width="8"
           height="8"
           rx="2"
-          fill="rgba(197,107,71,0.45)"
+          fill={tokens.color.wood}
         />
       </svg>
 
@@ -159,16 +158,14 @@ function SidebarStripImpl({
               borderRadius: 8,
               marginBottom: 16,
               border: isActive
-                ? "1px solid rgba(197,107,71,0.35)"
+                ? `1px solid ${tokens.color.border}`
                 : "1px solid rgba(42,40,35,0.07)",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: isActive ? "#C56B47" : "rgba(42,40,35,0.75)",
-              background: isActive
-                ? "rgba(197,107,71,0.14)"
-                : "rgba(42,40,35,0.04)",
+              color: isActive ? tokens.color.wood : "rgba(42,40,35,0.75)",
+              background: isActive ? tokens.color.sand : "rgba(42,40,35,0.04)",
               flexShrink: 0,
               transition: "color 0.12s, background 0.12s, border-color 0.12s",
             }}
