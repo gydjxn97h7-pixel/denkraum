@@ -38,7 +38,6 @@ export function FilterBar({
         left: "50%",
         transform: "translateX(-50%)",
         background: tokens.color.muted,
-        border: `0.5px solid ${tokens.color.border}`,
         borderRadius: tokens.radius.md,
         padding: "8px 12px",
         display: "flex",

@@ -56,7 +56,6 @@ interface CanvasToolbarProps {
 // just positions them in a row with gaps between groups.
 const cluster: React.CSSProperties = {
   background: tokens.color.muted,
-  border: `0.5px solid ${tokens.color.border}`,
   borderRadius: tokens.radius.md,
   padding: "8px 16px",
   display: "flex",
