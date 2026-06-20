@@ -20,8 +20,14 @@ export const GEN_NODE_TYPES = [
 ] as const;
 export type GenNodeType = (typeof GEN_NODE_TYPES)[number];
 
+// Research mode may additionally emit "link" source nodes (a real URL + title).
+// Kept out of GEN_NODE_TYPES so the normal structured-output schema's type enum
+// never offers "link" — off-mode behaviour is unchanged.
+export const GEN_RESEARCH_NODE_TYPES = [...GEN_NODE_TYPES, "link"] as const;
+export type GenAnyNodeType = (typeof GEN_RESEARCH_NODE_TYPES)[number];
+
 // Default size per generated node type — also drives the auto-layout spacing.
-export const GEN_SIZE: Record<GenNodeType, { w: number; h: number }> = {
+export const GEN_SIZE: Record<GenAnyNodeType, { w: number; h: number }> = {
   block: { w: 200, h: 90 },
   rounded: { w: 200, h: 90 },
   circle: { w: 110, h: 110 },
@@ -29,6 +35,7 @@ export const GEN_SIZE: Record<GenNodeType, { w: number; h: number }> = {
   diamond: { w: 150, h: 110 },
   text: { w: 160, h: 52 },
   sticky: { w: 150, h: 150 },
+  link: { w: 200, h: 70 },
 };
 
 // Curated DNKRM fill palette the generator may assign as a node's card colour.
@@ -56,13 +63,15 @@ export const GEN_H_RANGE = { min: 64, max: 220 } as const;
 
 export type GenNode = {
   id: string;
-  type: GenNodeType;
+  type: GenAnyNodeType;
   title: string;
   body: string;
   color: string;
   fontSize: number;
   width: number;
   height: number;
+  // Research mode only: the source URL for a "link" node.
+  url?: string;
 };
 export type GenConn = { from: string; to: string };
 export type GeneratedGraph = { nodes: GenNode[]; connections: GenConn[] };
@@ -132,6 +141,20 @@ Guidance:
 - Use color and size to express structure (group with color, anchor the central nodes with size), not decoration.
 - Do not include positions or coordinates — the app lays the graph out.
 Return only JSON matching the provided schema.`;
+
+// Appended to the system prompt in research mode. The model has no schema in
+// this mode (structured output is incompatible with web search's citations), so
+// the JSON shape is spelled out here and enforced by sanitizeGraph() afterwards.
+const RESEARCH_PROMPT_ADDITION = `Research mode is ON. Search the web to find accurate, current information. Add Link nodes for your key sources, connected to the nodes they support.
+
+A Link node uses:
+- "type": "link"
+- "title": the source's page title
+- "url": the source's full http(s) URL
+- plus the usual "id", "body", "color", "fontSize", "width", and "height" fields.
+Connect each Link node to the node(s) whose content it backs up.
+
+Important: do NOT return any prose, explanation, or markdown — return ONLY a single JSON object of the form {"nodes": [...], "connections": [...]} as your final message, matching the node shape described above.`;
 
 const EXPAND_SYSTEM_PROMPT = `You expand one node in DNKRM, a visual canvas / mind-mapping tool, into a few child nodes that branch out from it.
 
@@ -213,16 +236,32 @@ type TextResult =
   | { ok: true; text: string }
   | { ok: false; message: string };
 
+// The web_search server tool, enabled only in research mode. Anthropic runs the
+// search server-side and returns the results inline; the model grounds its graph
+// in them and cites sources as "link" nodes.
+const WEB_SEARCH_TOOL = {
+  type: "web_search_20250305" as const,
+  name: "web_search" as const,
+};
+
+// Cap on pause_turn resumes (the server-side search loop can exceed its internal
+// iteration limit on a long search and ask us to continue).
+const MAX_PAUSE_RESUMES = 4;
+
 // Shared core for every AI request: load the SDK (module-cached after the first
 // call), call Haiku, map errors, and return the response text. `maxTokens` and
 // the optional structured-output schema vary by caller (graph requests pass the
-// graph schema; prose requests pass none).
+// graph schema; prose requests pass none). When `tools` is set (research mode),
+// no schema is used — structured output is incompatible with web search's
+// citations — and the final answer is read from the LAST text block, after any
+// tool_use/tool_result blocks. A `pause_turn` stop reason is resumed in place.
 async function callModel(
   system: string,
   user: string,
   apiKey: string,
   maxTokens: number,
   schema?: Record<string, unknown>,
+  tools?: ReadonlyArray<Record<string, unknown>>,
 ): Promise<TextResult> {
   if (!apiKey) return { ok: false, message: "No API key set." };
 
@@ -236,77 +275,149 @@ async function callModel(
     };
   }
 
-  const request = {
+  // Base request shared across pause_turn resumes; only `messages` grows.
+  const baseRequest = {
     model: "claude-haiku-4-5",
     max_tokens: maxTokens,
     system,
-    messages: [{ role: "user" as const, content: user }],
     ...(schema && {
       output_config: { format: { type: "json_schema" as const, schema } },
     }),
+    ...(tools && { tools }),
   };
 
-  let response: Awaited<
-    ReturnType<InstanceType<typeof Anthropic>["messages"]["create"]>
-  >;
-  try {
-    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-    response = await client.messages.create(request);
-  } catch (err) {
-    if (
-      err instanceof Anthropic.AuthenticationError ||
-      err instanceof Anthropic.PermissionDeniedError
-    ) {
-      return { ok: false, message: "Invalid API key." };
+  type Msg = { role: "user" | "assistant"; content: unknown };
+  const messages: Msg[] = [{ role: "user", content: user }];
+
+  // Minimal structural view of a non-streaming Message — we never request a
+  // stream, so this is all we read off the response.
+  type MessageResponse = {
+    stop_reason: string | null;
+    content: Array<{ type: string; text?: string }>;
+  };
+  let response: MessageResponse;
+  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+
+  for (let resumes = 0; ; resumes++) {
+    const request = { ...baseRequest, messages };
+    try {
+      response = (await client.messages.create(
+        request as Parameters<typeof client.messages.create>[0],
+      )) as MessageResponse;
+    } catch (err) {
+      if (
+        err instanceof Anthropic.AuthenticationError ||
+        err instanceof Anthropic.PermissionDeniedError
+      ) {
+        return { ok: false, message: "Invalid API key." };
+      }
+      if (err instanceof Anthropic.APIConnectionError) {
+        return { ok: false, message: "Network error — check your connection." };
+      }
+      if (err instanceof Anthropic.APIError) {
+        // Log the exact request payload + full API error so schema/parameter
+        // rejections (e.g. a 400 from an unsupported JSON-schema keyword) are
+        // diagnosable instead of hiding behind a generic status message.
+        console.error("[ai-generate] Anthropic API error", {
+          status: err.status,
+          type: (err as { error?: { error?: { type?: string } } }).error?.error
+            ?.type,
+          message: err.message,
+          request,
+        });
+        return {
+          ok: false,
+          message: `AI request failed (status ${err.status}).`,
+        };
+      }
+      console.error("[ai-generate] Unexpected error contacting the AI", err);
+      return { ok: false, message: "Something went wrong contacting the AI." };
     }
-    if (err instanceof Anthropic.APIConnectionError) {
-      return { ok: false, message: "Network error — check your connection." };
+
+    if ("stop_reason" in response && response.stop_reason === "refusal") {
+      return { ok: false, message: "The model declined this request." };
     }
-    if (err instanceof Anthropic.APIError) {
-      // Log the exact request payload + full API error so schema/parameter
-      // rejections (e.g. a 400 from an unsupported JSON-schema keyword) are
-      // diagnosable instead of hiding behind a generic status message.
-      console.error("[ai-generate] Anthropic API error", {
-        status: err.status,
-        type: (err as { error?: { error?: { type?: string } } }).error?.error
-          ?.type,
-        message: err.message,
-        request,
-      });
-      return { ok: false, message: `AI request failed (status ${err.status}).` };
+    if (response.stop_reason === "max_tokens") {
+      return {
+        ok: false,
+        message: "The response was cut off — try a simpler prompt.",
+      };
     }
-    console.error("[ai-generate] Unexpected error contacting the AI", err);
-    return { ok: false, message: "Something went wrong contacting the AI." };
+    // The server-side search loop hit its iteration cap; re-send the
+    // accumulated turn (no extra user message) so it resumes where it left off.
+    if (response.stop_reason === "pause_turn") {
+      if (resumes >= MAX_PAUSE_RESUMES) {
+        return { ok: false, message: "The research took too long — try again." };
+      }
+      messages.push({ role: "assistant", content: response.content });
+      continue;
+    }
+    break;
   }
 
-  if ("stop_reason" in response && response.stop_reason === "refusal") {
-    return { ok: false, message: "The model declined this request." };
-  }
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || !("text" in textBlock)) {
+  // Read the LAST text block: in research mode the final JSON answer follows the
+  // tool_use/tool_result blocks; in normal mode there is only one text block.
+  const textBlock = [...response.content]
+    .reverse()
+    .find((b) => b.type === "text");
+  if (!textBlock || typeof textBlock.text !== "string") {
     return { ok: false, message: "The AI returned an empty response." };
-  }
-  if (response.stop_reason === "max_tokens") {
-    return {
-      ok: false,
-      message: "The response was cut off — try a simpler prompt.",
-    };
   }
   return { ok: true, text: textBlock.text };
 }
 
-// Graph requests: structured JSON → parse → sanitize.
+// Pull a JSON object out of a model text block. Research-mode responses skip the
+// structured-output schema, so the final text can carry a ```json fence or a
+// stray sentence around the object; non-research text is already bare JSON and
+// passes through the fast path. Returns undefined if no object is found.
+function extractJsonObject(text: string): unknown {
+  const tryParse = (s: string): unknown => {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return undefined;
+    }
+  };
+  const trimmed = text.trim();
+  const direct = tryParse(trimmed);
+  if (direct !== undefined) return direct;
+  // Strip a fenced code block, if present.
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) {
+    const inner = tryParse(fence[1].trim());
+    if (inner !== undefined) return inner;
+  }
+  // Last resort: slice from the first "{" to the last "}".
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    return tryParse(trimmed.slice(start, end + 1));
+  }
+  return undefined;
+}
+
+// Graph requests: JSON → parse → sanitize. In research mode the web_search tool
+// is enabled and the schema is dropped (incompatible with search citations);
+// the model is told to emit bare JSON, which we extract tolerantly.
 async function runGraphRequest(
   system: string,
   user: string,
   apiKey: string,
+  research = false,
 ): Promise<GenResult> {
-  const r = await callModel(system, user, apiKey, 4096, GRAPH_SCHEMA);
+  const r = research
+    ? await callModel(
+        `${system}\n\n${RESEARCH_PROMPT_ADDITION}`,
+        user,
+        apiKey,
+        4096,
+        undefined,
+        [WEB_SEARCH_TOOL],
+      )
+    : await callModel(system, user, apiKey, 4096, GRAPH_SCHEMA);
   if (!r.ok) return r;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(r.text);
-  } catch {
+  const parsed = research ? extractJsonObject(r.text) : tryParseStrict(r.text);
+  if (parsed === undefined) {
     return {
       ok: false,
       message: "Couldn’t read the AI response (invalid JSON).",
@@ -315,13 +426,22 @@ async function runGraphRequest(
   return sanitizeGraph(parsed);
 }
 
+function tryParseStrict(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function generateGraph(
   prompt: string,
   apiKey: string,
+  research = false,
 ): Promise<GenResult> {
   const trimmed = prompt.trim();
   if (!trimmed) return { ok: false, message: "Enter a prompt." };
-  return runGraphRequest(SYSTEM_PROMPT, trimmed, apiKey);
+  return runGraphRequest(SYSTEM_PROMPT, trimmed, apiKey, research);
 }
 
 // Context describing the node being expanded — passed to the model so the
@@ -365,7 +485,9 @@ function clampSize(
 // Validate + coerce the model's JSON into a safe graph: known ids only, types
 // clamped to the allowed set, connections referencing real nodes, deduped.
 function sanitizeGraph(parsed: unknown): GenResult {
-  const allowed = GEN_NODE_TYPES as readonly string[];
+  // "link" is accepted here (research mode) even though it's excluded from the
+  // normal structured-output schema — off-mode can never reach this branch.
+  const allowed = GEN_RESEARCH_NODE_TYPES as readonly string[];
   const obj = (parsed ?? {}) as { nodes?: unknown; connections?: unknown };
   const rawNodes = Array.isArray(obj.nodes) ? obj.nodes : [];
 
@@ -375,9 +497,15 @@ function sanitizeGraph(parsed: unknown): GenResult {
     if (!raw || typeof raw !== "object") continue;
     const n = raw as Record<string, unknown>;
     if (typeof n.id !== "string" || n.id === "" || ids.has(n.id)) continue;
-    const type = (
+    let type = (
       typeof n.type === "string" && allowed.includes(n.type) ? n.type : "block"
-    ) as GenNodeType;
+    ) as GenAnyNodeType;
+    // A "link" node must carry a real http(s) URL; otherwise it's a regular card.
+    const url =
+      typeof n.url === "string" && /^https?:\/\/\S+$/i.test(n.url.trim())
+        ? n.url.trim()
+        : undefined;
+    if (type === "link" && !url) type = "block";
     // Clamp colour + size to the allowed sets so a stray value can never produce
     // an off-palette fill or an unreadable card; default to cream / body size.
     const color =
@@ -411,6 +539,7 @@ function sanitizeGraph(parsed: unknown): GenResult {
       fontSize,
       width,
       height,
+      ...(type === "link" && url ? { url } : {}),
     });
   }
 

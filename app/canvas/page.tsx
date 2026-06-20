@@ -751,6 +751,11 @@ export default function Canvas() {
           // AI-assigned card fill (text nodes have no card) + size hierarchy.
           color: isText ? "transparent" : gn.color,
           fontSize: gn.fontSize,
+          // Research-mode "link" nodes carry a real source URL: store it (and a
+          // cached favicon) so the node renders and behaves like a link node.
+          ...(gn.type === "link" && gn.url
+            ? { linkUrl: gn.url, linkFavicon: faviconUrl(gn.url) }
+            : {}),
         };
       });
       const newConns: Connection[] = [];
@@ -773,11 +778,11 @@ export default function Canvas() {
   // aiState drives the assistant character while the call is in flight. Success
   // and failure both surface as a toast.
   const generateFromPrompt = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, research: boolean) => {
       if (!aiHasKey || aiBusyRef.current) return;
       aiBusyRef.current = true;
       setAiState("thinking");
-      const r = await generateGraph(prompt, aiApiKey);
+      const r = await generateGraph(prompt, aiApiKey, research);
       aiBusyRef.current = false;
       if (!r.ok) {
         setAiState("error");

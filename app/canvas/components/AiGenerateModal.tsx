@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Globe } from "lucide-react";
 import { ICON, ICON_PROPS } from "../lib/design-tokens";
 import { ACCENT } from "../lib/canvas-types";
 import { AiCharacter, type AiCharacterState } from "./AiCharacter";
@@ -10,7 +10,8 @@ interface AiGenerateModalProps {
   onClose: () => void;
   // Fire-and-forget: the modal hands the prompt off and closes immediately;
   // the actual AI call runs in the background while the canvas stays usable.
-  onSubmit: (prompt: string) => void;
+  // `research` enables web search before the graph is built.
+  onSubmit: (prompt: string, research: boolean) => void;
   aiState: AiCharacterState;
 }
 
@@ -22,6 +23,7 @@ export function AiGenerateModal({
   aiState,
 }: AiGenerateModalProps) {
   const [prompt, setPrompt] = useState("");
+  const [research, setResearch] = useState(false);
 
   if (!open) return null;
 
@@ -32,8 +34,9 @@ export function AiGenerateModal({
   const submit = () => {
     const p = prompt.trim();
     if (p === "") return;
-    onSubmit(p);
+    onSubmit(p, research);
     setPrompt("");
+    setResearch(false);
     onClose();
   };
 
@@ -123,6 +126,68 @@ export function AiGenerateModal({
             boxSizing: "border-box",
           }}
         />
+
+        {/* Research toggle — searches the web before building the graph */}
+        <button
+          onClick={() => setResearch((r) => !r)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "9px 12px",
+            borderRadius: 10,
+            border: `1px solid ${
+              research ? "rgba(197,107,71,0.5)" : "rgba(42,40,35,0.12)"
+            }`,
+            background: research ? "rgba(197,107,71,0.08)" : "transparent",
+            cursor: "pointer",
+            textAlign: "left",
+            fontFamily: "inherit",
+            transition: "background 120ms, border-color 120ms",
+          }}
+        >
+          <Globe
+            size={ICON.sm}
+            {...ICON_PROPS}
+            color={research ? ACCENT : "rgba(42,40,35,0.55)"}
+          />
+          <span
+            style={{
+              flex: 1,
+              fontSize: 12,
+              lineHeight: 1.4,
+              color: research ? "#2A2823" : "rgba(42,40,35,0.7)",
+            }}
+          >
+            Research mode — AI searches the web first
+          </span>
+          {/* Switch */}
+          <span
+            aria-hidden
+            style={{
+              flexShrink: 0,
+              width: 32,
+              height: 18,
+              borderRadius: 9,
+              background: research ? ACCENT : "rgba(42,40,35,0.2)",
+              position: "relative",
+              transition: "background 120ms",
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: 2,
+                left: research ? 16 : 2,
+                width: 14,
+                height: 14,
+                borderRadius: "50%",
+                background: "#FCFBF8",
+                transition: "left 120ms",
+              }}
+            />
+          </span>
+        </button>
 
         {/* Actions */}
         <div
