@@ -2,7 +2,7 @@
 import { memo } from "react";
 import { MIN_ZOOM, MAX_ZOOM } from "../lib/canvas-types";
 import { Minus, Plus } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 
 interface ZoomControlsProps {
   zoom: number;
@@ -24,10 +24,9 @@ function ZoomControlsImpl({
         position: "fixed",
         bottom: 24,
         right: 24,
-        background: "rgba(252,251,248,0.92)",
-        backdropFilter: "blur(12px)",
-        border: "1px solid rgba(42,40,35,0.1)",
-        borderRadius: 16,
+        background: tokens.color.muted,
+        border: `0.5px solid ${tokens.color.border}`,
+        borderRadius: tokens.radius.md,
         padding: "8px 12px",
         display: isPresenting ? "none" : "flex",
         gap: 8,
@@ -80,7 +79,7 @@ function ZoomControlsImpl({
         style={{
           width: "1px",
           height: 16,
-          background: "rgba(42,40,35,0.1)",
+          background: tokens.color.border,
         }}
       />
       <button
@@ -91,13 +90,13 @@ function ZoomControlsImpl({
         style={{
           height: 24,
           padding: "0 12px",
-          borderRadius: 999,
-          border: "1px solid rgba(42,40,35,0.12)",
-          background: "none",
+          borderRadius: tokens.radius.xs,
+          border: `0.5px solid ${tokens.color.border}`,
+          background: "transparent",
           fontSize: 11,
           fontWeight: 600,
           cursor: "pointer",
-          color: "rgba(42,40,35,0.7)",
+          color: tokens.color.text,
         }}
       >
         Reset

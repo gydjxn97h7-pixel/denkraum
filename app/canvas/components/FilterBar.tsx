@@ -1,8 +1,7 @@
 "use client";
-import { ACCENT } from "../lib/canvas-types";
 import type { NodeType } from "../lib/canvas-types";
 import { Search, X } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 
 interface FilterBarProps {
   filterInputRef: React.RefObject<HTMLInputElement | null>;
@@ -38,12 +37,9 @@ export function FilterBar({
         top: 84,
         left: "50%",
         transform: "translateX(-50%)",
-        background:
-          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.95)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        border: "1px solid rgba(42,40,35,0.1)",
-        borderRadius: 16,
+        background: tokens.color.muted,
+        border: `0.5px solid ${tokens.color.border}`,
+        borderRadius: tokens.radius.md,
         padding: "8px 12px",
         display: "flex",
         flexDirection: "column",
@@ -83,7 +79,7 @@ export function FilterBar({
             color: "#2A2823",
             fontSize: 13,
             fontFamily: "inherit",
-            caretColor: ACCENT,
+            caretColor: tokens.color.ink,
           }}
         />
         <span
@@ -108,7 +104,7 @@ export function FilterBar({
             color: "rgba(42,40,35,0.7)",
             cursor: "pointer",
             padding: 4,
-            borderRadius: 8,
+            borderRadius: tokens.radius.xs,
             flexShrink: 0,
             display: "flex",
             alignItems: "center",
@@ -156,12 +152,12 @@ export function FilterBar({
               onClick={() => setFilterType(value)}
               style={{
                 padding: "4px 12px",
-                borderRadius: 999,
+                borderRadius: tokens.radius.xs,
                 border: active
-                  ? `1px solid ${ACCENT}66`
+                  ? `0.5px solid ${tokens.color.ink}`
                   : "1px solid rgba(42,40,35,0.07)",
-                background: active ? `${ACCENT}22` : "transparent",
-                color: active ? ACCENT : "rgba(42,40,35,0.7)",
+                background: active ? tokens.color.sand : "transparent",
+                color: active ? tokens.color.ink : "rgba(42,40,35,0.7)",
                 fontSize: 11,
                 fontWeight: 600,
                 fontFamily: "inherit",

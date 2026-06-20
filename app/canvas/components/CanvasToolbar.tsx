@@ -1,6 +1,5 @@
 "use client";
 import { memo, useEffect, useRef, useState } from "react";
-import { ACCENT } from "../lib/canvas-types";
 import type { NodeType } from "../lib/canvas-types";
 import { ShapeButton, renderShapeIcon } from "./ShapeButton";
 import {
@@ -11,7 +10,7 @@ import {
   Search,
   Ellipsis,
 } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 
 // Primary shapes live in the toolbar; secondary shapes hide behind the overflow
 // "more shapes" button.
@@ -53,18 +52,12 @@ interface CanvasToolbarProps {
   setFilterOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-// Shared glass background for each floating cluster.
-const CLUSTER_BG =
-  "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.92)";
-
-// Each related group of actions lives in its own pill-shaped floating cluster;
-// the wrapper just positions them in a row with gaps between groups.
+// Each related group of actions lives in its own floating cluster; the wrapper
+// just positions them in a row with gaps between groups.
 const cluster: React.CSSProperties = {
-  background: CLUSTER_BG,
-  backdropFilter: "blur(20px)",
-  WebkitBackdropFilter: "blur(20px)",
-  border: "1px solid rgba(42,40,35,0.1)",
-  borderRadius: 16,
+  background: tokens.color.muted,
+  border: `0.5px solid ${tokens.color.border}`,
+  borderRadius: tokens.radius.md,
   padding: "8px 16px",
   display: "flex",
   alignItems: "center",
@@ -136,7 +129,7 @@ function CanvasToolbarImpl({
   const exportBtn = (disabled: boolean): React.CSSProperties => ({
     height: 36,
     padding: "0 14px",
-    borderRadius: 999,
+    borderRadius: tokens.radius.xs,
     border: "none",
     fontSize: 12,
     fontWeight: 600,
@@ -160,12 +153,12 @@ function CanvasToolbarImpl({
     width: 36,
     height: 36,
     border: "none",
-    borderRadius: 8,
-    background: active ? `${ACCENT}22` : "transparent",
+    borderRadius: tokens.radius.xs,
+    background: active ? tokens.color.sand : "transparent",
     color: !enabled
       ? "rgba(42,40,35,0.25)"
       : active && accent
-        ? ACCENT
+        ? tokens.color.ink
         : "rgba(42,40,35,0.85)",
     cursor: enabled ? "pointer" : "default",
     display: "flex",

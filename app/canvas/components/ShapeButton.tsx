@@ -14,7 +14,7 @@ import {
   Image as ImageIcon,
   FileText,
 } from "lucide-react";
-import { ICON, ICON_STROKE } from "../lib/design-tokens";
+import { ICON, ICON_STROKE, tokens } from "../lib/design-tokens";
 import { polygonPoints, pointsAttr } from "../lib/shape-geometry";
 import type { NodeType } from "../lib/canvas-types";
 
@@ -141,7 +141,7 @@ export function ShapeButton({
 }) {
   const [hovered, setHovered] = useState(false);
   const stroke = isActive
-    ? "#C56B47"
+    ? tokens.color.ink
     : hovered
       ? "rgba(42,40,35,1)"
       : "rgba(42,40,35,0.8)";
@@ -155,12 +155,12 @@ export function ShapeButton({
         width: 36,
         height: 36,
         border: "none",
-        background: isActive ? "rgba(197,107,71,0.06)" : "transparent",
+        background: isActive ? tokens.color.sand : "transparent",
         cursor: "pointer",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        borderRadius: 8,
+        borderRadius: tokens.radius.xs,
         padding: 0,
         transition: "background 0.12s",
       }}
