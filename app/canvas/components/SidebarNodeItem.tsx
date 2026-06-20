@@ -66,7 +66,7 @@ const TYPE_ICON: Partial<Record<NodeType, typeof Square>> = {
 };
 
 function NodeIcon({ type, active }: { type: NodeType; active: boolean }) {
-  const color = active ? tokens.color.wood : "rgba(42,40,35,0.6)";
+  const color = active ? tokens.color.ink : "rgba(42,40,35,0.6)";
   if (type === "oval") return <OvalIcon size={ICON.sm} color={color} />;
   if (type === "arrow" || type === "parallelogram")
     return <PolygonGlyph type={type} size={ICON.sm} color={color} />;
@@ -127,7 +127,7 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
             top: 0,
             width: 2.5,
             height: 36,
-            background: tokens.color.wood,
+            background: tokens.color.ink,
             borderRadius: "0 1px 1px 0",
           }}
         />
@@ -165,7 +165,7 @@ export const SidebarNodeItem = React.memo(function SidebarNodeItem({
             fontFamily: "var(--font-clash), system-ui, sans-serif",
             background: "rgba(42,40,35,0.07)",
             border: "none",
-            outline: `1px solid ${tokens.color.driftwood}`,
+            outline: `1px solid ${tokens.color.ink}`,
             borderRadius: 8,
             padding: "0 4px",
             color: "#2A2823",

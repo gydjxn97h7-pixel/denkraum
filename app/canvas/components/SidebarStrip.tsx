@@ -33,8 +33,6 @@ function SidebarStripImpl({
         height: "calc(100vh - 24px)",
         width: 52,
         background: tokens.color.muted,
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
         borderRadius: tokens.radius.md,
         boxShadow:
           "0 4px 12px rgba(58,48,38,0.10), 0 16px 44px rgba(58,48,38,0.20)",
@@ -158,13 +156,13 @@ function SidebarStripImpl({
               borderRadius: 8,
               marginBottom: 16,
               border: isActive
-                ? `1px solid ${tokens.color.border}`
+                ? `1px solid ${tokens.color.ink}`
                 : "1px solid rgba(42,40,35,0.07)",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: isActive ? tokens.color.wood : "rgba(42,40,35,0.75)",
+              color: isActive ? tokens.color.ink : "rgba(42,40,35,0.75)",
               background: isActive ? tokens.color.sand : "rgba(42,40,35,0.04)",
               flexShrink: 0,
               transition: "color 0.12s, background 0.12s, border-color 0.12s",

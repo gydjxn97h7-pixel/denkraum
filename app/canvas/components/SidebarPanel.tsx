@@ -102,8 +102,6 @@ function SidebarPanelImpl({
         height: "calc(100vh - 24px)",
         width: 340,
         background: tokens.color.muted,
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
         borderRadius: tokens.radius.md,
         boxShadow:
           "0 4px 12px rgba(58,48,38,0.10), 0 16px 44px rgba(58,48,38,0.20)",
@@ -229,7 +227,7 @@ function SidebarPanelImpl({
                 top: 0,
                 width: 2.5,
                 height: 40,
-                background: tokens.color.wood,
+                background: tokens.color.ink,
                 borderRadius: "0 1px 1px 0",
               }}
             />
@@ -281,7 +279,7 @@ function SidebarPanelImpl({
                   fontFamily: "inherit",
                   background: "rgba(42,40,35,0.07)",
                   border: "none",
-                  outline: `1px solid ${tokens.color.driftwood}`,
+                  outline: `1px solid ${tokens.color.ink}`,
                   borderRadius: 8,
                   padding: "0 4px",
                   color: "#2A2823",
@@ -313,7 +311,7 @@ function SidebarPanelImpl({
                   style={{ marginRight: 20, flexShrink: 0 }}
                 >
                   <circle cx="8" cy="8" r="6" fill={tokens.color.sand} />
-                  <circle cx="8" cy="8" r="3.5" fill={tokens.color.wood} />
+                  <circle cx="8" cy="8" r="3.5" fill={tokens.color.ink} />
                 </svg>
               </>
             )}
