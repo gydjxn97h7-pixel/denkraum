@@ -1,8 +1,9 @@
 "use client";
 import { useRef, useState, useCallback, useEffect, useLayoutEffect } from "react";
-import { ACCENT, PRESET_COLORS } from "../lib/canvas-types";
+import { PRESET_COLORS } from "../lib/canvas-types";
 import { X, Maximize2, Minimize2 } from "lucide-react";
 import type { ColorPicker } from "../lib/canvas-types";
+import { tokens } from "../lib/design-tokens";
 import {
   hexToHsv,
   hsvToHex,
@@ -210,10 +211,8 @@ export function ColorPickerWindow({
         left: 0,
         top: 0,
         width: W,
-        background: "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
-        backdropFilter: "blur(28px)",
-        border: "1px solid rgba(42,40,35,0.1)",
-        borderRadius: 16,
+        background: tokens.color.muted,
+        borderRadius: tokens.radius.md,
         boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 500,
         overflow: "hidden",
@@ -235,8 +234,8 @@ export function ColorPickerWindow({
           alignItems: "center",
           justifyContent: "space-between",
           cursor: "grab",
-          borderBottom: "1px solid rgba(42,40,35,0.06)",
-          background: "rgba(42,40,35,0.04)",
+          borderBottom: `0.5px solid ${tokens.color.border}`,
+          background: tokens.color.sand,
         }}
       >
         <span
@@ -252,7 +251,7 @@ export function ColorPickerWindow({
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <TrafficDot color="#C0492E" title="Close" onClick={onClose} Icon={X} />
           <TrafficDot
-            color="#7C7A4E"
+            color={tokens.color.fern}
             title={isFullscreen ? "Shrink" : "Fullscreen"}
             onClick={() => setIsFullscreen((f) => !f)}
             Icon={isFullscreen ? Minimize2 : Maximize2}
@@ -406,10 +405,10 @@ export function ColorPickerWindow({
             display: "flex",
             alignItems: "center",
             gap: 8,
-            background: "rgba(42,40,35,0.06)",
+            background: tokens.color.sand,
             borderRadius: 8,
             padding: "8px 8px",
-            border: "1px solid rgba(42,40,35,0.1)",
+            border: `0.5px solid ${tokens.color.border}`,
             marginBottom: 8,
           }}
         >
@@ -599,8 +598,8 @@ export function ColorPickerWindow({
                   width: "100%",
                   boxSizing: "border-box",
                   textAlign: "center",
-                  border: "1px solid rgba(42,40,35,0.1)",
-                  background: "rgba(42,40,35,0.06)",
+                  border: `0.5px solid ${tokens.color.border}`,
+                  background: tokens.color.sand,
                   borderRadius: 8,
                   padding: "4px 4px",
                   fontSize: 11,
@@ -654,11 +653,11 @@ export function ColorPickerWindow({
                     borderRadius: 8,
                     background: c,
                     border: active
-                      ? `2px solid ${ACCENT}`
+                      ? `2px solid ${tokens.color.ink}`
                       : "1px solid rgba(42,40,35,0.08)",
                     cursor: "pointer",
                     transition: "transform 0.1s",
-                    boxShadow: active ? `0 0 0 3px ${ACCENT}30` : "none",
+                    boxShadow: active ? `0 0 0 3px ${tokens.color.ink}30` : "none",
                   }}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLElement).style.transform =

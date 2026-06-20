@@ -1,5 +1,5 @@
 "use client";
-import { ICON, ICON_STROKE } from "../lib/design-tokens";
+import { ICON, ICON_STROKE, tokens } from "../lib/design-tokens";
 
 // ── AI companion ───────────────────────────────────────────────────────────────
 // The companion IS the DNKRM brand mark, brought to life: three nested rounded
@@ -7,10 +7,10 @@ import { ICON, ICON_STROKE } from "../lib/design-tokens";
 // thought. Pure SVG + CSS (no WebGL, no dependency, crisp at any size), so it's
 // fast and unmistakably this app's. Identity stays constant; only the core's
 // colour + motion change with mood:
-//   idle      terracotta core, a slow steady pulse
-//   thinking  ochre core that rotates back and forth, glow quickens
-//   done      olive core, a single bloom outward
-//   error     deep-clay core, a brief shake of the whole mark
+//   idle      fern core, a slow steady pulse
+//   thinking  driftwood core that rotates back and forth, glow quickens
+//   done      fern core, a single bloom outward
+//   error     alert-red core, a brief shake of the whole mark
 //
 // All ambient life + per-state moods live in canvas.css, keyed off data-state, so
 // this stays a static, cache-friendly tree. The fixed-stroke trick keeps the
@@ -42,7 +42,7 @@ export function AiCharacter({
       aria-hidden="true"
     >
       <g className="ai-mark__breathe">
-        {/* The room — outer frame (brand identity, always terracotta) */}
+        {/* The room — outer frame (brand identity, warm driftwood) */}
         <rect
           className="ai-mark__frame"
           x="2.5"
@@ -50,7 +50,7 @@ export function AiCharacter({
           width="19"
           height="19"
           rx="5.5"
-          stroke="rgba(197,107,71,0.34)"
+          stroke={`${tokens.color.driftwood}57`}
           strokeWidth={strokeWidth}
         />
         {/* Inner space — a soft warm tint */}
@@ -60,7 +60,7 @@ export function AiCharacter({
           width="13"
           height="13"
           rx="4"
-          fill="rgba(197,107,71,0.13)"
+          fill={`${tokens.color.driftwood}21`}
         />
         {/* Soft glow behind the core (pulses / blooms) */}
         <rect

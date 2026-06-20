@@ -324,7 +324,7 @@ function SidebarPanelImpl({
           <StatusRow
             label="Autosave"
             value={saveState === "saving" ? "Saving…" : "Saved"}
-            dotColor={saveState === "saving" ? tokens.color.driftwood : "#7C7A4E"}
+            dotColor={saveState === "saving" ? tokens.color.driftwood : tokens.color.fern}
           />
         </div>
       )}

@@ -183,8 +183,8 @@ input[type="range"].fmt-slider::-webkit-slider-runnable-track {
 .ai-mark__glow {
   transform-origin: 12px 12px;
   transition: fill 0.35s ease;
-  /* Mood hue — overridden per state below; terracotta by default. */
-  fill: #c56b47;
+  /* Mood hue — overridden per state below; fern (calm) by default. */
+  fill: #8a9e72;
 }
 .ai-mark__core {
   animation: ai-mark-pulse 2.8s ease-in-out infinite;
@@ -197,15 +197,15 @@ input[type="range"].fmt-slider::-webkit-slider-runnable-track {
 /* Mood hues for the core + glow */
 .ai-mark[data-state="thinking"] .ai-mark__core,
 .ai-mark[data-state="thinking"] .ai-mark__glow {
-  fill: #d4a04a; /* ochre */
+  fill: #b09070; /* driftwood — working */
 }
 .ai-mark[data-state="done"] .ai-mark__core,
 .ai-mark[data-state="done"] .ai-mark__glow {
-  fill: #7c7a4e; /* olive */
+  fill: #8a9e72; /* fern — settled */
 }
 .ai-mark[data-state="error"] .ai-mark__core,
 .ai-mark[data-state="error"] .ai-mark__glow {
-  fill: #a8553a; /* deep clay */
+  fill: #dc2626; /* alert — error */
 }
 
 /* Thinking — the core turns the idea over; glow quickens */

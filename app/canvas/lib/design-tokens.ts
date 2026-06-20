@@ -173,6 +173,9 @@ export const tokens = {
     fern: "#8A9E72",
     moss: "#5C6B4A",
 
+    // Alert — a clean, clear red. Error and invalid states ONLY.
+    alert: "#DC2626",
+
     // Sticky Note (unchanged)
     sticky: "#F5E97A",
     stickyBorder: "#D4C860",

@@ -5,7 +5,7 @@ import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 import { PanelSectionLabel } from "./panel-ui";
 import { useApiKey, validateKey } from "../lib/ai-key";
 
-const OLIVE = "#7C7A4E";
+const OLIVE = tokens.color.fern;
 const OCHRE = tokens.color.driftwood;
 
 type Feedback = { tone: "good" | "bad" | "warn"; text: string } | null;
@@ -52,7 +52,7 @@ export function SettingsPanel() {
     feedback?.tone === "good"
       ? OLIVE
       : feedback?.tone === "bad"
-        ? tokens.color.ink
+        ? tokens.color.alert
         : OCHRE;
 
   const primaryBtn: React.CSSProperties = {

@@ -18,10 +18,10 @@ const STATE_MOOD: Record<AiCharacterState, string> = {
 
 // Soft status dot colour matching the mood.
 const STATE_DOT: Record<AiCharacterState, string> = {
-  idle: "#7C7A4E", // olive — calm
+  idle: tokens.color.fern, // fern — calm
   thinking: tokens.color.driftwood, // warm — working
-  done: "#7C7A4E", // olive — happy/settled
-  error: tokens.color.ink, // ink — attention
+  done: tokens.color.fern, // fern — happy/settled
+  error: tokens.color.alert, // red — attention
 };
 
 // What the assistant can do today — strictly the features that work now.

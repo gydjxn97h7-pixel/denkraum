@@ -316,13 +316,13 @@ export function PresentationPanel({
               padding: "8px 10px",
               borderRadius: 10,
               border: overRemoveZone
-                ? `1px solid ${tokens.color.ink}`
-                : `1px dashed ${tokens.color.border}`,
+                ? `1px solid ${tokens.color.alert}`
+                : `1px dashed ${tokens.color.alert}`,
               background: tokens.color.sand,
               boxShadow: overRemoveZone
-                ? "0 0 0 3px rgba(29,28,26,0.12)"
+                ? `0 0 0 3px ${tokens.color.alert}26`
                 : undefined,
-              color: tokens.color.ink,
+              color: tokens.color.alert,
               fontSize: 11,
               fontWeight: 600,
               transition:

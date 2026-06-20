@@ -1,8 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
-import { ACCENT } from "../lib/canvas-types";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 import { AiCharacter, type AiCharacterState } from "./AiCharacter";
 
 interface AiGenerateModalProps {
@@ -58,10 +57,8 @@ export function AiGenerateModal({
         style={{
           width: 460,
           maxWidth: "calc(100vw - 48px)",
-          background:
-            "linear-gradient(180deg, rgba(216,201,168,0.05) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.98)",
-          border: "1px solid rgba(42,40,35,0.1)",
-          borderRadius: 16,
+          background: tokens.color.muted,
+          borderRadius: tokens.radius.md,
           boxShadow:
             "0 4px 12px rgba(58,48,38,0.12), 0 24px 64px rgba(58,48,38,0.28)",
           padding: 20,
@@ -112,8 +109,8 @@ export function AiGenerateModal({
           style={{
             height: 40,
             borderRadius: 10,
-            border: "1px solid rgba(42,40,35,0.16)",
-            background: "rgba(42,40,35,0.04)",
+            border: `0.5px solid ${tokens.color.border}`,
+            background: tokens.color.sand,
             padding: "0 12px",
             fontSize: 13,
             fontFamily: "inherit",
@@ -138,10 +135,10 @@ export function AiGenerateModal({
             style={{
               height: 34,
               padding: "0 14px",
-              borderRadius: 10,
-              border: "1px solid rgba(42,40,35,0.12)",
+              borderRadius: tokens.radius.xs,
+              border: `0.5px solid ${tokens.color.border}`,
               background: "transparent",
-              color: "rgba(42,40,35,0.8)",
+              color: tokens.color.text,
               fontSize: 12,
               fontWeight: 600,
               fontFamily: "inherit",
@@ -156,11 +153,11 @@ export function AiGenerateModal({
             style={{
               height: 34,
               padding: "0 16px",
-              borderRadius: 10,
+              borderRadius: tokens.radius.xs,
               border: "none",
               background:
-                prompt.trim() === "" ? "rgba(197,107,71,0.4)" : ACCENT,
-              color: "#FCFBF8",
+                prompt.trim() === "" ? "rgba(29,28,26,0.35)" : tokens.color.ink,
+              color: tokens.color.canvas,
               fontSize: 12,
               fontWeight: 600,
               fontFamily: "inherit",
