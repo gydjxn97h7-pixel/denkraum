@@ -1,7 +1,13 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ACCENT } from "../lib/canvas-types";
-import { NODE_SHADOW, ICON, ICON_PROPS, STICKY_FILL } from "../lib/design-tokens";
+import {
+  NODE_SHADOW,
+  ICON,
+  ICON_PROPS,
+  STICKY_FILL,
+  tokens,
+} from "../lib/design-tokens";
 import {
   FileText,
   Grip,
@@ -680,17 +686,19 @@ export const NodeView = React.memo(function NodeView({
       ? STICKY_FILL
       : n.color && n.color !== "transparent"
         ? n.color
-        : "#FCFBF8";
+        : tokens.color.surface;
   const hostBg =
     isPoly || isText || isImage ? "transparent" : cardFill;
-  // Borderless cards — the soft drop shadow does the separation now.
-  const hostBorder = "none";
-  // Elevation by state: selected/dragged sits highest, hover lifts slightly.
-  const elevation = isSel
-    ? NODE_SHADOW.active
-    : isHovered
-      ? NODE_SHADOW.hover
-      : NODE_SHADOW.rest;
+  // Hairline border: stone on rest, ink on selection. Card nodes only —
+  // text/image/polygon hosts stay borderless (they have no card).
+  const hostBorder =
+    isPoly || isText || isImage
+      ? "none"
+      : isSel
+        ? `0.5px solid ${tokens.color.ink}`
+        : `0.5px solid ${tokens.color.border}`;
+  // Elevation by state: a flat resting shadow, lifted slightly when selected.
+  const elevation = isSel ? tokens.shadow.selected : tokens.shadow.node;
   // Diamond casts its shadow via an SVG filter; text floats via a glyph
   // drop-shadow (see below) — neither uses a box shadow on the host.
   // Positive search highlight: a solid accent ring + soft accent glow so a
@@ -712,7 +720,7 @@ export const NodeView = React.memo(function NodeView({
       ? 16
       : isSticky
         ? 4
-        : 12;
+        : tokens.radius.sm;
 
   const showResize = (isHovered || isSel) && !isText;
   const isSource = isConnectSource;

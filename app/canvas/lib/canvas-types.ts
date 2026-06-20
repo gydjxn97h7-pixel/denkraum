@@ -1,3 +1,5 @@
+import { tokens } from "./design-tokens";
+
 export const ACCENT = "#C56B47"; // terracotta — primary interactive accent
 
 export type NodeType =
@@ -159,7 +161,7 @@ export const DEFAULT_NODES: CanvasNode[] = [
     title: "Project Idea",
     body: "Capture your thoughts here",
     type: "block",
-    color: "#FCFBF8",
+    color: tokens.color.surface,
     fontSize: 13,
   },
   {
@@ -171,7 +173,7 @@ export const DEFAULT_NODES: CanvasNode[] = [
     title: "Concept",
     body: "Connect your ideas",
     type: "block",
-    color: "#FCFBF8",
+    color: tokens.color.surface,
     fontSize: 13,
   },
   {
@@ -183,7 +185,7 @@ export const DEFAULT_NODES: CanvasNode[] = [
     title: "Next Steps",
     body: "",
     type: "block",
-    color: "#FCFBF8",
+    color: tokens.color.surface,
     fontSize: 13,
   },
 ];

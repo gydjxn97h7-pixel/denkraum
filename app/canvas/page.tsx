@@ -46,6 +46,7 @@ import {
   type SummaryItem,
 } from "./lib/ai-generate";
 import { fitGeneratedHeights } from "./lib/node-measure";
+import { tokens } from "./lib/design-tokens";
 import {
   buildPresentationSteps,
   flattenSteps,
@@ -609,7 +610,7 @@ export default function Canvas() {
         label: autoLabel,
         body: "",
         type,
-        color: isText ? "transparent" : "#FCFBF8",
+        color: isText ? "transparent" : tokens.color.surface,
         fontSize: isText ? 15 : 13,
         // Seed a checklist with a few empty rows so it reads as a list on
         // insert; the node opens straight into edit mode (below).
@@ -1030,7 +1031,7 @@ export default function Canvas() {
       title: "Summary",
       body: r.summary,
       type: "rounded",
-      color: "#FCFBF8",
+      color: tokens.color.surface,
       fontSize: 13,
     };
     commitNewGraph([node], [], { cx: x + W / 2, cy: y + H / 2 });
@@ -1080,7 +1081,7 @@ export default function Canvas() {
             label: `Image ${maxIdx + 1}`,
             body: "",
             type: "image",
-            color: "#FCFBF8",
+            color: tokens.color.surface,
             imageUrl,
           };
           const newNodes = [...nodesRef.current, imgNode];
@@ -1139,7 +1140,7 @@ export default function Canvas() {
           label: fileName,
           body: "",
           type: "textfile",
-          color: "#FCFBF8",
+          color: tokens.color.surface,
           fontSize: 13,
           textFileContent,
           textFileName: fileName,
@@ -1940,7 +1941,7 @@ export default function Canvas() {
         label: cleanTitle || "Document",
         body: "",
         type: "textfile",
-        color: "#FCFBF8",
+        color: tokens.color.surface,
         fontSize: 13,
         textFileContent: plain,
         ...(keepRich && { docRich: keepRich }),
@@ -2013,7 +2014,7 @@ export default function Canvas() {
       style={{
         width: "100vw",
         height: "100vh",
-        background: "#E8EBE6",
+        background: tokens.color.canvas,
         overflow: "hidden",
         position: "relative",
         fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
