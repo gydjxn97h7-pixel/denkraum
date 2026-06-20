@@ -176,7 +176,7 @@ function CanvasToolbarImpl({
         // Anchored between the sidebar (strip or open panel) and the right edge
         // so the clusters center within the canvas area and only wrap when the
         // viewport is genuinely too narrow.
-        left: panelOpen ? 308 : 76,
+        left: panelOpen ? 384 : 76,
         right: 16,
         display: isPresenting ? "none" : "flex",
         flexWrap: "wrap",

@@ -67,8 +67,7 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { ColorPickerWindow } from "./components/ColorPickerWindow";
 import { NodeView } from "./components/NodeView";
 import { ConnectionLine } from "./components/ConnectionLine";
-import { SidebarStrip } from "./components/SidebarStrip";
-import { SidebarPanel } from "./components/SidebarPanel";
+import { FloatingSidebar } from "./components/FloatingSidebar";
 import { CanvasToolbar } from "./components/CanvasToolbar";
 import { AiGenerateModal } from "./components/AiGenerateModal";
 import type { AiCharacterState } from "./components/AiCharacter";
@@ -2065,13 +2064,7 @@ export default function Canvas() {
         </defs>
       </svg>
 
-      <SidebarStrip
-        isPresenting={isPresenting}
-        activePanel={activePanel}
-        setActivePanel={setActivePanel}
-      />
-
-      <SidebarPanel
+      <FloatingSidebar
         activePanel={activePanel}
         setActivePanel={setActivePanel}
         isPresenting={isPresenting}
