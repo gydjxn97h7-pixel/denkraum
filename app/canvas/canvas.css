@@ -1,5 +1,5 @@
 :root {
-  --accent: #C56B47;
+  --accent: #1d1c1a; /* ink — interactive control accent (slider thumb) */
 }
 
 .mobile-fallback {

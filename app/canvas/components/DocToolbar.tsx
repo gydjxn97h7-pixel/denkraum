@@ -26,11 +26,11 @@ import {
 import {
   RADIUS,
   SPACE,
-  BORDER_DARK,
   FONT_SANS,
   CONTROL,
   ICON,
   ICON_PROPS,
+  tokens,
 } from "../lib/design-tokens";
 
 interface DocToolbarProps {
@@ -70,10 +70,9 @@ function computedHex(el: Element | null): string {
 const TACTILE_SHADOW =
   "0 4px 14px rgba(0,0,0,0.20), inset 0 1px 0 rgba(42,40,35,0.06)";
 
-// Shared dark sage-green glass used by both the full bar and the compact
-// trigger so they read as the same surface.
-const GLASS_BG =
-  "linear-gradient(180deg, rgba(216,201,168,0.06) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)";
+// Shared muted-stone surface used by both the full bar and the compact trigger
+// so they read as the same surface as the sidebar and toolbars.
+const GLASS_BG = tokens.color.muted;
 
 // Hover tooltip that names what a control does (e.g. "Bold"). Sits just below
 // its button, over the white page where it reads clearly.
@@ -86,9 +85,9 @@ function Tooltip({ children }: { children: React.ReactNode }) {
         left: "50%",
         transform: "translateX(-50%)",
         marginTop: SPACE.sm,
-        background: "rgba(12,32,24,0.97)",
-        color: "rgba(42,40,35,0.92)",
-        border: "1px solid rgba(42,40,35,0.1)",
+        background: tokens.color.ink,
+        color: tokens.color.canvas,
+        border: "none",
         borderRadius: RADIUS.pill,
         padding: "4px 10px",
         fontSize: 11,
@@ -149,14 +148,14 @@ function IconButton({
     : {
         ...base,
         background: active
-          ? "rgba(197,107,71,0.20)"
+          ? tokens.color.sand
           : hover
             ? "rgba(42,40,35,0.12)"
             : "rgba(42,40,35,0.05)",
         border: active
-          ? "1px solid rgba(197,107,71,0.5)"
+          ? `1px solid ${tokens.color.ink}`
           : "1px solid rgba(42,40,35,0.09)",
-        color: active ? "#C56B47" : "rgba(42,40,35,0.85)",
+        color: active ? tokens.color.ink : "rgba(42,40,35,0.85)",
         ...glyphStyle,
       };
   return (
@@ -316,7 +315,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
       prop,
       x: (r ? r.left + r.width / 2 : window.innerWidth / 2) - 130,
       y: (r ? r.bottom : 80) + 8,
-      color: prop === "color" ? fmt.textColor : "#C56B47",
+      color: prop === "color" ? fmt.textColor : tokens.color.sticky,
     });
   };
 
@@ -338,7 +337,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
       style={{
         width: "1px",
         height: SPACE.lg,
-        background: "rgba(42,40,35,0.12)",
+        background: tokens.color.border,
         margin: `0 ${SPACE.xs}px`,
         flexShrink: 0,
       }}
@@ -387,9 +386,7 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
             padding: "0 14px",
             borderRadius: RADIUS.pill,
             background: GLASS_BG,
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            border: BORDER_DARK,
+            border: "none",
             boxShadow: TACTILE_SHADOW,
             color: "rgba(42,40,35,0.9)",
             display: "flex",
@@ -424,10 +421,8 @@ export function DocToolbar({ editorRef, onInsertImage }: DocToolbarProps) {
         }}
         style={{
           background: GLASS_BG,
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          border: BORDER_DARK,
-          borderRadius: RADIUS.lg,
+          border: "none",
+          borderRadius: tokens.radius.md,
           boxShadow: TACTILE_SHADOW,
           padding: `${SPACE.sm}px ${SPACE.md}px`,
           display: "flex",

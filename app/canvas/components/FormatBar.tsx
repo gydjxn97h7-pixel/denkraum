@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState, memo } from "react";
 import { applyFontSizeToSelection, FONT_SIZE_LADDER } from "../lib/rich-text";
 import { Bold, Italic, Underline } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 
 type BarState = {
   x: number;
@@ -107,9 +107,9 @@ function FormatBarImpl() {
     width: 26,
     height: 26,
     border: "none",
-    borderRadius: 8,
-    background: active ? "rgba(197,107,71,0.18)" : "transparent",
-    color: active ? "#C56B47" : "rgba(42,40,35,0.85)",
+    borderRadius: tokens.radius.xs,
+    background: active ? tokens.color.sand : "transparent",
+    color: active ? tokens.color.ink : "rgba(42,40,35,0.85)",
     cursor: "pointer",
     fontSize: 12,
     fontFamily: "inherit",
@@ -127,12 +127,8 @@ function FormatBarImpl() {
         left: bar.x,
         top: Math.max(8, bar.y - 44),
         transform: "translateX(-50%)",
-        background:
-          "linear-gradient(180deg, rgba(216,201,168,0.04) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.97)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        border: "1px solid rgba(42,40,35,0.1)",
-        borderRadius: 12,
+        background: tokens.color.muted,
+        borderRadius: tokens.radius.md,
         boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         padding: "4px 8px",
         display: "flex",
@@ -170,7 +166,7 @@ function FormatBarImpl() {
         style={{
           width: "1px",
           height: 14,
-          background: "rgba(42,40,35,0.12)",
+          background: tokens.color.border,
           margin: "0 4px",
           flexShrink: 0,
         }}

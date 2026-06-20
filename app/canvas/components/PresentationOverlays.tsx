@@ -1,5 +1,6 @@
 "use client";
 import { memo } from "react";
+import { tokens } from "../lib/design-tokens";
 
 interface PresentationOverlaysProps {
   isPresenting: boolean;
@@ -25,8 +26,7 @@ function PresentationOverlaysImpl({
             inset: 0,
             pointerEvents: "none",
             zIndex: 249,
-            boxShadow:
-              "inset 0 0 0 2px rgba(197,107,71,0.38), inset 0 0 28px rgba(216,201,168,0.07)",
+            boxShadow: `inset 0 0 0 2px ${tokens.color.driftwood}61, inset 0 0 28px ${tokens.color.sand}12`,
             borderRadius: 0,
           }}
         />
@@ -41,12 +41,8 @@ function PresentationOverlaysImpl({
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -50%)",
-            background:
-              "linear-gradient(180deg, rgba(216,201,168,0.12) 0%, rgba(216,201,168,0) 100%), rgba(252,251,248,0.95)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            border: "1px solid rgba(216,201,168,0.18)",
-            borderRadius: 16,
+            background: tokens.color.muted,
+            borderRadius: tokens.radius.md,
             boxShadow:
               "0 8px 24px rgba(0,0,0,0.22)",
             padding: "20px 32px",
@@ -78,7 +74,7 @@ function PresentationOverlaysImpl({
             }}
           >
             ← → navigate &nbsp;·&nbsp;{" "}
-            <span style={{ color: "#C56B47" }}>Esc</span> to exit
+            <span style={{ color: tokens.color.ink }}>Esc</span> to exit
           </span>
         </div>
       )}
@@ -91,10 +87,8 @@ function PresentationOverlaysImpl({
             bottom: 28,
             left: "50%",
             transform: "translateX(-50%)",
-            background: "rgba(252,251,248,0.92)",
-            backdropFilter: "blur(12px)",
-            border: "1px solid rgba(42,40,35,0.1)",
-            borderRadius: 12,
+            background: tokens.color.muted,
+            borderRadius: tokens.radius.md,
             padding: "8px 20px",
             display: "flex",
             alignItems: "center",
@@ -106,7 +100,7 @@ function PresentationOverlaysImpl({
             userSelect: "none",
           }}
         >
-          <span style={{ color: "#C56B47", fontWeight: 600 }}>
+          <span style={{ color: tokens.color.ink, fontWeight: 600 }}>
             {presentationIndex + 1} / {presentActiveCount}
           </span>
           <span>← → navigate · Esc exit</span>

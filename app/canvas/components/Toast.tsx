@@ -1,5 +1,6 @@
 "use client";
 import { memo } from "react";
+import { tokens } from "../lib/design-tokens";
 
 interface ToastProps {
   toast: { msg: string; variant: "success" | "error" } | null;
@@ -15,16 +16,16 @@ function ToastImpl({ toast }: ToastProps) {
         position: "fixed",
         bottom: 28,
         left: 80,
-        background: "rgba(252,251,248,0.97)",
+        background: tokens.color.muted,
         border:
           toast.variant === "success"
-            ? "1px solid rgba(124,122,78,0.35)"
-            : "1px solid rgba(176,67,43,0.35)",
-        borderRadius: 12,
+            ? `0.5px solid ${tokens.color.fern}`
+            : `0.5px solid ${tokens.color.alert}`,
+        borderRadius: tokens.radius.md,
         padding: "8px 12px",
         fontSize: 12,
         fontWeight: 600,
-        color: toast.variant === "success" ? "#7C7A4E" : "#B0432B",
+        color: toast.variant === "success" ? tokens.color.fern : tokens.color.alert,
         boxShadow: "0 8px 24px rgba(0,0,0,0.22)",
         zIndex: 500,
         display: "flex",
@@ -40,7 +41,7 @@ function ToastImpl({ toast }: ToastProps) {
           height: 8,
           borderRadius: 999,
           flexShrink: 0,
-          background: toast.variant === "success" ? "#7C7A4E" : "#B0432B",
+          background: toast.variant === "success" ? tokens.color.fern : tokens.color.alert,
         }}
       />
       {toast.msg}

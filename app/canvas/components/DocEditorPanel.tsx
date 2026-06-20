@@ -3,9 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CanvasNode, RichText } from "../lib/canvas-types";
 import { TrafficDot } from "./ColorPickerWindow";
 import { FileText, X, Minus, Maximize2, Minimize2 } from "lucide-react";
-import { ICON, ICON_PROPS } from "../lib/design-tokens";
+import { ICON, ICON_PROPS, RADIUS, tokens } from "../lib/design-tokens";
 import { DocToolbar } from "./DocToolbar";
-import { RADIUS } from "../lib/design-tokens";
 import {
   MAX_DOC_CHARS,
   MAX_DOC_IMAGE_CHARS,
@@ -35,7 +34,7 @@ interface DocEditorPanelProps {
   getOriginRect: () => OriginRect | null;
 }
 
-const HEADER_CLAY = "#B0795E"; // document header — clay accent (the node, expanded)
+const HEADER_BG = tokens.color.bark; // document header — deep wood (the node, expanded)
 const SHEET_SHADOW =
   "0 24px 70px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.30)";
 type Mode = "standard" | "min" | "full";
@@ -242,7 +241,7 @@ export function DocEditorPanel({
             maxWidth: 280,
             padding: "0 16px",
             borderRadius: RADIUS.pill,
-            background: HEADER_CLAY,
+            background: HEADER_BG,
             border: "1px solid rgba(252,251,248,0.18)",
             boxShadow: "0 8px 24px rgba(0,0,0,0.30)",
             display: "flex",
@@ -336,7 +335,7 @@ export function DocEditorPanel({
           style={{
             flexShrink: 0,
             height: 52,
-            background: HEADER_CLAY,
+            background: HEADER_BG,
             display: "flex",
             alignItems: "center",
             gap: 14,
@@ -353,13 +352,13 @@ export function DocEditorPanel({
               Icon={X}
             />
             <TrafficDot
-              color="#D4A04A"
+              color={tokens.color.driftwood}
               title="Minimize"
               onClick={() => setMode("min")}
               Icon={Minus}
             />
             <TrafficDot
-              color="#7C7A4E"
+              color={tokens.color.fern}
               title={mode === "full" ? "Exit fullscreen" : "Fullscreen"}
               onClick={() => setMode(mode === "full" ? "standard" : "full")}
               Icon={mode === "full" ? Minimize2 : Maximize2}
@@ -380,7 +379,7 @@ export function DocEditorPanel({
               background: "transparent",
               border: "none",
               outline: "none",
-              color: "#FCFBF8",
+              color: tokens.color.canvas,
               fontSize: 16,
               fontWeight: 600,
               fontFamily: "var(--font-clash), system-ui, sans-serif",
@@ -398,7 +397,7 @@ export function DocEditorPanel({
             position: "relative",
             flex: 1,
             minHeight: 0,
-            background: "#FCFBF8",
+            background: tokens.color.surface,
             display: "flex",
             flexDirection: "column",
             cursor: "text",
@@ -444,7 +443,7 @@ export function DocEditorPanel({
               overflowWrap: "break-word",
               wordBreak: "break-word",
               userSelect: "text",
-              caretColor: "#C56B47",
+              caretColor: tokens.color.ink,
               cursor: "text",
             }}
           />
@@ -453,13 +452,13 @@ export function DocEditorPanel({
           <div
             style={{
               flexShrink: 0,
-              borderTop: "1px solid rgba(42,40,35,0.08)",
+              borderTop: `0.5px solid ${tokens.color.border}`,
               padding: "10px 20px",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               gap: 12,
-              background: "#FCFBF8",
+              background: tokens.color.surface,
             }}
           >
             <span
@@ -472,9 +471,9 @@ export function DocEditorPanel({
                 fontSize: 11,
                 fontVariantNumeric: "tabular-nums",
                 color: atLimit
-                  ? "#B0432B"
+                  ? tokens.color.alert
                   : nearLimit
-                    ? "#D4A04A"
+                    ? tokens.color.driftwood
                     : "rgba(42,40,35,0.4)",
               }}
             >
@@ -488,10 +487,10 @@ export function DocEditorPanel({
               style={{
                 height: 30,
                 padding: "0 16px",
-                borderRadius: RADIUS.pill,
+                borderRadius: tokens.radius.xs,
                 border: "none",
-                background: "#C56B47",
-                color: "#FCFBF8",
+                background: tokens.color.ink,
+                color: tokens.color.canvas,
                 fontSize: 12,
                 fontWeight: 600,
                 fontFamily: "inherit",
