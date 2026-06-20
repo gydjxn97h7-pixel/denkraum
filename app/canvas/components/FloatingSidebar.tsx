@@ -1,5 +1,7 @@
 "use client";
-import { Fragment, memo } from "react";
+import { Fragment, memo, useCallback, useRef } from "react";
+import { AnimatePresence, motion, MotionConfig } from "motion/react";
+import { useClickOutside } from "../lib/use-click-outside";
 import type { CanvasNode, PanelSection } from "../lib/canvas-types";
 import type { PresentationStep } from "../lib/presentation";
 import { SidebarNodeItem } from "./SidebarNodeItem";
@@ -34,8 +36,13 @@ const STRIP_W = 56;
 const PANEL_W = 304;
 const MARGIN = 12;
 
-// Frosted stone: muted (#E6E2D8) at low opacity over a backdrop blur.
-const FROST_BG = "rgba(230,226,216,0.55)";
+// Spring used for the panel expand / collapse (Motion Primitives foundation).
+const SPRING = { type: "spring", bounce: 0.1, duration: 0.25 } as const;
+
+// Frosted glass: a very light stone tint (surface) at low opacity over a strong
+// backdrop blur, so the canvas clearly bleeds through the sidebar.
+const FROST_BG = "rgba(240,237,229,0.35)";
+const FROST_BLUR = "blur(24px)";
 // Hairline that separates the strip from the panel and frames the frost.
 const HAIRLINE = "rgba(42,40,35,0.10)";
 
@@ -235,6 +242,14 @@ function FloatingSidebarImpl({
   onAssignWorkspace,
   onClearWorkspace,
 }: FloatingSidebarProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Click-outside collapses the panel (Motion Primitives behaviour).
+  const collapse = useCallback(
+    () => setActivePanel(null),
+    [setActivePanel],
+  );
+  useClickOutside(containerRef, collapse);
+
   if (isPresenting) return null;
   const open = activePanel !== null;
 
@@ -242,7 +257,9 @@ function FloatingSidebarImpl({
     setActivePanel((prev) => (prev === section ? null : section));
 
   return (
+    <MotionConfig transition={SPRING}>
     <div
+      ref={containerRef}
       style={{
         position: "fixed",
         top: MARGIN,
@@ -254,8 +271,8 @@ function FloatingSidebarImpl({
         borderRadius: 18,
         overflow: "hidden",
         background: FROST_BG,
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
+        backdropFilter: FROST_BLUR,
+        WebkitBackdropFilter: FROST_BLUR,
         boxShadow: "0 6px 22px rgba(58,48,38,0.16)",
         zIndex: 150,
         fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
@@ -305,19 +322,35 @@ function FloatingSidebarImpl({
       </div>
 
       {/* ── Layer 2 — expanded panel ── */}
-      {open && activePanel && (
-        <div
-          className="sidebar-panel-in"
-          style={{
-            width: PANEL_W,
-            flexShrink: 0,
-            display: "flex",
-            flexDirection: "column",
-            minHeight: 0,
-            borderLeft: `1px solid ${HAIRLINE}`,
-          }}
-        >
-          {/* Panel header — title + collapse */}
+      {/* Slides + fades open/closed via Motion (width + opacity spring). The
+          inner card is fixed-width so content never reflows mid-animation; the
+          motion wrapper clips it with overflow:hidden. */}
+      <AnimatePresence initial={false}>
+        {open && activePanel && (
+          <motion.div
+            key="panel"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: PANEL_W, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            style={{
+              flexShrink: 0,
+              alignSelf: "stretch",
+              overflow: "hidden",
+              display: "flex",
+            }}
+          >
+            <div
+              style={{
+                width: PANEL_W,
+                height: "100%",
+                flexShrink: 0,
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 0,
+                borderLeft: `1px solid ${HAIRLINE}`,
+              }}
+            >
+              {/* Panel header — title + collapse */}
           <div
             style={{
               flexShrink: 0,
@@ -676,9 +709,12 @@ function FloatingSidebarImpl({
               )}
             </div>
           )}
-        </div>
-      )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+    </MotionConfig>
   );
 }
 
