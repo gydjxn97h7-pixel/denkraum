@@ -3,7 +3,8 @@ import { Sparkles, FileText, GitBranch, Crosshair, X } from "lucide-react";
 import { ICON, ICON_PROPS, tokens } from "../lib/design-tokens";
 import { PanelSectionLabel } from "./panel-ui";
 import { useApiKey } from "../lib/ai-key";
-import { AiCharacter, type AiCharacterState } from "./AiCharacter";
+import type { AiCharacterState } from "./AiCharacter";
+import { Bonsai } from "./Bonsai";
 
 // The companion has a name so it reads as a presence, not a status icon.
 const COMPANION_NAME = "Sol";
@@ -88,22 +89,8 @@ export function AiPanel({
           padding: "4px 16px 18px",
         }}
       >
-        {/* Companion on a soft aura pedestal */}
-        <span
-          style={{
-            position: "relative",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 72,
-            height: 72,
-            borderRadius: "50%",
-            // A warm radial halo so the companion sits on a little stage.
-            background: `radial-gradient(circle at 50% 42%, ${tokens.color.driftwood}24, ${tokens.color.driftwood}0A 58%, transparent 72%)`,
-          }}
-        >
-          <AiCharacter state={aiState} size={50} />
-        </span>
+        {/* Bonsai companion — an illustrated tree on a stone + board. */}
+        <Bonsai size={92} />
 
         {/* Name */}
         <span
